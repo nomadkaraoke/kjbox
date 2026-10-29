@@ -29,6 +29,12 @@ def verify_code():
     return jsonify({"session_token": "fake-session", "email": request.json.get("email")})
 
 
+@app.post("/api/kjbox/auth/<provider>")
+def social(provider):
+    return jsonify({"session_token": "fake-session", "user": {"email": "anya@example.com"},
+                    "credits_granted": 0, "credit_status": "already_granted"})
+
+
 @app.get("/api/users/me")
 def me():
     return jsonify({"user": {"email": "anya@example.com", "credits": 1}, "email": "anya@example.com", "credits": 1})
@@ -42,7 +48,7 @@ def credit():
 @app.post("/api/catalog/match-judge")
 def judge():
     b = request.json
-    time.sleep(0.5 if b["stage"] == "fast" else 18)  # prod: full judge answered ~19s after search
+    time.sleep(0.5 if b["stage"] == "fast" else 6)  # prod: full judge answered ~19s after search
     v = JUDGE.get((b["title"], b["stage"]))
     if not v:
         v = {"alternatives": [], "canonical_artist": b["artist"], "canonical_title": b["title"], "confident": True,
@@ -54,13 +60,15 @@ def judge():
 def search():
     b = request.json
     time.sleep(3)
-    r = SEARCH.get(b["title"]) or {"results": [], "search_session_id": "none"}
+    r = dict(SEARCH.get(b["title"]) or {"results": [], "search_session_id": "none"})
+    r["search_session_id"] = "ss-%d" % time.time_ns()   # fresh per search, like gen
     return jsonify(r)
 
 
 @app.post("/api/jobs/create-from-search")
 def create():
     sid = request.json["search_session_id"]
+    time.sleep(2)
     time.sleep(3)  # prod: create-from-search took ~3s
     if sid in used_sessions:  # gen consumes the search session: a repeat create 404s
         return jsonify({"detail": "Search session not found"}), 404

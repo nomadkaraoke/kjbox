@@ -97,6 +97,11 @@ def load_config(config_file=None):
         # Partner secret for the singer make-it flow (gen /api/kjbox/*,
         # Secret Manager kjbox-partner-secret). Empty = make-it not offered.
         "gen_kjbox_secret": "",
+        # One-tap sign-in on the singer page (public IDs, not secrets). Google: the
+        # gen "server audience" Web client (sing.nomadkaraoke.com is an authorised
+        # JS origin); Apple: the web Services ID. Empty = that button is hidden.
+        "sing_google_client_id": "718638054799-fush0smd1e4icq9pt0immp8n59jjlebh.apps.googleusercontent.com",
+        "sing_apple_client_id": "com.nomadkaraoke.sing",
         "render_mode": DEFAULT_RENDER_MODE,
         # Pin the iGPU to its max clock while a song plays (unpin when idle) to give
         # 4K decode+composite headroom. No-op on devices without the sudo helper.

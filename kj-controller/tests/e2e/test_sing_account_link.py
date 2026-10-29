@@ -144,7 +144,9 @@ class TestSaveTonightsSongs:
         expect(page.locator('[data-testid="save-songs-main"] [data-testid="save-songs-stop"]')
                ).to_have_text("Stop saving")
 
-    def test_make_sign_in_offers_link_without_linking(self, page, live_server, live_token):
+    def test_make_sign_in_never_links_and_keeps_the_make_screen_clean(self, page, live_server, live_token):
+        # The one-screen make-it has a single job; "Save tonight's songs" is
+        # offered on the done screen (the "main" slot) once the song is sent.
         calls = {"link": []}
         page.route("**/sing/account/link*", lambda r: (
             calls["link"].append(1), _json(r, {"linked": True, "email": EMAIL})))
@@ -152,16 +154,9 @@ class TestSaveTonightsSongs:
         page.locator('[data-testid="make-email"]').fill(EMAIL)
         page.locator('[data-testid="make-send-code"]').click()
         page.locator('[data-testid="make-code"]').fill("123456")
-        offer = page.locator('[data-testid="save-songs-offer"]')
-        expect(offer.locator('[data-testid="save-songs-link"]')).to_have_text(LINK)
-        expect(offer.locator('[data-testid="save-songs-explainer"]')).to_have_text(EXPLAINER)
-        _shot(page, "a9-5-make-offer")
+        expect(page.locator('[data-testid="make-pick"]')).to_be_visible()
+        expect(page.locator('[data-testid="save-songs-offer"]')).to_have_count(0)
         assert calls["link"] == []                      # signing in never links by itself
-        offer.locator('[data-testid="save-songs-link"]').click()
-        expect(offer.locator('[data-testid="save-songs-status"]')).to_contain_text(
-            f"Saving tonight's songs to {EMAIL}")
-        assert calls["link"] == [1]
-        _shot(page, "a9-6-make-offer-linked")
 
     def test_signed_in_make_without_fresh_sign_in_has_no_offer(self, page, live_server, live_token):
         _open_wizard(page, live_server, live_token, email=EMAIL)

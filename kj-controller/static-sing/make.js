@@ -72,11 +72,40 @@ const rememberEmail = (email) => {
 // "Switch singer" hands the phone to someone else: never offer them this email.
 export const forgetMakeEmail = () => rememberEmail("");
 
+// One-tap sign-in SDKs, loaded only when the sign-in block is on screen.
+const GSI_SRC = "https://accounts.google.com/gsi/client";
+const APPLE_SRC = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+const _scripts = {};
+function loadScript(src) {
+  if (!_scripts[src]) {
+    _scripts[src] = new Promise((resolve, reject) => {
+      const tag = document.createElement("script");
+      tag.src = src; tag.async = true;
+      tag.onload = resolve;
+      tag.onerror = () => { delete _scripts[src]; reject(new Error(`load ${src}`)); };
+      document.head.appendChild(tag);
+    });
+  }
+  return _scripts[src];
+}
+// The Google client only trusts sing.nomadkaraoke.com (and Apple's Services ID
+// only returns there), so elsewhere (LAN, local, tests) the buttons are hidden.
+const socialHostOk = () => window.location.hostname === "sing.nomadkaraoke.com" || !!window.__SING_SOCIAL_STUB;
+const APPLE_LOGO_SVG = '<svg class="mk-apple-logo" viewBox="0 0 814 1000" aria-hidden="true">'
+  + '<path fill="currentColor" d="M788 341c-6 4-108 62-108 190 0 149 131 202 135 203-1 3-21 72-69 142-43 62-88 '
+  + '124-157 124s-87-40-166-40c-77 0-104 41-167 41s-107-57-157-127C40 791 0 680 0 574 0 404 110 314 219 314c58 0 '
+  + '106 38 142 38 35 0 89-40 155-40 25 0 115 2 172 29zM554 158c27-32 46-77 46-121 0-6-1-12-2-17-44 2-96 29-127 '
+  + '66-25 28-48 73-48 118 0 7 1 14 2 16 3 1 8 1 12 1 39 0 89-27 117-63z"/></svg>';
+const onApplePlatform = () => /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || "");
+
 // --- Wizard ------------------------------------------------------------------
 
 export function createMakeFlow(deps) {
-  const { el, fetchJson, state, render, BASE, getDeviceId, onPicked, onBack } = deps;
-  const { onAccount, onSignedIn, onSignedOut, saveSongsSlot } = deps;
+  const { el, fetchJson, state, render, BASE, getDeviceId, onBack } = deps;
+  const { onAccount, onSignedIn, onSignedOut } = deps;
+  // One screen, one send: the make screen submits itself (sing.js's shared
+  // submitSelection) with the extras the confirm screen used to ask for.
+  const { onSubmit, submitErrorText, extrasSlot } = deps;
 
   const m = () => state.make;
 
@@ -105,12 +134,15 @@ export function createMakeFlow(deps) {
       verdict: null, appliedFrom: null, correctionActive: false, gate: false,
       showOthers: false, expanded: new Set(), ytUrl: "", ytErr: "", ytBusy: false,
       searchSeq: 0,
+      pick: null, audioOpen: false, sending: false, submitErr: "",
+      social: { google: "", apple: "" },
     };
     state.step = "make";
     render();
     try {
       const acct = await fetchJson(`${BASE}/make/account?device_id=${encodeURIComponent(getDeviceId())}`);
       m().email = acct.email || rememberedEmail();
+      m().social = { google: acct.google_client_id || "", apple: acct.apple_client_id || "" };
       onAccount?.(acct);
       if (acct.email) beginSearch(); else m().stage = "account";
     } catch {
@@ -173,11 +205,77 @@ export function createMakeFlow(deps) {
     rerender();
   }
 
+  // Google / Apple one-tap: the provider's ID token signs the singer in to gen
+  // (kjbox POST /make/social), no email to type and no code to fetch.
+  async function socialSignIn(provider, idToken) {
+    const s = m();
+    if (!idToken || s.busy) return;   // a double tap must not sign in (and search) twice
+    s.busy = true; s.err = ""; rerender();
+    try {
+      const d = await api("social", { provider, id_token: idToken });
+      s.busy = false;
+      s.email = d.email;
+      rememberEmail(d.email);
+      onSignedIn?.(d.email);
+      beginSearch();
+    } catch (e) {
+      Object.assign(s, { busy: false, err: e?.data?.error === "social_failed" ? t("make.socialFailed") : errText(e) });
+    }
+    rerender();
+  }
+
+  async function signInWithApple() {
+    const s = m();
+    try {
+      const stub = window.__SING_SOCIAL_STUB;
+      if (stub) return socialSignIn("apple", stub.apple);
+      await loadScript(APPLE_SRC);
+      window.AppleID.auth.init({
+        clientId: s.social.apple, scope: "email", usePopup: true,
+        redirectURI: `${window.location.origin}/`,
+      });
+      const r = await window.AppleID.auth.signIn();
+      await socialSignIn("apple", r?.authorization?.id_token);
+    } catch (e) {
+      // Closing the popup is not an error worth shouting about.
+      if (e && e.error === "popup_closed_by_user") return;
+      s.err = t("make.socialFailed"); rerender();
+    }
+  }
+
+  // What gets sent: the picked result (or YouTube link) as a make selection.
+  function selection() {
+    const s = m();
+    const p = effectivePick();
+    if (!p) return null;
+    const base = { source_type: "make", source_ref: null, song_artist: s.artist, song_title: s.title,
+                   label: `${s.title} — ${s.artist}` };
+    if (p.youtube_url) return { ...base, source_meta: { youtube_url: p.youtube_url, audio: t("make.fromYoutubeLink") } };
+    return { ...base, source_meta: { search_session_id: s.search.sessionId, selection_index: p.index,
+                                     audio: resultSummary(p) } };
+  }
+
+  async function submit() {
+    const s = m();
+    const sel = selection();
+    if (!sel || s.sending) return;
+    s.sending = true; s.submitErr = ""; rerender();
+    try {
+      await onSubmit(sel);           // renders the done screen on success
+    } catch (e) {
+      s.sending = false;
+      if (handleAuthLoss(e)) return;
+      s.submitErr = submitErrorText(e);
+      rerender();
+    }
+  }
+
   async function signOut() {
     try { await api("sign-out", {}); } catch { /* best effort */ }
     rememberEmail("");   // "not you?" — don't offer this email to the next person
     onSignedOut?.();
-    Object.assign(m(), { stage: "account", email: "", err: "" });
+    Object.assign(m(), { stage: "account", email: "", err: "", pick: null,
+                         search: { status: "idle", results: [], sessionId: null } });
     rerender();
   }
 
@@ -187,6 +285,8 @@ export function createMakeFlow(deps) {
     s.stage = "audio";
     s.err = "";
     s.showOthers = false;
+    s.pick = null;          // a new search's results replace any earlier choice
+    s.audioOpen = false;
     s.search = { status: "searching", results: [], sessionId: null };
     const seq = ++s.searchSeq;
     if (judge) {
@@ -290,6 +390,10 @@ export function createMakeFlow(deps) {
   function toggleCorrection() {
     const s = m();
     if (!s.appliedFrom || !s.verdict) return;
+    // A different song: a recording chosen for the old one no longer applies
+    // (the automatic pick is re-derived against the new title).
+    s.pick = null;
+    s.audioOpen = false;
     if (s.correctionActive) {
       s.artist = s.appliedFrom.artist; s.title = s.appliedFrom.title; s.correctionActive = false;
     } else {
@@ -300,18 +404,9 @@ export function createMakeFlow(deps) {
 
   function pickResult(r) {
     const s = m();
-    onPicked({
-      source_type: "make",
-      source_ref: null,
-      song_artist: s.artist,
-      song_title: s.title,
-      label: `${s.title} — ${s.artist}`,
-      source_meta: {
-        search_session_id: s.search.sessionId,
-        selection_index: r.index,
-        audio: resultSummary(r),
-      },
-    });
+    s.pick = r;
+    s.audioOpen = false;
+    rerender();
   }
 
   async function pickUrl() {
@@ -323,12 +418,9 @@ export function createMakeFlow(deps) {
       const v = await api("validate-url", { url });
       s.ytBusy = false;
       if (!v.supported) { s.ytErr = v.detail || t("make.urlUnsupported"); return rerender(); }
-      onPicked({
-        source_type: "make", source_ref: null,
-        song_artist: s.artist, song_title: s.title,
-        label: `${s.title} — ${s.artist}`,
-        source_meta: { youtube_url: url, audio: t("make.fromYoutubeLink") },
-      });
+      s.pick = { youtube_url: url };
+      s.audioOpen = false;
+      rerender();
     } catch (e) {
       s.ytBusy = false;
       if (!handleAuthLoss(e)) { s.ytErr = errText(e); rerender(); }
@@ -424,37 +516,60 @@ export function createMakeFlow(deps) {
       el("span", { class: `mk-kv-value ${cls || ""}` }, value));
   }
 
-  // The hero "Perfect match found" / "Recommended audio" card.
-  function pickCard(conf) {
+  // The audio that will be used — picked automatically for a confident
+  // (tier 1/2) search once the checks are done, else the singer's own choice.
+  function effectivePick() {
     const s = m();
-    const best = conf.best;
-    const perfect = conf.tier === 1;
-    const meta = formatMetadata(best);
+    if (s.pick) return s.pick;
+    if (!s.gate || s.search.status !== "done" || !s.search.results.length) return null;
+    const conf = getSearchConfidence(s.search.results, s.title, s.artist);
+    return conf.tier === 3 ? null : conf.best;
+  }
+
+  // The chosen audio, summarised; "Change" opens the other options.
+  function pickCard(r, auto) {
+    const s = m();
+    if (r.youtube_url) {
+      return el("div", { class: "mk-pick mk-pick-perfect", "data-testid": "make-pick" },
+        el("div", { class: "mk-pick-head" }, el("span", { class: "mk-pick-label" }, t("make.yourChoice")),
+          el("span", { class: "mk-tag mk-tag-yt" }, "YouTube")),
+        el("div", { class: "mk-pick-body", "data-testid": "make-result" },
+          el("p", { class: "mk-reason mk-mono" }, r.youtube_url),
+          changeAudioLink()));
+    }
+    const perfect = auto && getSearchConfidence(s.search.results, s.title, s.artist).tier === 1;
+    const meta = formatMetadata(r);
     return el("div", { class: `mk-pick ${perfect ? "mk-pick-perfect" : "mk-pick-recommended"}`, "data-testid": "make-pick" },
       el("div", { class: "mk-pick-head" },
-        el("span", { class: "mk-pick-label" }, perfect ? t("make.perfectMatch") : t("make.recommended")),
-        ...providerPills(best)),
+        el("span", { class: "mk-pick-label" },
+          !auto ? t("make.yourChoice") : perfect ? t("make.perfectMatch") : t("make.recommended")),
+        ...providerPills(r)),
       el("div", { class: "mk-pick-body", "data-testid": "make-result" },
-        el("p", { class: "mk-reason" }, confidenceReason(best)),
-        best.target_file ? labelled(t("make.filename"), best.target_file, "mk-mono") : null,
-        labelled(t("make.release"), releaseName(best)),
+        el("p", { class: "mk-reason" }, confidenceReason(r)),
+        r.target_file ? labelled(t("make.filename"), r.target_file, "mk-mono") : null,
+        labelled(t("make.release"), releaseName(r)),
         el("div", { class: "mk-tags" },
-          el("span", { class: "mk-quality" }, formatQuality(best)),
-          availabilityBadge(best), viewsBadge(best), matchBadge(best, false)),
+          el("span", { class: "mk-quality" }, formatQuality(r)),
+          availabilityBadge(r), viewsBadge(r), matchBadge(r, false)),
         meta ? el("div", { class: "mk-meta" }, meta) : null,
-        ...pickWarnings(s.search.results, best).map((w) => el("div", { class: "mk-result-warn" }, "⚠ ", w)),
-        el("button", {
-          class: "btn primary mk-use-full", "data-testid": "make-use",
-          disabled: s.gate ? null : "disabled",
-          onclick: () => pickResult(best),
-        }, t("make.useThis"))));
+        ...pickWarnings(s.search.results, r).map((w) => el("div", { class: "mk-result-warn" }, "⚠ ", w)),
+        changeAudioLink()));
+  }
+
+  function changeAudioLink() {
+    const s = m();
+    return el("button", {
+      class: "btn link mk-change-audio", "data-testid": "make-change-audio",
+      onclick: () => { s.audioOpen = !s.audioOpen; rerender(); },
+    }, s.audioOpen ? t("make.hideOthers") : t("make.changeAudio"));
   }
 
   function resultRow(r, showMatch) {
     const s = m();
     const q = formatQuality(r);
     const meta = formatMetadata(r);
-    return el("div", { class: "mk-row", "data-testid": "make-result" },
+    const chosen = effectivePick() === r;
+    return el("div", { class: "mk-row" + (chosen ? " mk-row-chosen" : ""), "data-testid": "make-result" },
       el("div", { class: "mk-row-main" },
         el("div", { class: "mk-row-line1" },
           ...providerPills(r),
@@ -464,9 +579,9 @@ export function createMakeFlow(deps) {
         meta ? el("div", { class: "mk-meta" }, meta) : null,
         r.target_file ? labelled(t("make.filename"), r.target_file, "mk-mono") : null),
       el("button", {
-        class: "btn mk-select", disabled: s.gate ? null : "disabled",
+        class: "btn mk-select" + (chosen ? " primary" : ""), disabled: s.gate && !chosen ? null : "disabled",
         onclick: () => pickResult(r),
-      }, t("make.select")));
+      }, chosen ? t("make.selected") : t("make.select")));
   }
 
   function correctionNotice() {
@@ -543,137 +658,194 @@ export function createMakeFlow(deps) {
       ...shown.map((r) => resultRow(r, showMatch)));
   }
 
-  function othersSection(conf, grouped) {
-    const s = m();
-    // Tier 3 has no pick card — every result is listed (like gen).
-    const expandedAll = conf.tier === 3;
-    const others = s.search.results.filter((r) => expandedAll || r !== conf.best);
-    if (!others.length) return null;
-    const toggle = expandedAll ? null : el("button", {
-      class: "btn link mk-others-toggle", "data-testid": "make-others-toggle",
-      onclick: () => { s.showOthers = !s.showOthers; rerender(); },
-    }, s.showOthers ? t("make.hideOthers") : tn("make.seeOthers", others.length));
-    if (!expandedAll && !s.showOthers) return toggle;
-    return el("div", { class: "mk-others" },
-      toggle,
-      el("p", { class: "hint mk-others-help" },
-        expandedAll ? t("make.limitedResults") : t("make.othersHelp")),
-      ...grouped.map((g) => {
-        const rows = g.results.filter((r) => expandedAll || r !== conf.best);
-        return rows.length ? categoryBlock(g, rows, expandedAll) : null;
-      }),
-    );
+  // Every result, grouped like gen's Choose Audio step: the "Change" list, or
+  // the list the singer must pick from when no result is a confident match.
+  function othersSection(grouped, mustPick) {
+    return el("div", { class: "mk-others", "data-testid": "make-others" },
+      el("p", { class: "hint mk-others-help" }, mustPick ? t("make.limitedResults") : t("make.othersHelp")),
+      ...grouped.map((g) => (g.results.length ? categoryBlock(g, g.results, mustPick) : null)));
   }
 
-  function renderAudio(card) {
-    const s = m();
-    card.appendChild(el("div", { class: "mk-song" },
-      el("div", { class: "mk-song-title" }, s.title),
-      el("div", { class: "mk-song-artist" }, s.artist)));
-    const notice = correctionNotice();
-    if (notice) card.appendChild(notice);
+  function section(label, ...children) {
+    return el("section", { class: "mk-section" }, el("div", { class: "mk-section-label" }, label), ...children);
+  }
 
+  function renderAudio() {
+    const s = m();
+    const out = [];
+    if (s.stage !== "audio") {
+      out.push(el("p", { class: "hint", "data-testid": "make-audio-later" }, t("make.audioAfterSignIn")));
+      return out;
+    }
     if (s.search.status === "searching") {
-      card.appendChild(el("p", { class: "hint mk-searching", "data-testid": "make-searching" }, t("make.searching")));
-      return;
+      out.push(el("p", { class: "hint mk-searching", "data-testid": "make-searching" }, t("make.searching")));
+      return out;
     }
     if (s.search.status === "error") {
-      card.appendChild(el("p", { class: "error" }, s.err));
-      card.appendChild(el("button", { class: "btn primary", onclick: () => beginSearch() }, t("make.retry")));
-      return;
+      out.push(el("p", { class: "error" }, s.err));
+      out.push(el("button", { class: "btn ghost", onclick: () => beginSearch() }, t("make.retry")));
+      return out;
     }
     const results = s.search.results;
+    if (!results.length) {
+      if (s.pick) out.push(pickCard(s.pick, false));   // the YouTube link they chose
+      out.push(el("div", { class: "mk-none" },
+        el("h4", {}, t("make.noResultsTitle")), el("p", { class: "sing-empty-desc" }, t("make.noResultsDesc"))));
+      out.push(fallbackSection(false));
+      return out;
+    }
+    if (!s.gate) {
+      out.push(el("p", { class: "hint", "data-testid": "make-checking" }, t("make.checking")));
+      return out;
+    }
     const conf = getSearchConfidence(results, s.title, s.artist);
     const grouped = groupResults(results);
-    if (!s.gate && results.length) card.appendChild(el("p", { class: "hint" }, t("make.checking")));
-
-    if (!results.length) {
-      card.appendChild(el("div", { class: "mk-none" },
-        el("h4", {}, t("make.noResultsTitle")), el("p", { class: "sing-empty-desc" }, t("make.noResultsDesc"))));
-      card.appendChild(fallbackSection(false));
-      return;
-    }
-    if (conf.tier === 3) {
-      card.appendChild(el("div", { class: "mk-guidance", "data-testid": "make-guidance" },
-        el("div", { class: "mk-guidance-title" }, t("make.limitedTitle")),
+    const pick = effectivePick();
+    if (conf.tier === 3 && !s.pick) {
+      // Not sure which recording is right: the singer picks (never the KJ).
+      out.push(el("div", { class: "mk-guidance", "data-testid": "make-guidance" },
+        el("div", { class: "mk-guidance-title" }, t("make.pickTitle")),
         el("ul", {}, ...guidanceTips(results).map((tip) => el("li", {}, tip)))));
-      card.appendChild(fallbackSection(true));
-    } else {
-      card.appendChild(pickCard(conf));
+      out.push(othersSection(grouped, true));
+      out.push(fallbackSection(true));
+      return out;
     }
-    const others = othersSection(conf, grouped);
-    if (others) card.appendChild(others);
-    if (conf.tier !== 3) card.appendChild(collapsedFallback());
+    out.push(pickCard(pick, !s.pick));
+    if (s.audioOpen) {
+      out.push(othersSection(grouped, false));
+      out.push(fallbackSection(false));
+    }
+    return out;
   }
 
-  // With a good pick on screen, YouTube is a last resort: keep the link box
-  // behind a small "Can't find your song?" toggle instead of inviting it.
-  function collapsedFallback() {
+  // Google renders its own button (an iframe) into a node we keep across
+  // re-renders, so it isn't rebuilt on every keystroke-driven render.
+  function googleButton() {
     const s = m();
-    if (s.fallbackOpen || s.ytUrl || s.ytErr) return fallbackSection(false);
-    return el("button", {
-      class: "btn ghost mk-fallback-toggle", "data-testid": "make-fallback-toggle",
-      onclick: () => { s.fallbackOpen = true; rerender(); },
-    }, t("make.fallbackToggle"));
+    if (s.googleNode) return s.googleNode;
+    const node = el("div", { class: "mk-google", "data-testid": "make-google" });
+    s.googleNode = node;
+    const stub = window.__SING_SOCIAL_STUB;
+    if (stub) {
+      node.appendChild(el("button", { class: "btn mk-social mk-social-google", type: "button",
+        onclick: () => socialSignIn("google", stub.google) }, t("make.continueGoogle")));
+      return node;
+    }
+    loadScript(GSI_SRC).then(() => {
+      const gid = window.google && window.google.accounts && window.google.accounts.id;
+      if (!gid) throw new Error("gsi");
+      gid.initialize({ client_id: s.social.google, ux_mode: "popup",
+                       callback: (resp) => socialSignIn("google", resp && resp.credential) });
+      gid.renderButton(node, { type: "standard", theme: "filled_black", size: "large", shape: "pill",
+                               text: "continue_with", logo_alignment: "center", locale: getLocale(),
+                               width: Math.min(400, node.clientWidth || 320) });
+    }).catch(() => { node.hidden = true; });   // blocked / offline: email still works
+    return node;
   }
 
-  function renderAccount(card) {
-    const s = m();
-    card.appendChild(el("p", { class: "sing-empty-desc" }, t("make.emailWhy")));
-    card.appendChild(el("label", { class: "sing-empty-label" }, t("make.emailLabel"),
-      el("input", {
-        type: "email", class: "sing-empty-input", autocomplete: "email", inputmode: "email",
-        placeholder: "you@example.com", value: s.email, "data-testid": "make-email",
-        oninput: (e) => { s.email = e.target.value; },
-        onkeydown: (e) => { if (e.key === "Enter") sendCode(); },
-      })));
-    card.appendChild(el("button", {
-      class: "btn primary sing-empty-submit", "data-testid": "make-send-code",
-      disabled: s.busy ? "disabled" : null, onclick: sendCode,
-    }, s.busy ? t("common.sending") : t("make.sendCode")));
-    card.appendChild(el("p", { class: "hint mk-fineprint" }, t("make.emailFineprint")));
+  function appleButton() {
+    const btn = el("button", { class: "btn mk-social mk-social-apple", type: "button", "data-testid": "make-apple",
+      onclick: signInWithApple });
+    // Apple's logo as inline SVG (the  glyph only exists in Apple's own fonts).
+    btn.innerHTML = APPLE_LOGO_SVG;
+    btn.appendChild(document.createTextNode(` ${t("make.continueApple")}`));
+    return btn;
   }
 
-  function renderCode(card) {
+  function renderSignIn() {
     const s = m();
-    card.appendChild(el("p", { class: "sing-empty-desc" }, t("make.codeSent", { email: s.email })));
-    card.appendChild(el("input", {
-      type: "text", class: "sing-empty-input mk-code", inputmode: "numeric",
-      autocomplete: "one-time-code", maxlength: "6", placeholder: "123456",
-      value: s.code, "data-testid": "make-code",
-      oninput: (e) => { s.code = e.target.value; if (/^\d{6}$/.test(s.code.trim())) verifyCode(); },
-    }));
-    card.appendChild(el("button", {
-      class: "btn primary sing-empty-submit", "data-testid": "make-verify",
-      disabled: s.busy ? "disabled" : null, onclick: verifyCode,
-    }, s.busy ? t("common.sending") : t("make.verify")));
-    card.appendChild(el("div", { class: "mk-code-actions" },
-      el("button", { class: "btn link", onclick: sendCode }, t("make.resend")),
-      el("button", { class: "btn link", onclick: () => { s.stage = "account"; s.err = ""; rerender(); } },
-        t("make.differentEmail"))));
+    if (s.stage === "audio" && s.email) {
+      return [el("p", { class: "mk-signed-in", "data-testid": "make-signed-in" },
+        t("make.sendingTo", { email: s.email }), " ",
+        el("button", { class: "btn link", onclick: signOut }, t("make.notYou")))];
+    }
+    if (s.stage === "loading") return [el("p", { class: "hint" }, t("make.loading"))];
+    const out = [el("p", { class: "sing-empty-desc" }, t("make.sendToDesc"))];
+    const social = socialHostOk();
+    const google = social && s.social.google ? googleButton() : null;
+    const apple = social && s.social.apple ? appleButton() : null;
+    if (google || apple) {
+      if (apple && !window.__SING_SOCIAL_STUB) loadScript(APPLE_SRC).catch(() => {});   // so the tap opens the popup at once
+      out.push(el("div", { class: "mk-socials" }, ...(onApplePlatform() ? [apple, google] : [google, apple])));
+      out.push(el("div", { class: "mk-or" }, el("span", {}, t("make.orEmail"))));
+    }
+    if (s.stage === "code") {
+      out.push(el("p", { class: "sing-empty-desc" }, t("make.codeSent", { email: s.email })));
+      out.push(el("input", {
+        type: "text", class: "sing-empty-input mk-code", inputmode: "numeric",
+        autocomplete: "one-time-code", maxlength: "6", placeholder: "123456",
+        value: s.code, "data-testid": "make-code",
+        oninput: (e) => { s.code = e.target.value; if (/^\d{6}$/.test(s.code.trim())) verifyCode(); },
+      }));
+      out.push(el("button", {
+        class: "btn ghost sing-empty-submit", "data-testid": "make-verify",
+        disabled: s.busy ? "disabled" : null, onclick: verifyCode,
+      }, s.busy ? t("common.sending") : t("make.verify")));
+      out.push(el("div", { class: "mk-code-actions" },
+        el("button", { class: "btn link", onclick: sendCode }, t("make.resend")),
+        el("button", { class: "btn link", onclick: () => { s.stage = "account"; s.err = ""; rerender(); } },
+          t("make.differentEmail"))));
+    } else {
+      // A real <form> with name/autocomplete=email: the browser offers the
+      // phone's saved addresses, so most singers tap instead of typing.
+      out.push(el("form", {
+        class: "mk-email-form", autocomplete: "on",
+        onsubmit: (e) => { e.preventDefault(); sendCode(); },
+      },
+        el("input", {
+          type: "email", name: "email", id: "mk-email", class: "sing-empty-input", autocomplete: "email",
+          inputmode: "email", autocapitalize: "off", spellcheck: "false",
+          placeholder: t("make.emailPlaceholder"), "aria-label": t("make.emailLabel"),
+          value: s.email, "data-testid": "make-email",
+          oninput: (e) => { s.email = e.target.value; },
+        }),
+        el("button", {
+          type: "submit", class: "btn ghost", "data-testid": "make-send-code",
+          disabled: s.busy ? "disabled" : null,
+        }, s.busy ? t("common.sending") : t("make.sendCode"))));
+    }
+    if (s.err) out.push(el("p", { class: "error", "data-testid": "make-error" }, s.err));
+    return out;
+  }
+
+  // The one "send" on the screen, pinned above the tab bar. Disabled until it
+  // can work, and its label says what's still missing.
+  function submitBar() {
+    const s = m();
+    let label = t("make.submitCta");
+    let ready = false;
+    if (s.sending) label = t("common.sending");
+    else if (s.stage !== "audio") label = t("make.needSignIn");
+    else if (s.search.status === "searching" || (!s.gate && s.search.status === "done")) label = t("make.findingAudio");
+    else if (!effectivePick()) label = t("make.needAudio");
+    else ready = true;
+    return el("div", { class: "mk-submit-bar", "data-testid": "make-submit-bar" },
+      el("button", {
+        class: "btn primary mk-submit", "data-testid": "make-submit",
+        disabled: ready ? null : "disabled", onclick: submit,
+      }, label));
   }
 
   function renderStep() {
     const s = m();
-    const card = el("main", { class: "sing-card mk-card", "data-testid": "make-step" });
-    card.appendChild(el("h2", {}, t("make.title")));
+    const card = el("main", { class: "sing-card mk-card mk-one", "data-testid": "make-step" });
+    card.appendChild(el("h2", {}, t("make.screenTitle")));
     if (!s) return card;
-    if (s.err && s.stage !== "audio") card.appendChild(el("p", { class: "error", "data-testid": "make-error" }, s.err));
-    if (s.stage === "loading") card.appendChild(el("p", { class: "hint" }, t("make.loading")));
-    else if (s.stage === "account") renderAccount(card);
-    else if (s.stage === "code") renderCode(card);
-    else renderAudio(card);
-
-    const foot = el("div", { class: "mk-foot" },
-      el("button", { class: "btn ghost", onclick: onBack }, t("make.back")));
-    if (s.email && s.stage === "audio") {
-      foot.appendChild(el("span", { class: "hint mk-signed-in" },
-        t("make.signedInAs", { email: s.email }), " ",
-        el("button", { class: "btn link", onclick: signOut }, t("make.notYou"))));
-    }
-    card.appendChild(foot);
-    // Just signed in: offer "Save tonight's songs" with one tap (never automatic).
-    if (s.email && s.stage === "audio" && saveSongsSlot) card.appendChild(saveSongsSlot("offer"));
+    card.appendChild(section(t("make.songLabel"),
+      el("div", { class: "mk-song" },
+        el("div", { class: "mk-song-title" }, s.title),
+        el("div", { class: "mk-song-artist" }, s.artist)),
+      correctionNotice(),
+      el("button", { class: "btn link mk-change-song", "data-testid": "make-change-song", onclick: onBack },
+        t("make.changeSong"))));
+    card.appendChild(section(t("make.sendToTitle"), ...renderSignIn()));
+    card.appendChild(section(t("make.audioLabel"), ...renderAudio()));
+    const extras = extrasSlot ? extrasSlot() : null;
+    if (extras) card.appendChild(extras);
+    if (s.submitErr) card.appendChild(el("p", { class: "error", "data-testid": "make-submit-error" }, s.submitErr));
+    card.appendChild(el("div", { class: "mk-foot" },
+      el("button", { class: "btn ghost", onclick: onBack }, t("make.back"))));
+    card.appendChild(submitBar());
     return card;
   }
 

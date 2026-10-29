@@ -12,6 +12,7 @@ with sync_playwright() as p:
     ctx = b.new_context(viewport={"width": 412, "height": 860}, user_agent=UA, device_scale_factor=2,
                         is_mobile=True, has_touch=True, storage_state=None)
     page = ctx.new_page()
+    page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
     n = 0
     for st in STEPS:
         kind, arg = st[0], st[1] if len(st) > 1 else None
@@ -23,6 +24,8 @@ with sync_playwright() as p:
             page.locator(arg).first.fill(st[2])
         elif kind == "type":
             page.locator(arg).first.press_sequentially(st[2], delay=40)
+        elif kind == "eval":
+            page.evaluate(arg)
         elif kind == "wait":
             page.wait_for_timeout(int(arg))
         elif kind == "waitfor":

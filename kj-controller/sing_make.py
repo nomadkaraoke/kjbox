@@ -214,10 +214,14 @@ def make_account():
     device_id = str(request.args.get("device_id") or "").strip()[:64]
     store = current_app.sing_store
     account = _gen_account(store, device_id)
+    cfg = current_app.kj_config
     return jsonify({
         "ready": make_flow_ready(current_app._get_current_object()),
         "email": account["email"] if account else None,
         "linked": _linked_tonight(store, device_id, account),
+        # One-tap sign-in buttons (public client IDs; empty hides the button).
+        "google_client_id": cfg.get("sing_google_client_id") or "",
+        "apple_client_id": cfg.get("sing_apple_client_id") or "",
     })
 
 
@@ -292,6 +296,39 @@ def make_verify_code():
         return jsonify({"error": "gen_unavailable"}), 502
     current_app.sing_store.set_gen_account(device_id, email, token)
     # A9-R1: verifying never links; it only ends a link to a different account.
+    _unlink_if_other(current_app.sing_store, device_id, email)
+    return jsonify({"email": email})
+
+
+@sing_bp.route("/make/social", methods=["POST"])
+@require_token
+def make_social():
+    """Google / Apple one-tap: the provider's ID token instead of an email code."""
+    data, device_id = _body()
+    _, err = _guard(device_id, need_account=False, purpose=_purpose(data))
+    if err:
+        return err
+    provider = str(data.get("provider") or "")
+    id_token = str(data.get("id_token") or "")
+    if provider not in ("google", "apple") or not id_token or len(id_token) > 8192:
+        return jsonify({"error": "social_failed"}), 400
+    try:
+        result = current_app.gen_client.social_sign_in(
+            provider, id_token, locale=_locale(data), venue=current_app.kj_config.get("venue_name"))
+    except GenApiError as exc:
+        if exc.status == 401:
+            return jsonify({"error": "social_failed"}), 400
+        if exc.status == 422:
+            return jsonify({"error": "email_invalid"}), 400
+        if exc.status == 429:
+            return jsonify({"error": "signup_cap"}), 429
+        current_app.logger.warning("make: %s sign-in failed: %s", provider, exc)
+        return jsonify({"error": "gen_unavailable"}), 502
+    token = result.get("session_token")
+    email = str(((result.get("user") or {}).get("email")) or "").strip().lower()
+    if not (token and email):
+        return jsonify({"error": "gen_unavailable"}), 502
+    current_app.sing_store.set_gen_account(device_id, email, token)
     _unlink_if_other(current_app.sing_store, device_id, email)
     return jsonify({"email": email})
 

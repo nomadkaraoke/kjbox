@@ -56,7 +56,8 @@ class TestAccount:
     def test_not_ready_without_partner_secret(self, client, sing_app, token):
         sing_app.gen_client = None
         resp = client.get(f"/sing/make/account?device_id={DEVICE}&t={token}")
-        assert resp.get_json() == {"ready": False, "email": None, "linked": False}
+        body = resp.get_json()
+        assert {k: body[k] for k in ("ready", "email", "linked")} == {"ready": False, "email": None, "linked": False}
         assert _post(client, token, "send-code", email="a@b.co").status_code == 400
 
     def test_make_flag_needs_flow_ready(self, client, sing_app, token, gen):
@@ -96,6 +97,36 @@ class TestAccount:
     def test_sign_out(self, client, sing_app, token, signed_in):
         _post(client, token, "sign-out")
         assert sing_app.sing_store.get_gen_account(DEVICE) is None
+
+
+class TestSocialSignIn:
+    def test_account_offers_the_one_tap_client_ids(self, client, sing_app, token, gen):
+        sing_app.kj_config["sing_google_client_id"] = "g-client"
+        sing_app.kj_config["sing_apple_client_id"] = "com.example.web"
+        body = client.get(f"/sing/make/account?device_id={DEVICE}&t={token}").get_json()
+        assert (body["google_client_id"], body["apple_client_id"]) == ("g-client", "com.example.web")
+
+    @pytest.mark.parametrize("provider", ["google", "apple"])
+    def test_id_token_signs_the_singer_in(self, client, sing_app, token, gen, provider):
+        gen.social_sign_in.return_value = {"session_token": "sess-anya", "user": {"email": "Anya@Example.com"}}
+        resp = _post(client, token, "social", provider=provider, id_token="eyJ.tok", locale="en")
+        assert resp.status_code == 200 and resp.get_json() == {"email": "anya@example.com"}   # no token to the phone
+        assert gen.social_sign_in.call_args.args[:2] == (provider, "eyJ.tok")
+        acct = sing_app.sing_store.get_gen_account(DEVICE)
+        assert (acct["email"], acct["session_token"]) == ("anya@example.com", "sess-anya")
+
+    @pytest.mark.parametrize("status,error,code", [(401, "social_failed", 400), (422, "email_invalid", 400),
+                                                   (429, "signup_cap", 429), (503, "gen_unavailable", 502)])
+    def test_gen_refusals(self, client, sing_app, token, gen, status, error, code):
+        gen.social_sign_in.side_effect = GenApiError(status, "nope")
+        resp = _post(client, token, "social", provider="google", id_token="x")
+        assert (resp.status_code, resp.get_json()["error"]) == (code, error)
+        assert sing_app.sing_store.get_gen_account(DEVICE) is None
+
+    def test_unknown_provider_rejected(self, client, token, gen):
+        resp = _post(client, token, "social", provider="facebook", id_token="x")
+        assert resp.status_code == 400
+        gen.social_sign_in.assert_not_called()
 
 
 class TestCheckAndSearch:

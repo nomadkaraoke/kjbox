@@ -311,6 +311,12 @@ class GenClient:
         return self._singer_call("POST", "/api/kjbox/auth/verify-code", locale=locale,
                                  json={"email": email, "code": code})
 
+    def social_sign_in(self, provider, id_token, locale=None, venue=None):
+        """Google / Apple ID token → the singer's gen session (same body as
+        verify-code). ``provider`` is "google" or "apple"."""
+        return self._singer_call("POST", f"/api/kjbox/auth/{provider}", locale=locale,
+                                 json={"id_token": id_token, "locale": locale, "venue": venue})
+
     def grant_show_credit(self, session_token, idempotency_key, venue=None, only_if_empty=False):
         """+1 free "show" credit. ``only_if_empty`` grants only at a 0 balance;
         gen claims ``idempotency_key`` only when it actually grants, so one key

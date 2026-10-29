@@ -53,7 +53,9 @@ def _link(client, token, device=DEVICE, path="link"):
 
 
 def _account(client, token, device=DEVICE):
-    return client.get(f"/sing/make/account?device_id={device}&t={token}").get_json()
+    body = client.get(f"/sing/make/account?device_id={device}&t={token}").get_json()
+    # The one-tap sign-in client IDs (v0.142.0) aren't what these tests are about.
+    return {k: v for k, v in body.items() if k not in ("google_client_id", "apple_client_id")}
 
 
 def _sung(sing_app, device, name="Mary", song="Golden Hour - Nova Lane"):
