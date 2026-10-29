@@ -2278,7 +2278,9 @@ function renderSearch() {
       offerMake() ? el("p", { class: "sing-missing-desc" }, t("search.missingMakeDesc")) : null,
       action,
       // No rows at all: the YouTube link / describe-it triage is one tap away.
-      !(results.songs || []).length && !showOtherOptions ? el("button", {
+      // (Same row list renderResults shows: the corrected search's, if any.)
+      !((c.active && c.songs && c.songs.length ? c.songs : results.songs) || []).length
+        && !showOtherOptions ? el("button", {
         class: "btn link sing-other-options", "data-testid": "song-other-options",
         onclick: (e) => { e.stopPropagation(); showOtherOptions = true; logChoice("other_options"); update(); },
       }, t("search.otherOptions")) : null,
