@@ -100,11 +100,6 @@
       "other": "▸ {count} piese de la alți artiști"
     },
     "othersHide": "▾ Ascunde piesele de la alți artiști",
-    "autoBest": "Cea mai bună versiune aleasă automat",
-    "pickByFilter": {
-      "community": "Versiune audio originală selectată (filtrul tău)",
-      "commercial": "Versiune cover band selectată (filtrul tău)"
-    },
     "versionsToggle": {
       "one": "Alege din {count} versiune →",
       "other": "Alege din {count} versiuni →"
@@ -391,19 +386,6 @@
     "socialFailed": "Conectarea nu a funcționat. Încearcă din nou sau folosește adresa de email."
   },
   "confirm": {
-    "title": "Asta e piesa corectă?",
-    "changeTitle": "Schimbi cu această piesă?",
-    "changeHint": "Asta înlocuiește {song}. Îți păstrezi locul la rând.",
-    "sourceLocal": "Pe calculatorul gazdei — sigur disponibil",
-    "sourceCloud": "Din biblioteca noastră cloud — foarte de încredere",
-    "sourceOnline": "De pe YouTube — aproape mereu funcționează",
-    "sourceYouTube": "Dintr-un link de YouTube — aproape mereu funcționează",
-    "sourceMake": "Sistemul nostru va crea un video de karaoke pentru această piesă. Locul tău în listă este păstrat la final până când e gata de cântat — de obicei ~30 de minute.",
-    "sourceMakeQuick": "⚡ O versiune rapidă cu versuri derulante este de obicei gata în câteva minute — te anunțăm și poți alege s-o cânți pe asta în loc să aștepți.",
-    "sourceAuto": "Vom alege cea mai bună versiune pentru tine",
-    "searched": "Ai căutat: „{query}”",
-    "details": "Detaliile tale: {name}",
-    "detailsWithPhone": "Detaliile tale: {name} · {phone}",
     "partnersTitle": "Mai cânți cu cineva? (opțional)",
     "partnerName": "Nume (ex. Sarah B.)",
     "partnerPhone": "Telefon (opțional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Pe lista din seara asta",
     "maxSingers": "Acesta este maximul — {count} cântăreți în total.",
     "partnerPhoneInvalid": "Cântăreț {n}: acel număr de telefon pare greșit.",
-    "back": "← Alege altă piesă",
-    "send": "Da — trimite",
-    "sendChange": "Da — schimbă piesa",
     "tooMany": "Ai trimis prea multe — așteaptă câteva minute.",
     "restricted": "Cererile de piese sunt momentan restricționate. Reîncarcă pagina pentru opțiunile actualizate.",
     "failed": "Nu s-a putut trimite — întreabă gazda dacă cererile sunt pe pauză.",
     "makeLimit": "Ne-ai cerut deja să creăm câteva piese în seara asta — alege una din catalog sau întreabă gazda.",
-    "makeDisabled": "Gazda nu acceptă cereri de creare de piese în acest moment — alege o piesă din catalog.",
-    "makeEmail": "Îți vom trimite pe e-mail fișierul video final și linkul de YouTube ({email}).",
-    "detailsFriend": "Cântăreț: {name} (cerut de pe telefonul tău)"
+    "makeDisabled": "Gazda nu acceptă cereri de creare de piese în acest moment — alege o piesă din catalog."
   },
   "mySongs": {
     "title": "Piesele tale de diseară",
@@ -518,6 +495,8 @@
     "forFriend": "Pentru {name}",
     "sentNote": "✓ Trimis: {song}",
     "sentNoteMake": "✓ Trimis! Pregătim piesa {song} special pentru tine (durează cam 30 min). Va intra în rotație imediat ce e gata.",
+    "undo": "Anulează",
+    "addSinger": "+ Adaugă cântăreț",
     "makeShortMaking": "✨ În curs de creare (aprox. 30 min)",
     "makeShortWaitingHost": "✨ În curs de creare · în așteptarea lui {host}",
     "makeShortReview": "✨ În curs de creare · necesită verificarea versurilor",
@@ -676,7 +655,8 @@
     "socialUnset": "Fără răspuns încă"
   },
   "saveSongs": {
-    "link": "Salvează melodiile din această seară în contul tău Nomad Karaoke",
+    "linkShort": "Salvează melodiile din seara asta într-un cont",
+    "whatIsThis": "Ce este asta?",
     "explainer": "Vom salva melodiile pe care le cânți în această seară în contul tău Nomad Karaoke, astfel încât aplicația să-ți poată arăta istoricul și să-ți recomande melodii.",
     "saving": "Se salvează melodiile din această seară în contul {email}",
     "stop": "Nu mai salva",

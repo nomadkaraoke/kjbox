@@ -244,17 +244,17 @@ const state = {
   makePrefill: { artist: "", title: "" },   // last auto-fill of makeArtist/makeTitle (renderSearch)
   makeTitle: "",
   showMakeForm: false,   // "make it" form opened from under non-empty results
-  // New: duet partners typed on the confirm screen. Array of
+  // Duet partners added on the make screen. Array of
   // {name, phone}. Capped at MAX_PARTNERS in the render.
   additional: [],
   // "Song for a friend": {name, phone} while this phone is requesting a song
-  // under someone else's name (search → confirm). Never touches state.name.
+  // under someone else's name (search → send). Never touches state.name.
   friend: null,
   request: null,    // after submit
-  // "Change song" mode: when set, the search→confirm flow re-submits to the
+  // "Change song" mode: when set, the search flow re-submits to the
   // change endpoint for this owned request instead of creating a new one.
-  // `changeSongLabel` names the song being swapped out so the search and
-  // confirm screens can say so.
+  // `changeSongLabel` names the song being swapped out so the search screen
+  // can say so.
   changeRequestId: null,
   changeEditToken: null,
   changeSongLabel: "",
@@ -527,7 +527,6 @@ function rerenderForLocale() {
 const STEP_HASH = {
   identity: "#name",
   search: "#search",
-  confirm: "#confirm",
   done: "#mysongs",
   rotation: "#rotation",
   tip: "#tip",
@@ -552,12 +551,11 @@ function _stepFromHash(hash) {
 }
 
 // A hash can point at a step whose prerequisites are gone (e.g. reload on
-// #confirm loses the in-memory selection) — degrade to the nearest sane step.
+// #make loses the in-memory wizard) — degrade to the nearest sane step.
 function _sanitizeStep(step) {
   if (!step) step = _bootStep();
-  if (step === "confirm" && !state.selected) step = "search";
   if (step === "make" && !state.make) step = "search";
-  if ((step === "search" || step === "confirm") && !state.name) step = "identity";
+  if (step === "search" && !state.name) step = "identity";
   // A stale #name hash (pushed during first-time setup) on a device that
   // already has a good identity — a reload or Back must not strand the
   // singer on the setup form they've completed.
@@ -602,17 +600,17 @@ function render() {
     clearInterval(state._statusPollTimer);
     state._statusPollTimer = null;
   }
-  // "Change song" mode is only valid across the search→confirm flow it starts.
+  // "Change song" mode is only valid across the search flow it starts.
   // Clearing it on any other screen prevents an abandoned change from
   // misrouting a later brand-new request to the /change endpoint.
-  if (state.changeRequestId && state.step !== "search" && state.step !== "confirm") {
+  if (state.changeRequestId && state.step !== "search") {
     state.changeRequestId = null;
     state.changeEditToken = null;
     state.changeSongLabel = "";
   }
-  // A song-for-a-friend only spans the name → search → confirm (→ make) flow;
+  // A song-for-a-friend only spans the name → search (→ make) flow;
   // leaving it (My songs, Rotation, Tip…) drops back to requesting for yourself.
-  if (state.friend && !["identity", "search", "confirm", "make"].includes(state.step)) {
+  if (state.friend && !["identity", "search", "make"].includes(state.step)) {
     state.friend = null;
   }
   // Reorder mode is a done-screen overlay — any navigation away discards it.
@@ -627,7 +625,6 @@ function render() {
   const views = {
     identity: renderIdentity,
     search: renderSearch,
-    confirm: renderConfirm,
     done: renderDone,
     rotation: renderRotation,
     tip: renderTip,
@@ -660,7 +657,7 @@ const makeFlow = createMakeFlow({
   el, fetchJson, state, render, BASE,
   getDeviceId: () => DEVICE_ID,
   onBack: () => { state.step = "search"; render(); },
-  // The make screen is its own confirm: it sends straight from there.
+  // The make screen sends straight from there.
   onSubmit: (selected) => { state.selected = selected; return submitSelection(); },
   submitErrorText: (e) => submitErrorText(e),
   extrasSlot: () => makeExtras(),
@@ -679,7 +676,7 @@ const makeFlow = createMakeFlow({
   onSignedOut: () => { state.account = { ..._freshAccount(), loaded: true, ready: true }; },
 });
 
-// What the confirm screen used to ask, on the make screen itself: photo consent
+// Asked on the make screen itself: photo consent
 // (once per device) and duet partners.
 function makeExtras() {
   const wrap = el("div", { class: "mk-extras" });
@@ -708,7 +705,7 @@ function enterEditName(returnStep) {
 }
 
 // Start a "song for a friend": a name form for the friend (optionally pre-filled,
-// e.g. from the rename guard), then the normal search → confirm flow submits
+// e.g. from the rename guard), then the normal search flow submits
 // under that name. The phone owner's own name, songs and alias are untouched.
 function enterFriend(returnStep, prefillName) {
   state._identityMode = "friend";
@@ -2442,7 +2439,7 @@ function renderSearch() {
       song_title: localRow.title || "",
       label: `${localRow.title || localRow.filename} — ${localRow.artist || ""}`,
     };
-    logPicked(); state.step = "confirm"; render();
+    logPicked(); sendPicked();
   };
   const pickSingleKN = (group, track) => {
     const hasDivebar = !!(track.divebar && track.divebar.file_id);
@@ -2464,7 +2461,7 @@ function renderSearch() {
           label: `${group.title} — ${group.artist}`,
           source_meta: { brand_code: track.brand_code, disc_id: track.disc_id },
         };
-    logPicked(); state.step = "confirm"; render();
+    logPicked(); sendPicked();
   };
 
   // Multi-version: defer to the KJ. The full versions snapshot rides along
@@ -2483,7 +2480,7 @@ function renderSearch() {
         versions: group.versions,
       },
     };
-    logPicked(); state.step = "confirm"; render();
+    logPicked(); sendPicked();
   };
 
   // Search log: which karaoke song/version the singer took from the results.
@@ -2495,7 +2492,7 @@ function renderSearch() {
   }
 
   // Make-it: hand what the singer typed to the make wizard (email code →
-  // corrected artist/title → audio choice), which lands on confirm.
+  // corrected artist/title → audio choice), which sends from its own screen.
   const pickMake = () => {
     const pre = state.makePrefill || {};
     logChoice("make_submit", {
@@ -2523,7 +2520,7 @@ function renderSearch() {
       song_title: "",
       label: `YouTube: ${url}`,
     };
-    logPicked(); state.step = "confirm"; render();
+    logPicked(); sendPicked();
   };
 
   function update() {
@@ -2580,7 +2577,7 @@ function renderSearch() {
         };
       }
     }
-    logPicked(); state.step = "confirm"; render();
+    logPicked(); sendPicked();
   }
 
   function dismissCcExplainer() {
@@ -2596,11 +2593,9 @@ function renderSearch() {
   }
 
   // One version's decision row: who made it (tappable), Community/Commercial +
-  // format pills (tappable), where it plays from, ▶ Preview. `compact` drops the
-  // "Pick this version" button — used inline under a single-version song whose
-  // big CTA already picks it, so those songs get the same preview/pills/brand
-  // layer as multi-version ones.
-  function renderVersionRow(group, version, isBest, { compact = false } = {}) {
+  // format pills (tappable), where it plays from, ▶ Preview, Pick. Lives in the
+  // "Choose from N versions" list only; the song row itself carries the best one.
+  function renderVersionRow(group, version, isBest) {
     const kn = version.kn || {};
     const local = version.local || {};
     const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
@@ -2651,13 +2646,13 @@ function renderSearch() {
         "data-testid": "version-preview",
         onclick: (e) => { e.stopPropagation(); if (!armed()) return; openVersionPreview(group, version); },
       }, t("versions.preview")),
-      compact ? null : el("button", {
+      el("button", {
         class: "sing-version-pick",
         onclick: (e) => { e.stopPropagation(); if (!armed()) return; pickSpecificVersion(group, version); },
       }, t("versions.pick")),
     );
 
-    const card = el("div", { class: "sing-version-card" + (compact ? " sing-version-compact" : "") },
+    const card = el("div", { class: "sing-version-card" },
       el("div", { class: "sing-version-main" },
         el("div", { class: "sing-version-primary" },
           isBest
@@ -2983,14 +2978,18 @@ function renderSearch() {
 
     // What Request gets you: Original (community) or Cover band (commercial)
     // audio, who made it, and how many versions there are to choose from.
+    // An open row adds the file format; the version itself has no card of its
+    // own, since it would only repeat this line (Andrew, 2026-10-29).
     const cls = featured ? _versionClass(featured) : "unknown";
     const brand = featured ? _brandName(featured) : "";
+    const fmt = open && featured ? _versionFormat(featured) : "";
     const facts = el("span", { class: "sing-song-facts" },
       cls === "community" || cls === "commercial"
         ? el("span", { class: `sing-song-type sing-song-type-${cls}`, "data-testid": "song-audio-type" },
             t(`versions.${cls}`))
         : null,
       brand ? el("span", { class: "sing-song-brand" }, brand) : null,
+      fmt ? el("span", { class: "sing-song-format", "data-testid": "song-format" }, fmt) : null,
     );
     const head = el("div", { class: "sing-song-head" },
       el("button", {
@@ -3014,13 +3013,18 @@ function renderSearch() {
 
     const children = [head];
     if (open && best) {
+      // Only a version that might not play earns a line: "definitely
+      // available" is the default and needs no saying.
+      const fkn = featured.kn || {};
+      if (featured.source !== "local" && !(fkn.divebar && fkn.divebar.file_id)) {
+        children.push(el("div", { class: "sing-avail sing-avail-likely sing-song-risk", "data-testid": "song-risk" },
+          t("versions.sourceYouTube")));
+      }
       if (isSingle) {
-        children.push(renderVersionRow(group, best, false, { compact: true }));
+        // Nothing more to choose: the row above is the whole decision.
       } else if (state.simpleMode) {
         children.push(renderVersionsExpander(group));
       } else {
-        children.push(el("div", { class: "sing-auto-hint" }, t(ownPick ? `search.pickByFilter.${audioShown}` : "search.autoBest")));
-        if (!isExpanded) children.push(renderVersionRow(group, featured, featured === best, { compact: true }));
         children.push(el("button", {
           class: "sing-versions-toggle",
           "aria-expanded": isExpanded ? "true" : "false",
@@ -3278,7 +3282,7 @@ function renderSearch() {
 }
 
 // --- Duet partners ----------------------------------------------------------
-// Shared by the confirm screen (partners on a new request) and My songs'
+// Shared by the make screen (partners on a new request) and My songs'
 // singers editor (add/remove partners on a song already sent).
 
 // Fold a name like the server does (casefold + accents stripped +
@@ -3472,7 +3476,7 @@ function renderPartnersEditor(partners, { selfName, title, onChange, onPick, onP
   return wrap;
 }
 
-// Send state.selected as a new request (the confirm screen and the one-screen
+// Send state.selected as a new request (a search-row Request and the one-screen
 // make-it both end here): partners + photo consent ride along, then "done".
 // Throws; submitErrorText(e) turns that into the singer-facing message.
 async function submitSelection() {
@@ -3526,16 +3530,19 @@ async function submitSelection() {
   state.justSent = {
     song: data.request.song_title || "",
     make: data.request.source_type === "make",
+    request: data.request,
   };
   state.step = "done";
-  state._navReplace = true;   // Back shouldn't land on the stale confirm
+  state._navReplace = true;   // Back returns past the search, not into it
   render();
 }
 
 // One line right after sending, so nobody wonders whether it went through
-// (live 2026-10-22: repeat taps, re-searches). It closes itself after a few
-// seconds or with ×: the song's own row below carries its status from then on.
-const SENT_NOTE_MS = 8000;
+// (live 2026-10-22: repeat taps, re-searches). Request sends straight from the
+// search row, so the note also carries the two things the old confirm screen
+// was for: Undo (a mis-tap) and + Add singer (a duet). It closes itself after
+// a while or with ×: the song's own row below carries its status from then on.
+const SENT_NOTE_MS = 15000;
 function sentBanner() {
   const j = state.justSent;
   if (!j) return null;
@@ -3551,10 +3558,111 @@ function sentBanner() {
     j.closeTimer = setTimeout(close, typeof window.__SING_SENT_NOTE_MS === "number"
       ? window.__SING_SENT_NOTE_MS : SENT_NOTE_MS);
   }
+  const req = j.request;
+  const editToken = req && req.id ? readEditToken(TOKEN, req.id) : null;
+  // A make-it is a gen job by now: there's nothing to undo in one tap.
+  const actions = editToken && !j.make ? el("span", { class: "sent-note-actions" },
+    el("button", {
+      class: "btn link", "data-testid": "sent-undo",
+      onclick: async (e) => {
+        e.target.disabled = true;
+        const res = await cancelOwnRequest(req.id, editToken);
+        if (!res.ok) { e.target.disabled = false; alert(res.message); return; }
+        close();
+        _markCancelled(req.id, j.song);
+      },
+    }, t("mySongs.undo")),
+    el("button", {
+      class: "btn link", "data-testid": "sent-add-singer",
+      onclick: () => {
+        // The live list has the request's current partners once it's polled.
+        const live = (state.mySongs.items || []).find((it) => it.request.id === req.id);
+        openEditSingers(live ? live.request : req, editToken, j.song);
+      },
+    }, t("mySongs.addSinger")),
+  ) : null;
   return el("div", { class: "sent-note", "data-testid": "sent-banner", role: "status" },
     el("span", { class: "sent-note-text" },
       t(j.make ? "mySongs.sentNoteMake" : "mySongs.sentNote", { song: j.song })),
+    actions,
     el("button", { class: "sent-note-close", "aria-label": t("common.close"), onclick: close }, "×"));
+}
+
+// Cancel a request this device owns. Shared by the song card's Cancel and the
+// Sent note's Undo; returns { ok, message } so each caller shows its own way.
+async function cancelOwnRequest(id, editToken) {
+  try {
+    const resp = await fetch(`${BASE}/requests/${id}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ t: TOKEN, edit_token: editToken, device_id: DEVICE_ID }),
+    });
+    if (!resp.ok) {
+      return { ok: false, message: resp.status === 429 ? t("common.tooManyChanges") : t("mySongs.cancelFailed") };
+    }
+  } catch { return { ok: false, message: t("mySongs.cancelOffline") }; }
+  return { ok: true, message: "" };
+}
+
+// Cancelled songs leave the list straight away (no struck-through leftovers);
+// a short notice confirms the tap.
+function _markCancelled(id, song) {
+  for (const it of state.mySongs.items || []) {
+    if (it.request.id === id) it.request.status = "cancelled";
+  }
+  flashMySongsNotice(t("mySongs.cancelledNotice", { song }));
+  if (typeof window.__sing_render === "function") window.__sing_render();
+}
+
+// Request sends straight from the search row: the row already showed the song
+// and the version, so the old "Is this the right song?" step only asked again
+// (Andrew, 2026-10-29). Undo / + Add singer are on the Sent note; Change,
+// Singers and Cancel on the song's card in My songs.
+let _sendingPick = false;
+async function sendPicked() {
+  if (_sendingPick) return;
+  _sendingPick = true;
+  const card = root.querySelector(".sing-card");
+  const buttons = card ? [...card.querySelectorAll(".btn-primary-cta, .sing-version-pick")] : [];
+  for (const b of buttons) b.disabled = true;
+  let status = card && card.querySelector('[data-testid="send-status"]');
+  if (card && !status) {
+    status = el("p", { class: "hint sing-send-status", role: "status", "data-testid": "send-status" });
+    const results = card.querySelector(".results");
+    if (results) results.before(status); else card.appendChild(status);
+  }
+  if (status) { status.classList.remove("error"); status.textContent = t("common.sending"); }
+  try {
+    if (state.changeRequestId) {
+      // "Change song": a SUPERSEDE of the owned request (partners stay as they were).
+      const resp = await changeSong(state.changeRequestId, state.changeEditToken, {
+        song_artist: state.selected.song_artist || "",
+        song_title: state.selected.song_title || "",
+        source_type: state.selected.source_type,
+        source_ref: state.selected.source_ref,
+        source_meta: state.selected.source_meta || null,
+      });
+      rememberRequestId(TOKEN, resp.request.id, resp.request.edit_token);
+      state.request = resp.request;
+      state.changeRequestId = null;
+      state.changeEditToken = null;
+      state.changeSongLabel = "";
+      state.step = "done";
+      state._navReplace = true;
+      render();
+    } else {
+      // Partners are added after sending now (Sent note / Singers): drop any
+      // left over from a make screen the singer backed out of.
+      state.additional = [];
+      await submitSelection();
+    }
+  } catch (e) {
+    for (const b of buttons) b.disabled = false;
+    if (status) { status.classList.add("error"); status.textContent = submitErrorText(e); }
+  } finally {
+    _sendingPick = false;
+  }
 }
 
 function submitErrorText(e) {
@@ -3574,126 +3682,6 @@ function submitErrorText(e) {
       : e.data?.error === "make_requests_disabled"
         ? t("confirm.makeDisabled")
         : t("confirm.failed");
-}
-
-function renderConfirm() {
-  let submitting = false;
-  let err = "";
-  const isChange = !!state.changeRequestId;
-  const sendLabel = () => (isChange ? t("confirm.sendChange") : t("confirm.send"));
-
-  function rerender() {
-    root.innerHTML = "";
-    root.appendChild(renderConfirm());
-  }
-
-  const send = async () => {
-    if (submitting) return;
-    submitting = true; err = "";
-    const submitBtn = root.querySelector(".submit-btn");
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.textContent = t("common.sending");
-    }
-    try {
-      // "Change song" mode — re-submit the picked song to the change endpoint
-      // for the owned request (song-only; partners are left as they were).
-      if (state.changeRequestId) {
-        const resp = await changeSong(state.changeRequestId, state.changeEditToken, {
-          song_artist: state.selected.song_artist || "",
-          song_title: state.selected.song_title || "",
-          source_type: state.selected.source_type,
-          source_ref: state.selected.source_ref,
-          source_meta: state.selected.source_meta || null,
-        });
-        rememberRequestId(TOKEN, resp.request.id, resp.request.edit_token);
-        state.request = resp.request;
-        state.changeRequestId = null;
-        state.changeEditToken = null;
-        state.changeSongLabel = "";
-        state.step = "done";
-        state._navReplace = true;   // Back shouldn't land on the stale confirm
-        render();
-        return;
-      }
-
-      await submitSelection();
-    } catch (e) {
-      err = submitErrorText(e);
-      submitting = false;
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = sendLabel();
-      }
-      const errEl = root.querySelector(".error");
-      if (errEl) errEl.textContent = err;
-    }
-  };
-
-  const addPartner = (p) => {
-    if (state.additional.length >= MAX_PARTNERS) return;
-    state.additional.push(p);
-    rerender();
-  };
-  const renderPartnersSection = () => renderPartnersEditor(state.additional, {
-    selfName: state.name,
-    title: t("confirm.partnersTitle"),
-    onChange: rerender,
-    onPick: addPartner,
-  });
-
-  const sel = state.selected || {};
-  const _confirmSourceLine = (s) => {
-    switch (s && s.source_type) {
-      case "local": return t("confirm.sourceLocal");
-      case "divebar": return t("confirm.sourceCloud");
-      case "kn": return t("confirm.sourceOnline");
-      case "youtube": return t("confirm.sourceYouTube");
-      case "make": return t("confirm.sourceMake");
-      case "kj_pick": return t("confirm.sourceAuto");
-      default: return "";
-    }
-  };
-  return el("main", { class: "sing-card sing-confirm" },
-    el("h2", {}, isChange ? t("confirm.changeTitle") : t("confirm.title")),
-    isChange ? el("p", { class: "hint sing-change-hint", "data-testid": "confirm-change-hint" },
-      t("confirm.changeHint", { song: state.changeSongLabel || t("common.untitledSong") })) : null,
-    el("div", { class: "confirm-song", "data-testid": "confirm-song" },
-      el("div", { class: "confirm-title" }, sel.song_title || sel.label || ""),
-      sel.song_artist ? el("div", { class: "confirm-artist" }, sel.song_artist) : null,
-      el("div", { class: "confirm-source" }, _confirmSourceLine(sel)),
-      sel.source_type === "make" && state.make?.email
-        ? el("div", { class: "confirm-make-email hint", "data-testid": "confirm-make-email" },
-            t("confirm.makeEmail", { email: state.make.email }))
-        : null,
-      sel.source_type === "make" && state.eventInfo && state.eventInfo.make_quick_version
-        ? el("div", { class: "confirm-make-quick hint", "data-testid": "confirm-make-quick" },
-            t("confirm.sourceMakeQuick"))
-        : null,
-    ),
-    // A make-it already shows the corrected artist/title — the raw search
-    // text is just noise there.
-    state.query && sel.source_type !== "make"
-      ? el("p", { class: "confirm-searched hint" }, t("confirm.searched", { query: state.query })) : null,
-    state.friend && !isChange
-      ? el("p", { class: "hint", "data-testid": "confirm-friend" },
-          t("confirm.detailsFriend", { name: state.friend.name }))
-      : el("p", { class: "hint" },
-          state.phone
-            ? t("confirm.detailsWithPhone", { name: state.name, phone: state.phone })
-            : t("confirm.details", { name: state.name })),
-    // Asked once per device (then changeable from My songs); optional.
-    !isChange && !state.friend && askPhotoConsent() && !state.photoConsent
-      ? photoConsentPicker((v) => { setPhotoConsentLocal(v); }) : null,
-    // Partners belong to the original request — a swap keeps them as they were.
-    isChange ? null : renderPartnersSection(),
-    el("div", { class: "row confirm-actions" },
-      el("button", { class: "btn ghost", onclick: back(sel.source_type === "make" && state.make ? "make" : "search") },
-        t("confirm.back")),
-      el("button", { class: "btn primary submit-btn", onclick: send }, sendLabel()),
-    ),
-    el("p", { class: "error" }, err),
-  );
 }
 
 // The device_id rides along so the server can also return queued songs the
@@ -4015,26 +4003,9 @@ function _renderSongCard(item, ctx = {}) {
         e.stopPropagation();
         if (!confirm(t("mySongs.cancelConfirm", { song }))) return;
         e.target.disabled = true;
-        try {
-          const resp = await fetch(`${BASE}/requests/${req.id}/cancel`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({ t: TOKEN, edit_token: editToken, device_id: DEVICE_ID }),
-          });
-          if (!resp.ok) {
-            e.target.disabled = false;
-            alert(resp.status === 429 ? t("common.tooManyChanges") : t("mySongs.cancelFailed"));
-            return;
-          }
-        } catch { e.target.disabled = false; alert(t("mySongs.cancelOffline")); return; }
-        // Cancelled songs leave the list straight away (no struck-through
-        // leftovers); a short notice confirms the tap.
-        for (const it of state.mySongs.items || []) {
-          if (it.request.id === req.id) it.request.status = "cancelled";
-        }
-        flashMySongsNotice(t("mySongs.cancelledNotice", { song }));
-        if (typeof window.__sing_render === "function") window.__sing_render();
+        const res = await cancelOwnRequest(req.id, editToken);
+        if (!res.ok) { e.target.disabled = false; alert(res.message); return; }
+        _markCancelled(req.id, song);
       },
     }, t("mySongs.cancel"));
     const singersBtn = el("button", {
@@ -4051,7 +4022,7 @@ function _renderSongCard(item, ctx = {}) {
 }
 
 // "👥 Singers" on a My-songs card: add or remove the friends singing a song
-// that's already been sent. Same partner editor as the confirm screen, in a
+// that's already been sent. Same partner editor as the make screen, in a
 // modal; the picker shares the one modal slot, so picking a name re-opens
 // the editor with the draft intact.
 function openEditSingers(req, editToken, song, draft = null) {
@@ -4263,9 +4234,6 @@ function renderDone() {
     state.name ? el("p", { class: "hint done-identity" },
       t("mySongs.singingAs"), " ", el("strong", {}, state.name), " · ",
       editNameLink("done")) : null,
-    // "Save tonight's songs to your Nomad Karaoke account" — sits with the
-    // identity line it extends; hidden until /make/account answers.
-    saveSongsSlot("main"),
     // "↕ Reorder songs" toggle (+ post-save notice) — filled by the poll.
     el("div", { class: "reorder-controls" }),
     state._reorderMode
@@ -4301,6 +4269,11 @@ function renderDone() {
     // (The old "Show upcoming singers" expander lived here — the dedicated
     // 📋 Rotation tab replaced it.)
     el("p", { class: "hint" }, t("mySongs.keepOpen")),
+    // "Save tonight's songs to an account": one quiet line at the bottom —
+    // most singers don't know or care what a Nomad Karaoke account is, so it
+    // mustn't take the top of the screen (Andrew, 2026-10-29). Hidden until
+    // /make/account answers.
+    saveSongsSlot("main"),
   );
 
   // Render the notifications block as soon as the card is in the DOM (it used
@@ -4497,14 +4470,28 @@ function saveSongsSlot(variant = "main") {
       }, t("saveSongs.stop"))));
   } else {
     const showForm = variant === "main" && !a.email && a.stage !== "idle";
+    // The explainer stays folded behind ⓘ on My songs; the make-it offer and
+    // the sign-in form show it, since there it answers "why am I asked this?".
+    const folded = variant === "main" && !showForm;
+    const explainer = el("p", { class: "hint save-songs-explainer", "data-testid": "save-songs-explainer",
+      hidden: folded && !a.explainerOpen ? "" : null }, t("saveSongs.explainer"));
     if (!showForm) {
-      slot.appendChild(el("button", {
-        class: "btn link save-songs-link", "data-testid": "save-songs-link",
-        disabled: a.busy ? "disabled" : null, onclick: saveSongsLink,
-      }, t("saveSongs.link")));
+      slot.appendChild(el("p", { class: "save-songs-line" },
+        el("button", {
+          class: "btn link save-songs-link", "data-testid": "save-songs-link",
+          disabled: a.busy ? "disabled" : null, onclick: saveSongsLink,
+        }, t("saveSongs.linkShort")),
+        folded ? el("button", {
+          class: "save-songs-info", "data-testid": "save-songs-info",
+          "aria-label": t("saveSongs.whatIsThis"), "aria-expanded": a.explainerOpen ? "true" : "false",
+          onclick: (e) => {
+            a.explainerOpen = !a.explainerOpen;
+            explainer.hidden = !a.explainerOpen;
+            e.currentTarget.setAttribute("aria-expanded", a.explainerOpen ? "true" : "false");
+          },
+        }, "ⓘ") : null));
     }
-    slot.appendChild(el("p", { class: "hint save-songs-explainer", "data-testid": "save-songs-explainer" },
-      t("saveSongs.explainer")));
+    slot.appendChild(explainer);
     if (showForm) slot.appendChild(_saveSongsForm(a));
   }
   if (a.err) {
@@ -4865,7 +4852,7 @@ function updateMySongsBar() {
 // #sing-root (sibling nav in sing.html) so it survives re-renders.
 
 function _activeTabForStep(step) {
-  if (step === "search" || step === "confirm" || step === "identity") return "request";
+  if (step === "search" || step === "identity") return "request";
   if (step === "done") return "mysongs";
   if (step === "rotation") return "rotation";
   if (step === "tip") return "tip";
@@ -5499,6 +5486,7 @@ function initCodeEntry() {
 if (typeof window !== 'undefined') {
   window.__sing_state = state;
   window.__sing_render = render;
+  window.__sing_send = sendPicked;   // tests: send state.selected like a search-row Request
   // Exposed so tests can assert the mid-flight-safe prune semantics directly
   // (drop only ids that were queried AND not returned).
   window.__sing_pruneRequestIds = pruneRequestIds;

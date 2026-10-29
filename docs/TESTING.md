@@ -346,7 +346,7 @@ Persistent server flag `kj_simple_mode` (in `sing_meta`); UI is CSS-driven via
 - [ ] Search for something that returns zero hits → empty-state shows a single header "We don't have that one." + paragraph "Try another search, or talk to the KJ at the front." No paste-YouTube card, no ask-KJ card, no DIY card.
 - [ ] Search a multi-version song (e.g. "bohemian rhapsody") → the "Auto-select best version →" CTA is absent. Versions list renders inline (no toggle button). Singer must tap a specific version's "Pick this version →" button.
 - [ ] Search a single-version song → "Add to queue" CTA still appears (singer can still pick songs with one version).
-- [ ] Singer's confirm screen subtitle reads "If we don't have it, just ask the KJ at the front." (advanced mode shows "you'll get options for how to get it on screen.").
+- [ ] Singer's search screen subtitle reads "If we don't have it, just ask the KJ at the front." (advanced mode shows "you'll get options for how to get it on screen.").
 - [ ] Pick a `local` / `divebar` / `kn` version and submit → request lands in pending queue. KJ approves → rotation plays normally.
 
 **Server-side enforcement (defence-in-depth):**
@@ -364,9 +364,9 @@ Persistent server flag `kj_simple_mode` (in `sing_meta`); UI is CSS-driven via
 
 **Stale-PWA recovery (no automated test):**
 
-- [ ] Load `/sing/?t=<token>` with Simple Mode OFF. Type a query, find a multi-version song, tap "Auto-select best version →" — but don't submit yet.
+- [ ] Load `/sing/?t=<token>` with Simple Mode OFF. Type a query and find a multi-version song — but don't tap Request yet.
 - [ ] In another browser, KJ flips Simple Mode ON.
-- [ ] Back in the singer browser, complete the confirm screen and submit → server returns 400. Error message in the UI reads "Song requests are currently restricted. Please refresh this page for the updated options." (not the generic "ask the KJ if requests are paused").
+- [ ] Back in the singer browser (no refresh), tap Request → server returns 400. The search screen shows "Song requests are currently restricted. Please refresh this page for the updated options." (not the generic "ask the KJ if requests are paused").
 
 **Toggle isolation:**
 

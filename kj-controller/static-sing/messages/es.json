@@ -100,11 +100,6 @@
       "other": "▸ {count} canciones de otros artistas"
     },
     "othersHide": "▾ Ocultar canciones de otros artistas",
-    "autoBest": "Mejor versión elegida automáticamente",
-    "pickByFilter": {
-      "community": "Versión con audio original elegida (tu filtro)",
-      "commercial": "Versión de banda tributo elegida (tu filtro)"
-    },
     "versionsToggle": {
       "one": "Elige entre {count} versión →",
       "other": "Elige entre {count} versiones →"
@@ -391,19 +386,6 @@
     "socialFailed": "No se pudo iniciar sesión. Inténtalo de nuevo o usa tu correo electrónico."
   },
   "confirm": {
-    "title": "¿Es esta la canción correcta?",
-    "changeTitle": "¿Cambiar a esta canción?",
-    "changeHint": "Esto reemplaza a {song}. Mantienes tu lugar en la fila.",
-    "sourceLocal": "En el equipo del anfitrión — definitivamente disponible",
-    "sourceCloud": "De nuestra biblioteca en la nube — muy confiable",
-    "sourceOnline": "De YouTube — casi siempre funciona",
-    "sourceYouTube": "De un enlace de YouTube — casi siempre funciona",
-    "sourceMake": "Nuestro sistema creará un video de karaoke de esta canción. Tu turno se mantendrá al final de la lista hasta que esté lista para cantar — normalmente en unos 30 minutos.",
-    "sourceMakeQuick": "⚡ Una versión rápida con letra desplazable suele estar lista en pocos minutos — te avisaremos y podrás elegir cantarla en vez de esperar.",
-    "sourceAuto": "Elegiremos la mejor versión para ti",
-    "searched": "Buscaste: \"{query}\"",
-    "details": "Tus datos: {name}",
-    "detailsWithPhone": "Tus datos: {name} · {phone}",
     "partnersTitle": "¿Cantas con alguien más? (opcional)",
     "partnerName": "Nombre (ej. Sarah B.)",
     "partnerPhone": "Teléfono (opcional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "En la lista de esta noche",
     "maxSingers": "Ese es el máximo — {count} cantantes en total.",
     "partnerPhoneInvalid": "Cantante {n}: ese número de teléfono parece incorrecto.",
-    "back": "← Elegir una canción diferente",
-    "send": "Sí — enviar",
-    "sendChange": "Sí — cambiar mi canción",
     "tooMany": "Has enviado muchas peticiones — por favor, espera unos minutos.",
     "restricted": "Las peticiones de canciones están restringidas actualmente. Por favor, actualiza esta página para ver las opciones actualizadas.",
     "failed": "No se pudo enviar — pregunta al anfitrión si las peticiones están pausadas.",
     "makeLimit": "Ya nos has pedido crear algunas canciones esta noche — elige una del catálogo o pregúntale al anfitrión.",
-    "makeDisabled": "El anfitrión no está aceptando peticiones para crear canciones ahora mismo — mejor elige una canción del catálogo.",
-    "makeEmail": "También te enviaremos por correo el archivo de video terminado y el enlace de YouTube ({email}).",
-    "detailsFriend": "Cantante: {name} (pedida desde tu teléfono)"
+    "makeDisabled": "El anfitrión no está aceptando peticiones para crear canciones ahora mismo — mejor elige una canción del catálogo."
   },
   "mySongs": {
     "title": "Tus canciones de esta noche",
@@ -518,6 +495,8 @@
     "forFriend": "Para {name}",
     "sentNote": "✓ Enviada: {song}",
     "sentNoteMake": "✓ ¡Enviada! Estamos preparando {song} para ti (unos 30 min). Entrará en el turno cuando esté lista.",
+    "undo": "Deshacer",
+    "addSinger": "+ Añadir cantante",
     "makeShortMaking": "✨ En creación (aprox. 30 min)",
     "makeShortWaitingHost": "✨ En creación · esperando a {host}",
     "makeShortReview": "✨ En creación · falta revisar la letra",
@@ -676,7 +655,8 @@
     "socialUnset": "Aún sin responder"
   },
   "saveSongs": {
-    "link": "Guarda las canciones de esta noche en tu cuenta de Nomad Karaoke",
+    "linkShort": "Guarda las canciones de esta noche en una cuenta",
+    "whatIsThis": "¿Qué es esto?",
     "explainer": "Guardaremos las canciones que cantes esta noche en tu cuenta de Nomad Karaoke, para que la app pueda mostrar tu historial y recomendarte canciones.",
     "saving": "Guardando las canciones de esta noche en {email}",
     "stop": "Dejar de guardar",

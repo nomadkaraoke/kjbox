@@ -100,11 +100,6 @@
       "other": "▸ {count} dal más előadóktól"
     },
     "othersHide": "▾ Más előadók dalainak elrejtése",
-    "autoBest": "A legjobb verzió automatikusan kiválasztva",
-    "pickByFilter": {
-      "community": "Eredeti zenei verzió kiválasztva (a szűrőd alapján)",
-      "commercial": "Cover band verzió kiválasztva (a szűrőd alapján)"
-    },
     "versionsToggle": {
       "one": "Válassz {count} verzióból →",
       "other": "Válassz {count} verzióból →"
@@ -391,19 +386,6 @@
     "socialFailed": "A bejelentkezés nem sikerült. Próbáld újra, vagy használd az e-mail-címedet."
   },
   "confirm": {
-    "title": "Ez a megfelelő dal?",
-    "changeTitle": "Lecseréled erre a dalra?",
-    "changeHint": "Ezzel lecseréled ezt: {song}. A helyed a sorban megmarad.",
-    "sourceLocal": "A KJ gépén — biztosan elérhető",
-    "sourceCloud": "A felhőkönyvtárunkból — nagyon megbízható",
-    "sourceOnline": "A YouTube-ról — szinte mindig működik",
-    "sourceYouTube": "Egy YouTube linkről — szinte mindig működik",
-    "sourceMake": "A rendszerünk készít egy karaoke videót ebből a dalból. A kérésed a lista végén marad, amíg a dal készen nem áll az éneklésre — ez általában ~30 perc.",
-    "sourceMakeQuick": "⚡ A gördülő dalszöveges gyors verzió általában néhány percen belül elkészül — értesítünk, és a várakozás helyett választhatod ezt is.",
-    "sourceAuto": "Kiválasztjuk neked a legjobb verziót",
-    "searched": "Ezt kerested: \"{query}\"",
-    "details": "Adataid: {name}",
-    "detailsWithPhone": "Adataid: {name} · {phone}",
     "partnersTitle": "Énekelsz még valakivel? (opcionális)",
     "partnerName": "Név (pl. Sarah B.)",
     "partnerPhone": "Telefonszám (opcionális)",
@@ -421,16 +403,11 @@
     "partnerOnList": "A ma esti listán",
     "maxSingers": "Ez a maximum — összesen {count} énekes.",
     "partnerPhoneInvalid": "{n}. énekes: ez a telefonszám nem tűnik jónak.",
-    "back": "← Válassz másik dalt",
-    "send": "Igen — küldés",
-    "sendChange": "Igen — cseréld le a dalom",
     "tooMany": "Sokat küldtél be — kérlek, várj néhány percet.",
     "restricted": "A dalkérések jelenleg korlátozva vannak. Kérlek, frissítsd az oldalt az aktuális lehetőségekért.",
     "failed": "Nem sikerült elküldeni — kérdezd meg a házigazdát, hogy szünetelnek-e a kérések.",
     "makeLimit": "Ma este már kérted tőlünk pár dal elkészítését — válassz egyet a katalógusból, vagy kérdezd a KJ-t.",
-    "makeDisabled": "A KJ most nem fogad kéréseket új dalok készítésére — válassz inkább egy dalt a katalógusból.",
-    "makeEmail": "A kész videófájlt és a YouTube linket e-mailben is elküldjük neked ({email}).",
-    "detailsFriend": "Énekes: {name} (a te telefonodról kérve)"
+    "makeDisabled": "A KJ most nem fogad kéréseket új dalok készítésére — válassz inkább egy dalt a katalógusból."
   },
   "mySongs": {
     "title": "A te dalaid ma este",
@@ -518,6 +495,8 @@
     "forFriend": "Neki: {name}",
     "sentNote": "✓ Elküldve: {song}",
     "sentNoteMake": "✓ Elküldve! Épp készítjük neked a dalt: {song} (kb. 30 perc). Amint kész, bekerül a sorba.",
+    "undo": "Visszavonás",
+    "addSinger": "+ Énekes hozzáadása",
     "makeShortMaking": "✨ Készül (kb. 30 perc)",
     "makeShortWaitingHost": "✨ Készül · várakozás a házigazdára ({host})",
     "makeShortReview": "✨ Készül · ellenőrizni kell a dalszöveget",
@@ -676,7 +655,8 @@
     "socialUnset": "Még nincs megválaszolva"
   },
   "saveSongs": {
-    "link": "Mentsd el a ma esti dalokat a Nomad Karaoke fiókodba",
+    "linkShort": "A ma esti dalok mentése egy fiókba",
+    "whatIsThis": "Mi ez?",
     "explainer": "Elmentjük a ma este énekelt dalaidat a Nomad Karaoke fiókodba, így az app mutatni tudja az előzményeidet, és dalokat is ajánlhat neked.",
     "saving": "Ma esti dalok mentése ide: {email}",
     "stop": "Mentés leállítása",

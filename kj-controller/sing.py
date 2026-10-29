@@ -1469,7 +1469,12 @@ def _make_submit_lock(device_id):
 @sing_bp.route("/submit", methods=["POST"])
 @require_token
 def submit():
-    """Create a new pending request (or auto-approve if configured)."""
+    """Create a new pending request (or auto-approve if configured).
+
+    Since v0.145.0 the singer UI calls this straight from a search row's
+    Request (no confirm step); duet partners arrive later via
+    ``/requests/<id>/singers`` unless the make screen sent them.
+    """
     cfg = current_app.kj_config
     store = current_app.sing_store
 

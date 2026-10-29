@@ -100,11 +100,6 @@
       "other": "▸ {count} songs by other artists"
     },
     "othersHide": "▾ Hide songs by other artists",
-    "autoBest": "Best version picked automatically",
-    "pickByFilter": {
-      "community": "Original audio version picked (your filter)",
-      "commercial": "Cover band version picked (your filter)"
-    },
     "versionsToggle": {
       "one": "Choose from {count} version →",
       "other": "Choose from {count} versions →"
@@ -391,19 +386,6 @@
     "socialFailed": "That sign-in didn't work. Try again, or use your email."
   },
   "confirm": {
-    "title": "Is this the right song?",
-    "changeTitle": "Swap to this song?",
-    "changeHint": "This replaces {song}. You keep your place in line.",
-    "sourceLocal": "On the host's machine — definitely available",
-    "sourceCloud": "From our cloud library — very reliable",
-    "sourceOnline": "From YouTube — almost always works",
-    "sourceYouTube": "From a YouTube link — almost always works",
-    "sourceMake": "Our system will make a karaoke video of this song. Your rotation entry is kept at the bottom until it's ready to sing — typically ~30 minutes.",
-    "sourceMakeQuick": "⚡ A quick version with scrolling lyrics is usually ready within a few minutes — we'll let you know, and you can choose to sing that instead of waiting.",
-    "sourceAuto": "We'll pick the best version for you",
-    "searched": "You searched: \"{query}\"",
-    "details": "Your details: {name}",
-    "detailsWithPhone": "Your details: {name} · {phone}",
     "partnersTitle": "Singing with anyone else? (optional)",
     "partnerName": "Name (e.g. Sarah B.)",
     "partnerPhone": "Phone (optional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "On tonight's list",
     "maxSingers": "That's the max — {count} singers total.",
     "partnerPhoneInvalid": "Singer {n}: that phone number looks off.",
-    "back": "← Pick a different song",
-    "send": "Yes — send it in",
-    "sendChange": "Yes — swap my song",
     "tooMany": "You've submitted a lot — please wait a few minutes.",
     "restricted": "Song requests are currently restricted. Please refresh this page for the updated options.",
     "failed": "Couldn't send — ask the host if requests are paused.",
     "makeLimit": "You've already asked us to make a few songs tonight — pick one from the catalogue, or ask the host.",
-    "makeDisabled": "The host isn't taking make-it requests right now — pick a song from the catalogue instead.",
-    "makeEmail": "We'll also email you the finished video file and YouTube link ({email}).",
-    "detailsFriend": "Singer: {name} (requested from your phone)"
+    "makeDisabled": "The host isn't taking make-it requests right now — pick a song from the catalogue instead."
   },
   "mySongs": {
     "title": "Your songs tonight",
@@ -518,6 +495,8 @@
     "forFriend": "For {name}",
     "sentNote": "✓ Sent: {song}",
     "sentNoteMake": "✓ Sent! We're making {song} for you (about 30 min). It joins the rotation when it's ready.",
+    "undo": "Undo",
+    "addSinger": "+ Add singer",
     "makeShortMaking": "✨ Being made (about 30 min)",
     "makeShortWaitingHost": "✨ Being made · waiting for {host}",
     "makeShortReview": "✨ Being made · lyrics check needed",
@@ -676,7 +655,8 @@
     "socialUnset": "Not answered yet"
   },
   "saveSongs": {
-    "link": "Save tonight's songs to your Nomad Karaoke account",
+    "linkShort": "Save tonight's songs to an account",
+    "whatIsThis": "What's this?",
     "explainer": "We'll save the songs you sing tonight to your Nomad Karaoke account, so the app can show your history and recommend songs.",
     "saving": "Saving tonight's songs to {email}",
     "stop": "Stop saving",

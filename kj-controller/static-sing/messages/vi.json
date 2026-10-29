@@ -100,11 +100,6 @@
       "other": "▸ {count} bài hát của nghệ sĩ khác"
     },
     "othersHide": "▾ Ẩn bài hát của nghệ sĩ khác",
-    "autoBest": "Phiên bản tốt nhất được chọn tự động",
-    "pickByFilter": {
-      "community": "Đã chọn bản âm thanh gốc (theo bộ lọc của bạn)",
-      "commercial": "Đã chọn bản ban nhạc cover (theo bộ lọc của bạn)"
-    },
     "versionsToggle": {
       "one": "Chọn từ {count} phiên bản →",
       "other": "Chọn từ {count} phiên bản →"
@@ -391,19 +386,6 @@
     "socialFailed": "Đăng nhập không thành công. Hãy thử lại hoặc dùng email của bạn nhé."
   },
   "confirm": {
-    "title": "Đúng bài này chưa?",
-    "changeTitle": "Đổi sang bài này?",
-    "changeHint": "Bài này sẽ thay thế {song}. Bạn vẫn giữ nguyên vị trí trong danh sách chờ.",
-    "sourceLocal": "Trên máy của KJ — chắc chắn có sẵn",
-    "sourceCloud": "Từ thư viện đám mây của chúng tôi — rất đáng tin cậy",
-    "sourceOnline": "Từ YouTube — hầu như luôn hoạt động",
-    "sourceYouTube": "Từ liên kết YouTube — hầu như luôn hoạt động",
-    "sourceMake": "Hệ thống sẽ tạo video karaoke cho bài hát này. Lượt hát của bạn sẽ được giữ ở cuối danh sách chờ cho đến khi bài hát sẵn sàng — thường mất khoảng 30 phút.",
-    "sourceMakeQuick": "⚡ Phiên bản nhanh với lời bài hát cuộn thường sẵn sàng sau vài phút — chúng tôi sẽ báo cho bạn và bạn có thể chọn hát bản đó thay vì phải chờ đợi.",
-    "sourceAuto": "Chúng tôi sẽ chọn phiên bản tốt nhất cho bạn",
-    "searched": "Bạn đã tìm: \"{query}\"",
-    "details": "Thông tin của bạn: {name}",
-    "detailsWithPhone": "Thông tin của bạn: {name} · {phone}",
     "partnersTitle": "Hát cùng ai khác không? (không bắt buộc)",
     "partnerName": "Tên (VD: Sarah B.)",
     "partnerPhone": "Số điện thoại (không bắt buộc)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Trong danh sách tối nay",
     "maxSingers": "Đã đạt tối đa — tổng cộng {count} người hát.",
     "partnerPhoneInvalid": "Người hát {n}: số điện thoại có vẻ không đúng.",
-    "back": "← Chọn bài khác",
-    "send": "Có — gửi đi",
-    "sendChange": "Có — đổi bài của tôi",
     "tooMany": "Bạn đã gửi hơi nhiều — đợi vài phút nhé.",
     "restricted": "Việc chọn bài hiện đang bị hạn chế. Bạn tải lại trang này để xem các tùy chọn mới nhất nhé.",
     "failed": "Không gửi được — bạn hỏi KJ xem có phải đang tạm dừng nhận bài không nhé.",
     "makeLimit": "Tối nay bạn đã yêu cầu chúng tôi tạo vài bài hát rồi — hãy chọn một bài từ danh sách, hoặc hỏi KJ nhé.",
-    "makeDisabled": "KJ hiện không nhận yêu cầu tạo bài hát — thay vào đó, bạn hãy chọn một bài từ danh sách nhé.",
-    "makeEmail": "Chúng mình cũng sẽ gửi qua email cho bạn file video hoàn chỉnh và link YouTube ({email}).",
-    "detailsFriend": "Người hát: {name} (được yêu cầu từ điện thoại của bạn)"
+    "makeDisabled": "KJ hiện không nhận yêu cầu tạo bài hát — thay vào đó, bạn hãy chọn một bài từ danh sách nhé."
   },
   "mySongs": {
     "title": "Các bài hát của bạn tối nay",
@@ -518,6 +495,8 @@
     "forFriend": "Dành cho {name}",
     "sentNote": "✓ Đã gửi: {song}",
     "sentNoteMake": "✓ Đã gửi! Tụi mình đang tạo bài {song} cho bạn (mất khoảng 30 phút). Bài hát sẽ vào danh sách chờ ngay khi làm xong nhé.",
+    "undo": "Hoàn tác",
+    "addSinger": "+ Thêm người hát",
     "makeShortMaking": "✨ Đang tạo (khoảng 30 phút)",
     "makeShortWaitingHost": "✨ Đang tạo · đang chờ {host}",
     "makeShortReview": "✨ Đang tạo · cần kiểm tra lời bài hát",
@@ -676,7 +655,8 @@
     "socialUnset": "Chưa chọn"
   },
   "saveSongs": {
-    "link": "Lưu các bài hát tối nay vào tài khoản Nomad Karaoke của bạn",
+    "linkShort": "Lưu các bài hát tối nay vào tài khoản",
+    "whatIsThis": "Đây là gì?",
     "explainer": "Tụi mình sẽ lưu những bài bạn hát tối nay vào tài khoản Nomad Karaoke để ứng dụng có thể hiển thị lịch sử và gợi ý bài hát cho bạn.",
     "saving": "Đang lưu các bài hát tối nay vào {email}",
     "stop": "Dừng lưu",

@@ -61,6 +61,11 @@ class TestCompactResults:
         body = {"songs": songs, "make_requests_enabled": True, "simple_mode": False}
         page.route("**/sing/search?*", lambda r: r.fulfill(
             status=200, content_type="application/json", body=json.dumps(body)))
+        # Request sends straight away: keep it off the live server.
+        page.route("**/sing/submit*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps({
+                "request": {"id": 9, "status": "pending", "edit_token": "t9", "singer_name": "Alice",
+                            "song_title": "x"}, "auto_approved": False})))
         page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
         page.locator('input[type="search"]').fill(query)
         expect(page.locator(".result-row")).to_have_count(len(songs) if rows is None else rows)
@@ -88,15 +93,17 @@ class TestCompactResults:
         toggle = row.locator('[data-testid="song-row-toggle"]')
         toggle.click()
         expect(toggle).to_have_attribute("aria-expanded", "true")
-        expect(row.locator(".sing-version-compact")).to_be_visible()
+        expect(row.locator('[data-testid="song-format"]')).to_be_visible()
         expect(row.locator(".sing-versions-toggle")).to_have_text("Choose from 2 versions →")
         toggle.click()
-        expect(row.locator(".sing-version-card")).to_have_count(0)
+        expect(row.locator('[data-testid="song-format"]')).to_have_count(0)
+        expect(row.locator(".sing-versions-toggle")).to_have_count(0)
 
     def test_short_list_opens_straight_onto_versions(self, page, live_server, live_token):
         self._search(page, live_server, live_token, LANA[:1], query="video games")
         expect(page.locator('[data-testid="filter-bar"]')).to_have_count(0)
-        expect(page.locator(".result-row .sing-version-compact")).to_be_visible()
+        expect(page.locator('.result-row [data-testid="song-format"]')).to_be_visible()
+        expect(page.locator(".result-row .sing-versions-toggle")).to_be_visible()
 
     def test_audio_pills_are_single_choice(self, page, live_server, live_token):
         self._search(page, live_server, live_token, LANA, rows=6)
@@ -147,8 +154,6 @@ class TestCompactResults:
         row = page.locator(".result-row", has_text="Video Games")
         expect(row.locator('[data-testid="song-audio-type"]')).to_have_text("🎵 Original")
         expect(row.locator(".sing-song-brand")).to_have_text("CARPY")
-        row.locator('[data-testid="song-row-toggle"]').click()
-        expect(row.locator(".sing-auto-hint")).to_have_text("Original audio version picked (your filter)")
         row.locator('[data-testid="request-song"]').click()
         sel = page.evaluate("window.__sing_state.selected")
         assert sel["source_type"] == "kn"

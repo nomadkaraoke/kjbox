@@ -100,11 +100,6 @@
       "other": "▸ {count} písniček od jiných interpretů"
     },
     "othersHide": "▾ Skrýt písničky od jiných interpretů",
-    "autoBest": "Nejlepší verze vybrána automaticky",
-    "pickByFilter": {
-      "community": "Vybrána verze s původním audiem (tvůj filtr)",
-      "commercial": "Vybrána verze od revival kapely (tvůj filtr)"
-    },
     "versionsToggle": {
       "one": "Vyber si z {count} verze →",
       "other": "Vyber si z {count} verzí →"
@@ -391,19 +386,6 @@
     "socialFailed": "Přihlášení se nepovedlo. Zkus to znovu, nebo použij e-mail."
   },
   "confirm": {
-    "title": "Je to ta správná píseň?",
-    "changeTitle": "Vyměnit za tuhle píseň?",
-    "changeHint": "Tohle nahradí {song}. Tvé místo v řadě ti zůstane.",
-    "sourceLocal": "V počítači KJe — určitě dostupné",
-    "sourceCloud": "Z naší cloudové knihovny — velmi spolehlivé",
-    "sourceOnline": "Z YouTube — skoro vždy funguje",
-    "sourceYouTube": "Z odkazu na YouTube — skoro vždy funguje",
-    "sourceMake": "Náš systém vytvoří karaoke video k této písničce. Tvé místo v pořadníku zůstane na konci, dokud nebude připravená ke zpěvu – obvykle to trvá cca 30 minut.",
-    "sourceMakeQuick": "⚡ Rychlá verze s posouvajícím se textem bývá hotová za pár minut – dáme ti vědět a můžeš si ji zazpívat místo čekání.",
-    "sourceAuto": "Vybereme pro tebe tu nejlepší verzi",
-    "searched": "Hledal jsi: \"{query}\"",
-    "details": "Tvé údaje: {name}",
-    "detailsWithPhone": "Tvé údaje: {name} · {phone}",
     "partnersTitle": "Zpíváš ještě s někým? (volitelné)",
     "partnerName": "Jméno (např. Sarah B.)",
     "partnerPhone": "Telefon (volitelné)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Na dnešním seznamu",
     "maxSingers": "To je maximum — celkem {count} zpěváků.",
     "partnerPhoneInvalid": "Zpěvák {n}: tohle telefonní číslo vypadá divně.",
-    "back": "← Vybrat jinou píseň",
-    "send": "Ano — odeslat",
-    "sendChange": "Ano — vyměnit mou píseň",
     "tooMany": "Odeslal jsi toho hodně — počkej prosím pár minut.",
     "restricted": "Žádosti o písně jsou momentálně omezené. Obnov tuhle stránku pro aktuální možnosti.",
     "failed": "Nepodařilo se odeslat — zeptej se KJ, jestli nejsou žádosti pozastavené.",
     "makeLimit": "Dnes večer už jsi nás požádal o vytvoření několika písniček — vyber si nějakou z katalogu, nebo se zeptej KJ.",
-    "makeDisabled": "KJ teď nepřijímá žádosti o vytvoření písniček — vyber si místo toho nějakou z katalogu.",
-    "makeEmail": "Hotový video soubor a odkaz na YouTube ti pošleme i na e-mail ({email}).",
-    "detailsFriend": "Zpěvák: {name} (vybráno z tvého telefonu)"
+    "makeDisabled": "KJ teď nepřijímá žádosti o vytvoření písniček — vyber si místo toho nějakou z katalogu."
   },
   "mySongs": {
     "title": "Tvé dnešní písně",
@@ -518,6 +495,8 @@
     "forFriend": "Pro: {name}",
     "sentNote": "✓ Odesláno: {song}",
     "sentNoteMake": "✓ Odesláno! Písničku {song} pro tebe právě připravujeme (asi 30 min). Do pořadníku se zařadí, jakmile bude hotová.",
+    "undo": "Zpět",
+    "addSinger": "+ Přidat zpěváka",
     "makeShortMaking": "✨ Vytváří se (asi 30 min)",
     "makeShortWaitingHost": "✨ Vytváří se · čeká se na: {host}",
     "makeShortReview": "✨ Vytváří se · je potřeba zkontrolovat text",
@@ -676,7 +655,8 @@
     "socialUnset": "Zatím nezodpovězeno"
   },
   "saveSongs": {
-    "link": "Uložit dnešní písničky k účtu Nomad Karaoke",
+    "linkShort": "Uložit dnešní písně do účtu",
+    "whatIsThis": "Co to je?",
     "explainer": "Písničky, které dnes zazpíváš, ti uložíme k účtu Nomad Karaoke. V aplikaci pak uvidíš svou historii i doporučení na další songy.",
     "saving": "Ukládáme dnešní písničky k účtu {email}",
     "stop": "Přestat ukládat",

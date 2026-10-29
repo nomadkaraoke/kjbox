@@ -100,11 +100,6 @@
       "other": "▸ 其他歌手的 {count} 首歌曲"
     },
     "othersHide": "▾ 隐藏其他歌手的歌曲",
-    "autoBest": "自动挑个最好的版本",
-    "pickByFilter": {
-      "community": "已按你的筛选选择原声伴奏版",
-      "commercial": "已按你的筛选选择翻唱伴奏版"
-    },
     "versionsToggle": {
       "one": "从 {count} 个版本中选择 →",
       "other": "从 {count} 个版本中选择 →"
@@ -391,19 +386,6 @@
     "socialFailed": "登录失败。请重试，或改用邮箱。"
   },
   "confirm": {
-    "title": "是这首歌吗？",
-    "changeTitle": "换成这首歌？",
-    "changeHint": "这会替换掉 {song}。您的排队位置不会变。",
-    "sourceLocal": "在主持人的设备上 — 绝对可用",
-    "sourceCloud": "来自我们的云端曲库 — 非常可靠",
-    "sourceOnline": "来自 YouTube — 几乎总是可用",
-    "sourceYouTube": "来自 YouTube 链接 — 几乎总是可用",
-    "sourceMake": "我们的系统将制作这首歌的卡拉OK视频。在准备好演唱之前，您的排麦记录会保留在列表底部——通常需要大约30分钟。",
-    "sourceMakeQuick": "⚡ 带有滚动歌词的快速版本通常几分钟内就能准备好——到时我们会通知你，你可以选择直接唱这个版本，不用一直等。",
-    "sourceAuto": "我们会为您挑个最好的版本",
-    "searched": "您搜索了：\"{query}\"",
-    "details": "您的信息：{name}",
-    "detailsWithPhone": "您的信息：{name} · {phone}",
     "partnersTitle": "和朋友一起唱？（选填）",
     "partnerName": "名字（例如 Sarah B.）",
     "partnerPhone": "电话（选填）",
@@ -421,16 +403,11 @@
     "partnerOnList": "在今晚的列表中",
     "maxSingers": "人满啦 — 最多 {count} 个人一起唱。",
     "partnerPhoneInvalid": "歌手 {n}：电话号码好像不对哦。",
-    "back": "← 换首歌",
-    "send": "对的 — 提交",
-    "sendChange": "对的 — 换歌",
     "tooMany": "您点得有点多啦 — 请稍等几分钟。",
     "restricted": "目前点歌有限制。请刷新页面看看最新选项。",
     "failed": "发送失败 — 问问主持人是不是暂停点歌了。",
     "makeLimit": "今晚您已经点了几首需要制作的歌 —— 请从曲库中选一首，或者去问问主持人吧。",
-    "makeDisabled": "主持人现在不接受制作歌曲的请求 —— 请从曲库中选一首吧。",
-    "makeEmail": "我们还会将制作好的视频文件和 YouTube 链接发送到您的邮箱 ({email})。",
-    "detailsFriend": "演唱者：{name}（由您的手机点播）"
+    "makeDisabled": "主持人现在不接受制作歌曲的请求 —— 请从曲库中选一首吧。"
   },
   "mySongs": {
     "title": "您今晚的歌",
@@ -518,6 +495,8 @@
     "forFriend": "给 {name}",
     "sentNote": "✓ 已发送：{song}",
     "sentNoteMake": "✓ 已发送！我们正在为你制作《{song}》（约需 30 分钟）。制作完成后就会加入点歌排队。",
+    "undo": "撤销",
+    "addSinger": "+ 添加歌手",
     "makeShortMaking": "✨ 正在制作（约需 30 分钟）",
     "makeShortWaitingHost": "✨ 正在制作 · 正在等待 {host}",
     "makeShortReview": "✨ 正在制作 · 需核对歌词",
@@ -676,7 +655,8 @@
     "socialUnset": "尚未回答"
   },
   "saveSongs": {
-    "link": "将今晚唱过的歌保存到你的 Nomad Karaoke 账户",
+    "linkShort": "把今晚的歌曲保存到账户",
+    "whatIsThis": "这是什么？",
     "explainer": "我们会将你今晚演唱的歌曲保存到你的 Nomad Karaoke 账户，方便你查看历史记录和获取推荐歌曲。",
     "saving": "正在保存今晚的歌曲到 {email}",
     "stop": "停止保存",

@@ -100,11 +100,6 @@
       "other": "▸ {count} muiden artistien kappaletta"
     },
     "othersHide": "▾ Piilota muiden artistien kappaleet",
-    "autoBest": "Paras versio valitaan automaattisesti",
-    "pickByFilter": {
-      "community": "Alkuperäinen ääniversio valittu (suodatuksesi mukaan)",
-      "commercial": "Coverbändiversio valittu (suodatuksesi mukaan)"
-    },
     "versionsToggle": {
       "one": "Valitse {count} versiosta →",
       "other": "Valitse {count} versiosta →"
@@ -391,19 +386,6 @@
     "socialFailed": "Kirjautuminen ei onnistunut. Yritä uudelleen tai käytä sähköpostia."
   },
   "confirm": {
-    "title": "Onko tämä oikea laulu?",
-    "changeTitle": "Vaihda tähän lauluun?",
-    "changeHint": "Tämä korvaa laulun {song}. Säilytät paikkasi jonossa.",
-    "sourceLocal": "KJ:n koneella — varmasti saatavilla",
-    "sourceCloud": "Pilvikirjastostamme — erittäin luotettava",
-    "sourceOnline": "YouTubesta — toimii melkein aina",
-    "sourceYouTube": "YouTube-linkistä — toimii melkein aina",
-    "sourceMake": "Järjestelmämme tekee tästä kappaleesta karaokevideon. Vuorosi pysyy listan hännillä, kunnes se on valmis laulettavaksi — yleensä noin 30 minuuttia.",
-    "sourceMakeQuick": "⚡ Pikaversio rullaavilla sanoilla valmistuu yleensä muutamassa minuutissa – ilmoitamme sinulle, ja voit halutessasi laulaa sen odottamisen sijaan.",
-    "sourceAuto": "Valitsemme sinulle parhaan version",
-    "searched": "Hait: \"{query}\"",
-    "details": "Tietosi: {name}",
-    "detailsWithPhone": "Tietosi: {name} · {phone}",
     "partnersTitle": "Laulatko jonkun muun kanssa? (valinnainen)",
     "partnerName": "Nimi (esim. Matti M.)",
     "partnerPhone": "Puhelin (valinnainen)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Tämän illan listalla",
     "maxSingers": "Siinä on maksimi — yhteensä {count} laulajaa.",
     "partnerPhoneInvalid": "Laulaja {n}: tuo puhelinnumero näyttää virheelliseltä.",
-    "back": "← Valitse toinen laulu",
-    "send": "Kyllä — lähetä",
-    "sendChange": "Kyllä — vaihda lauluni",
     "tooMany": "Olet lähettänyt paljon pyyntöjä — odota muutama minuutti.",
     "restricted": "Laulupyynnöt on tällä hetkellä rajoitettu. Päivitä tämä sivu nähdäksesi päivitetyt vaihtoehdot.",
     "failed": "Lähetys epäonnistui — kysy vetäjältä, onko pyynnöt tauolla.",
     "makeLimit": "Olet jo pyytänyt meitä tekemään muutaman kappaleen tänä iltana — valitse kappale valikoimasta tai kysy vetäjältä.",
-    "makeDisabled": "Vetäjä ei juuri nyt ota vastaan pyyntöjä uusien kappaleiden tekemisestä — valitse sen sijaan kappale valikoimasta.",
-    "makeEmail": "Lähetämme sinulle myös valmiin videotiedoston ja YouTube-linkin sähköpostitse ({email}).",
-    "detailsFriend": "Laulaja: {name} (toivottu puhelimestasi)"
+    "makeDisabled": "Vetäjä ei juuri nyt ota vastaan pyyntöjä uusien kappaleiden tekemisestä — valitse sen sijaan kappale valikoimasta."
   },
   "mySongs": {
     "title": "Laulusi tänä iltana",
@@ -518,6 +495,8 @@
     "forFriend": "Kaverille {name}",
     "sentNote": "✓ Lähetetty: {song}",
     "sentNoteMake": "✓ Lähetetty! Teemme kappaletta {song} sinulle (kestää noin 30 min). Se lisätään vuorolistaan, kun se on valmis.",
+    "undo": "Kumoa",
+    "addSinger": "+ Lisää laulaja",
     "makeShortMaking": "✨ Valmistumassa (n. 30 min)",
     "makeShortWaitingHost": "✨ Valmistumassa · odottaa juontajaa {host}",
     "makeShortReview": "✨ Valmistumassa · vaatii sanojen tarkistuksen",
@@ -676,7 +655,8 @@
     "socialUnset": "Ei vielä vastattu"
   },
   "saveSongs": {
-    "link": "Tallenna tämän illan kappaleet Nomad Karaoke -tilillesi",
+    "linkShort": "Tallenna illan kappaleet tilille",
+    "whatIsThis": "Mikä tämä on?",
     "explainer": "Tallennamme tänä iltana laulamasi kappaleet Nomad Karaoke -tilillesi, jotta sovellus voi näyttää historiasi ja suositella kappaleita.",
     "saving": "Tallennetaan tämän illan kappaleita tilille {email}",
     "stop": "Lopeta tallentaminen",

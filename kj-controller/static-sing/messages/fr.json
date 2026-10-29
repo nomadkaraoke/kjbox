@@ -100,11 +100,6 @@
       "other": "▸ {count} chansons d'autres artistes"
     },
     "othersHide": "▾ Masquer les chansons d'autres artistes",
-    "autoBest": "Meilleure version choisie automatiquement",
-    "pickByFilter": {
-      "community": "Version audio originale choisie (ton filtre)",
-      "commercial": "Version cover band choisie (ton filtre)"
-    },
     "versionsToggle": {
       "one": "Choisir parmi {count} version →",
       "other": "Choisir parmi {count} versions →"
@@ -391,19 +386,6 @@
     "socialFailed": "La connexion n'a pas fonctionné. Réessaie ou utilise ton e-mail."
   },
   "confirm": {
-    "title": "C'est la bonne chanson ?",
-    "changeTitle": "Changer pour cette chanson ?",
-    "changeHint": "Ceci remplace {song}. Tu gardes ta place dans la file.",
-    "sourceLocal": "Sur la machine du KJ — certainement disponible",
-    "sourceCloud": "De notre bibliothèque cloud — très fiable",
-    "sourceOnline": "De YouTube — fonctionne presque toujours",
-    "sourceYouTube": "D'un lien YouTube — fonctionne presque toujours",
-    "sourceMake": "Notre système va créer une vidéo karaoké pour cette chanson. Ta place est gardée en bas de la liste jusqu'à ce qu'elle soit prête à être chantée — environ 30 minutes en général.",
-    "sourceMakeQuick": "⚡ Une version rapide avec paroles défilantes est généralement prête en quelques minutes — on te préviendra, et tu pourras choisir de la chanter plutôt que d'attendre.",
-    "sourceAuto": "Nous choisirons la meilleure version pour toi",
-    "searched": "Tu as cherché : \"{query}\"",
-    "details": "Tes infos : {name}",
-    "detailsWithPhone": "Tes infos : {name} · {phone}",
     "partnersTitle": "Tu chantes avec quelqu'un d'autre ? (facultatif)",
     "partnerName": "Nom (ex. Sarah B.)",
     "partnerPhone": "Téléphone (facultatif)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Sur la liste de ce soir",
     "maxSingers": "C'est le maximum — {count} chanteurs au total.",
     "partnerPhoneInvalid": "Chanteur {n} : ce numéro de téléphone semble incorrect.",
-    "back": "← Choisir une autre chanson",
-    "send": "Oui — envoyer",
-    "sendChange": "Oui — changer ma chanson",
     "tooMany": "Tu as fait beaucoup de demandes — attends quelques minutes.",
     "restricted": "Les demandes de chansons sont actuellement restreintes. Actualise cette page pour voir les options.",
     "failed": "Envoi impossible — demande au KJ si les demandes sont en pause.",
     "makeLimit": "Tu nous as déjà demandé de créer quelques chansons ce soir — choisis-en une dans le catalogue, ou demande au KJ.",
-    "makeDisabled": "Le KJ ne prend pas de demandes de création pour le moment — choisis plutôt une chanson dans le catalogue.",
-    "makeEmail": "Nous t'enverrons aussi le fichier vidéo terminé et le lien YouTube par e-mail ({email}).",
-    "detailsFriend": "Chanteur·se : {name} (demandé depuis ton téléphone)"
+    "makeDisabled": "Le KJ ne prend pas de demandes de création pour le moment — choisis plutôt une chanson dans le catalogue."
   },
   "mySongs": {
     "title": "Tes chansons de ce soir",
@@ -518,6 +495,8 @@
     "forFriend": "Pour {name}",
     "sentNote": "✓ Envoyé : {song}",
     "sentNoteMake": "✓ Envoyé ! On prépare {song} pour toi (environ 30 min). Le morceau sera ajouté à la rotation dès qu'il sera prêt.",
+    "undo": "Annuler",
+    "addSinger": "+ Ajouter un chanteur",
     "makeShortMaking": "✨ En cours de création (environ 30 min)",
     "makeShortWaitingHost": "✨ En cours de création · en attente de {host}",
     "makeShortReview": "✨ En cours de création · vérification des paroles nécessaire",
@@ -676,7 +655,8 @@
     "socialUnset": "Pas encore répondu"
   },
   "saveSongs": {
-    "link": "Enregistrer les morceaux de ce soir sur ton compte Nomad Karaoke",
+    "linkShort": "Enregistrer les chansons de ce soir dans un compte",
+    "whatIsThis": "Qu'est-ce que c'est ?",
     "explainer": "On enregistrera les morceaux que tu chantes ce soir sur ton compte Nomad Karaoke pour que l'appli puisse afficher ton historique et te recommander des chansons.",
     "saving": "Enregistrement des morceaux de ce soir sur {email}",
     "stop": "Ne plus enregistrer",

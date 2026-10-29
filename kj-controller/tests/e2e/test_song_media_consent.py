@@ -9,7 +9,7 @@ import json
 
 from playwright.sync_api import expect
 
-from tests.e2e.test_footer_social_photo_consent import _entry, _event_info, _login, _to_confirm
+from tests.e2e.test_footer_social_photo_consent import _entry, _event_info, _login, _send
 
 _NOW = {"now_singing": None, "up_next": None, "queued_count": 0}
 
@@ -129,9 +129,13 @@ class TestScopeQuestion:
 
 
 class TestInstagramHandle:
+    """Asked with the photo question on My songs (Request sends straight
+    away); the handle then rides along with every later request."""
+
     def test_handle_offered_after_yes_and_sent_with_request(self, page, live_server, live_token):
         _event_info(page, ask_photo_consent=True)
         sent = {}
+        consent_posts = []
 
         def on_submit(route):
             sent.update(json.loads(route.request.post_data))
@@ -140,30 +144,42 @@ class TestInstagramHandle:
                              "singer_name": "Alice", "song_artist": "Oasis",
                              "song_title": "Wonderwall"}, "auto_approved": False}))
         page.route("**/sing/submit*", on_submit)
+        page.route("**/sing/photo-consent*", lambda r: (
+            consent_posts.append(json.loads(r.request.post_data)),
+            r.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"success": True, "updated": 1}))))
         _login(page, live_server, live_token)
         page.reload()
-        _to_confirm(page)
-        handle = page.locator('[data-testid="photo-consent-instagram"]')
+        _send(page)
+        picker = page.locator('#push-optin [data-testid="photo-consent"]')
+        handle = picker.locator('[data-testid="photo-consent-instagram"]')
         expect(handle).to_be_hidden()
-        page.locator('[data-testid="photo-consent-yes"]').click()
+        picker.locator('[data-testid="photo-consent-yes"]').click()
         expect(handle).to_be_visible()
         handle.fill("@Alice.Sings")
         handle.dispatch_event("change")
         assert page.evaluate("localStorage.getItem('sing_instagram')") == "alice.sings"
-        page.locator(".submit-btn").click()
-        page.wait_for_function("window.__sing_state.step === 'done'")
+        page.wait_for_function("window.__sing_state.instagram === 'alice.sings'")
+        expect(picker.locator(".photo-consent-saved")).to_contain_text("Saved")
+        assert consent_posts[-1]["consent"] == "yes"
+        assert consent_posts[-1]["instagram"] == "alice.sings"
+        # The next request carries both.
+        sent.clear()
+        with page.expect_response("**/sing/submit*"):
+            _send(page)
         assert sent["photo_consent"] == "yes" and sent["instagram"] == "alice.sings"
 
     def test_invalid_handle_shows_error(self, page, live_server, live_token):
         _event_info(page, ask_photo_consent=True)
         _login(page, live_server, live_token)
         page.reload()
-        _to_confirm(page)
-        page.locator('[data-testid="photo-consent-yes"]').click()
-        handle = page.locator('[data-testid="photo-consent-instagram"]')
+        _send(page)
+        picker = page.locator('#push-optin [data-testid="photo-consent"]')
+        picker.locator('[data-testid="photo-consent-yes"]').click()
+        handle = picker.locator('[data-testid="photo-consent-instagram"]')
         handle.fill("not a handle!")
         handle.dispatch_event("change")
-        expect(page.locator(".photo-consent-handle-error")).to_be_visible()
+        expect(picker.locator(".photo-consent-handle-error")).to_be_visible()
         assert not page.evaluate("localStorage.getItem('sing_instagram')")
 
 

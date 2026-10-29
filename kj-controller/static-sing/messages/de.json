@@ -100,11 +100,6 @@
       "other": "▸ {count} Songs von anderen Künstlern"
     },
     "othersHide": "▾ Songs von anderen Künstlern ausblenden",
-    "autoBest": "Beste Version automatisch ausgewählt",
-    "pickByFilter": {
-      "community": "Original-Audio-Version gewählt (dein Filter)",
-      "commercial": "Coverband-Version gewählt (dein Filter)"
-    },
     "versionsToggle": {
       "one": "Wähle aus {count} Version →",
       "other": "Wähle aus {count} Versionen →"
@@ -391,19 +386,6 @@
     "socialFailed": "Die Anmeldung hat leider nicht geklappt. Versuch es nochmal oder nutze deine E-Mail-Adresse."
   },
   "confirm": {
-    "title": "Ist das der richtige Song?",
-    "changeTitle": "Zu diesem Song wechseln?",
-    "changeHint": "Das ersetzt {song}. Du behältst deinen Platz in der Warteschlange.",
-    "sourceLocal": "Auf dem Rechner des KJ — definitiv verfügbar",
-    "sourceCloud": "Aus unserer Cloud-Bibliothek — sehr zuverlässig",
-    "sourceOnline": "Von YouTube — funktioniert fast immer",
-    "sourceYouTube": "Von einem YouTube-Link — funktioniert fast immer",
-    "sourceMake": "Unser System erstellt ein Karaoke-Video von diesem Song. Dein Platz in der Warteschlange bleibt ganz unten, bis das Video singbereit ist – normalerweise ca. 30 Minuten.",
-    "sourceMakeQuick": "⚡ Eine Schnellversion mit mitlaufendem Text ist meist in wenigen Minuten fertig – wir geben dir Bescheid, und du kannst sie singen, statt zu warten.",
-    "sourceAuto": "Wir wählen die beste Version für dich aus",
-    "searched": "Du hast gesucht: \"{query}\"",
-    "details": "Deine Daten: {name}",
-    "detailsWithPhone": "Deine Daten: {name} · {phone}",
     "partnersTitle": "Singst du noch mit jemandem? (optional)",
     "partnerName": "Name (z. B. Sarah B.)",
     "partnerPhone": "Handynummer (optional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Auf der heutigen Liste",
     "maxSingers": "Das ist das Maximum — insgesamt {count} Sänger.",
     "partnerPhoneInvalid": "Sänger {n}: Diese Handynummer sieht falsch aus.",
-    "back": "← Anderen Song wählen",
-    "send": "Ja — abschicken",
-    "sendChange": "Ja — meinen Song austauschen",
     "tooMany": "Du hast viel eingereicht — bitte warte ein paar Minuten.",
     "restricted": "Songanfragen sind derzeit eingeschränkt. Bitte aktualisiere diese Seite für die neuesten Optionen.",
     "failed": "Konnte nicht gesendet werden — frag den KJ, ob Anfragen pausiert sind.",
     "makeLimit": "Du hast dir heute Abend schon ein paar Songs erstellen lassen — such dir einen aus dem Katalog aus oder frag den KJ.",
-    "makeDisabled": "Der KJ nimmt im Moment keine Anfragen zum Erstellen von Songs an — such dir stattdessen einen Song aus dem Katalog aus.",
-    "makeEmail": "Wir senden dir auch die fertige Videodatei und den YouTube-Link per E-Mail ({email}).",
-    "detailsFriend": "Sänger/in: {name} (über dein Handy gewünscht)"
+    "makeDisabled": "Der KJ nimmt im Moment keine Anfragen zum Erstellen von Songs an — such dir stattdessen einen Song aus dem Katalog aus."
   },
   "mySongs": {
     "title": "Deine Songs heute Abend",
@@ -518,6 +495,8 @@
     "forFriend": "Für {name}",
     "sentNote": "✓ Gesendet: {song}",
     "sentNoteMake": "✓ Gesendet! Wir erstellen {song} gerade für dich (dauert ca. 30 Min.). Sobald der Song fertig ist, kommt er in die Warteschlange.",
+    "undo": "Rückgängig",
+    "addSinger": "+ Sänger:in hinzufügen",
     "makeShortMaking": "✨ Wird erstellt (ca. 30 Min.)",
     "makeShortWaitingHost": "✨ Wird erstellt · Warten auf {host}",
     "makeShortReview": "✨ Wird erstellt · Textprüfung nötig",
@@ -676,7 +655,8 @@
     "socialUnset": "Noch nicht beantwortet"
   },
   "saveSongs": {
-    "link": "Heutige Songs in deinem Nomad Karaoke-Konto speichern",
+    "linkShort": "Die Songs von heute Abend in einem Konto speichern",
+    "whatIsThis": "Was ist das?",
     "explainer": "Wir speichern die Songs, die du heute Abend singst, in deinem Nomad Karaoke-Konto. So kann die App deinen Verlauf anzeigen und dir Songs empfehlen.",
     "saving": "Heutige Songs werden unter {email} gespeichert",
     "stop": "Nicht mehr speichern",

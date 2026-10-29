@@ -100,11 +100,6 @@
       "other": "▸ Diğer sanatçılardan {count} şarkı"
     },
     "othersHide": "▾ Diğer sanatçıların şarkılarını gizle",
-    "autoBest": "En iyi versiyon otomatik seçildi",
-    "pickByFilter": {
-      "community": "Orijinal ses versiyonu seçildi (filtrene göre)",
-      "commercial": "Cover grubu versiyonu seçildi (filtrene göre)"
-    },
     "versionsToggle": {
       "one": "{count} versiyon arasından seç →",
       "other": "{count} versiyon arasından seç →"
@@ -391,19 +386,6 @@
     "socialFailed": "Giriş yapılamadı. Tekrar dene veya e-postanı kullan."
   },
   "confirm": {
-    "title": "Doğru şarkı bu mu?",
-    "changeTitle": "Bu şarkıyla değiştirilsin mi?",
-    "changeHint": "Bu, {song} şarkısının yerini alır. Sıradaki yerini korursun.",
-    "sourceLocal": "KJ'nin bilgisayarında — kesinlikle mevcut",
-    "sourceCloud": "Bulut kütüphanemizden — çok güvenilir",
-    "sourceOnline": "YouTube'dan — neredeyse her zaman çalışır",
-    "sourceYouTube": "Bir YouTube bağlantısından — neredeyse her zaman çalışır",
-    "sourceMake": "Sistemimiz bu şarkının karaoke videosunu hazırlayacak. Şarkı söylemeye hazır olana kadar sıradaki yerin en altta bekletilir — genellikle ~30 dakika sürer.",
-    "sourceMakeQuick": "⚡ Kayan sözlü hızlı bir versiyon genelde birkaç dakika içinde hazır olur — hazır olunca sana haber veririz, beklemek yerine onu söylemeyi seçebilirsin.",
-    "sourceAuto": "Senin için en iyi versiyonu seçeceğiz",
-    "searched": "Aradığın: \"{query}\"",
-    "details": "Bilgilerin: {name}",
-    "detailsWithPhone": "Bilgilerin: {name} · {phone}",
     "partnersTitle": "Başka biriyle mi söylüyorsun? (isteğe bağlı)",
     "partnerName": "İsim (örn. Ayşe B.)",
     "partnerPhone": "Telefon (isteğe bağlı)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Bu gecenin listesinde",
     "maxSingers": "Maksimuma ulaşıldı — toplam {count} şarkıcı.",
     "partnerPhoneInvalid": "Şarkıcı {n}: bu telefon numarası hatalı görünüyor.",
-    "back": "← Başka bir şarkı seç",
-    "send": "Evet — gönder",
-    "sendChange": "Evet — şarkımı değiştir",
     "tooMany": "Çok fazla gönderim yaptın — lütfen birkaç dakika bekle.",
     "restricted": "Şarkı istekleri şu an kısıtlı. Güncel seçenekler için lütfen bu sayfayı yenile.",
     "failed": "Gönderilemedi — isteklerin duraklatılıp duraklatılmadığını sunucuya sor.",
     "makeLimit": "Bu gece zaten birkaç şarkı hazırlamamızı istedin — katalogdan birini seç veya KJ'ye sor.",
-    "makeDisabled": "KJ şu an yeni şarkı hazırlama isteklerini kabul etmiyor — bunun yerine katalogdan bir şarkı seç.",
-    "makeEmail": "Tamamlanan video dosyasını ve YouTube bağlantısını sana e-posta ile de göndereceğiz ({email}).",
-    "detailsFriend": "Şarkıcı: {name} (senin telefonundan istendi)"
+    "makeDisabled": "KJ şu an yeni şarkı hazırlama isteklerini kabul etmiyor — bunun yerine katalogdan bir şarkı seç."
   },
   "mySongs": {
     "title": "Bu geceki şarkıların",
@@ -518,6 +495,8 @@
     "forFriend": "{name} için",
     "sentNote": "✓ Gönderildi: {song}",
     "sentNoteMake": "✓ Gönderildi! {song} parçasını senin için hazırlıyoruz (yaklaşık 30 dk). Hazır olduğunda sıraya eklenecek.",
+    "undo": "Geri al",
+    "addSinger": "+ Şarkıcı ekle",
     "makeShortMaking": "✨ Hazırlanıyor (yaklaşık 30 dk)",
     "makeShortWaitingHost": "✨ Hazırlanıyor · {host} bekleniyor",
     "makeShortReview": "✨ Hazırlanıyor · şarkı sözlerinin kontrol edilmesi gerekiyor",
@@ -676,7 +655,8 @@
     "socialUnset": "Henüz yanıtlanmadı"
   },
   "saveSongs": {
-    "link": "Bu gece söylediğin şarkıları Nomad Karaoke hesabına kaydet",
+    "linkShort": "Bu geceki şarkıları bir hesaba kaydet",
+    "whatIsThis": "Bu nedir?",
     "explainer": "Bu gece söylediğin şarkıları Nomad Karaoke hesabına kaydedeceğiz; böylece uygulama geçmişini gösterebilir ve sana şarkı önerebilir.",
     "saving": "Bu gecenin şarkıları {email} hesabına kaydediliyor",
     "stop": "Kaydetmeyi durdur",

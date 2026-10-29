@@ -100,11 +100,6 @@
       "other": "▸ {count} músicas de outros artistas"
     },
     "othersHide": "▾ Ocultar músicas de outros artistas",
-    "autoBest": "Melhor versão escolhida automaticamente",
-    "pickByFilter": {
-      "community": "Versão com áudio original selecionada (seu filtro)",
-      "commercial": "Versão de banda cover selecionada (seu filtro)"
-    },
     "versionsToggle": {
       "one": "Escolha entre {count} versão →",
       "other": "Escolha entre {count} versões →"
@@ -391,19 +386,6 @@
     "socialFailed": "Não foi possível entrar. Tente novamente ou use seu e-mail."
   },
   "confirm": {
-    "title": "Esta é a música certa?",
-    "changeTitle": "Trocar para esta música?",
-    "changeHint": "Isso substitui {song}. Você mantém seu lugar na fila.",
-    "sourceLocal": "Na máquina do KJ — definitivamente disponível",
-    "sourceCloud": "Da nossa biblioteca na nuvem — muito confiável",
-    "sourceOnline": "Do YouTube — quase sempre funciona",
-    "sourceYouTube": "De um link do YouTube — quase sempre funciona",
-    "sourceMake": "Nosso sistema criará um vídeo de karaokê desta música. Seu pedido ficará no final da fila até que esteja pronto para cantar — normalmente ~30 minutos.",
-    "sourceMakeQuick": "⚡ Uma versão rápida com letra em rolagem costuma ficar pronta em poucos minutos — avisaremos você, e você poderá escolher cantar essa versão em vez de esperar.",
-    "sourceAuto": "Vamos escolher a melhor versão para você",
-    "searched": "Você pesquisou: \"{query}\"",
-    "details": "Seus dados: {name}",
-    "detailsWithPhone": "Seus dados: {name} · {phone}",
     "partnersTitle": "Vai cantar com mais alguém? (opcional)",
     "partnerName": "Nome (ex. Sarah B.)",
     "partnerPhone": "Telefone (opcional)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Na lista de hoje",
     "maxSingers": "Esse é o máximo — {count} cantores no total.",
     "partnerPhoneInvalid": "Cantor {n}: esse número de telefone parece estranho.",
-    "back": "← Escolher uma música diferente",
-    "send": "Sim — enviar",
-    "sendChange": "Sim — trocar minha música",
     "tooMany": "Você enviou muitos pedidos — espere alguns minutos.",
     "restricted": "Os pedidos de música estão restritos no momento. Atualize esta página para ver as opções.",
     "failed": "Não foi possível enviar — pergunte ao anfitrião se os pedidos estão pausados.",
     "makeLimit": "Você já nos pediu para criar algumas músicas esta noite — escolha uma do catálogo ou fale com o anfitrião.",
-    "makeDisabled": "O anfitrião não está aceitando pedidos de criação agora — escolha uma música do catálogo.",
-    "makeEmail": "Também enviaremos por e-mail o arquivo de vídeo finalizado e o link do YouTube ({email}).",
-    "detailsFriend": "Cantor(a): {name} (pedido pelo seu celular)"
+    "makeDisabled": "O anfitrião não está aceitando pedidos de criação agora — escolha uma música do catálogo."
   },
   "mySongs": {
     "title": "Suas músicas de hoje",
@@ -518,6 +495,8 @@
     "forFriend": "Para {name}",
     "sentNote": "✓ Enviado: {song}",
     "sentNoteMake": "✓ Enviado! Estamos preparando {song} para você (cerca de 30 min). A música entrará na fila assim que estiver pronta.",
+    "undo": "Desfazer",
+    "addSinger": "+ Adicionar cantor",
     "makeShortMaking": "✨ Sendo feito (cerca de 30 min)",
     "makeShortWaitingHost": "✨ Sendo feito · aguardando {host}",
     "makeShortReview": "✨ Sendo feito · precisa revisar a letra",
@@ -676,7 +655,8 @@
     "socialUnset": "Ainda não respondido"
   },
   "saveSongs": {
-    "link": "Salvar as músicas de hoje na sua conta do Nomad Karaoke",
+    "linkShort": "Salvar as músicas desta noite numa conta",
+    "whatIsThis": "O que é isto?",
     "explainer": "Vamos salvar as músicas que você cantar hoje na sua conta do Nomad Karaoke, para que o aplicativo possa mostrar seu histórico e recomendar músicas.",
     "saving": "Salvando as músicas de hoje em {email}",
     "stop": "Parar de salvar",

@@ -100,11 +100,6 @@
       "other": "▸ {count} pjesama drugih izvođača"
     },
     "othersHide": "▾ Sakrij pjesme drugih izvođača",
-    "autoBest": "Najbolja verzija odabrana automatski",
-    "pickByFilter": {
-      "community": "Odabrana verzija s originalnim zvukom (tvoj filter)",
-      "commercial": "Odabrana verzija cover benda (tvoj filter)"
-    },
     "versionsToggle": {
       "one": "Odaberi iz {count} verzije →",
       "other": "Odaberi iz {count} verzija →"
@@ -391,19 +386,6 @@
     "socialFailed": "Prijava nije uspjela. Pokušaj ponovno ili unesi e-poštu."
   },
   "confirm": {
-    "title": "Je li ovo prava pjesma?",
-    "changeTitle": "Želiš li zamijeniti za ovu pjesmu?",
-    "changeHint": "Ovo zamjenjuje {song}. Zadržavaš svoje mjesto u redu.",
-    "sourceLocal": "Na računalu voditelja — sigurno dostupno",
-    "sourceCloud": "Iz naše cloud baze — vrlo pouzdano",
-    "sourceOnline": "S YouTubea — gotovo uvijek radi",
-    "sourceYouTube": "S YouTube poveznice — gotovo uvijek radi",
-    "sourceMake": "Naš sustav će napraviti karaoke video za ovu pjesmu. Tvoja prijava ostaje na dnu popisa dok ne bude spremna za pjevanje — obično oko 30 minuta.",
-    "sourceMakeQuick": "⚡ Brza verzija s pomičnim tekstom obično je spremna za nekoliko minuta — javit ćemo ti pa je možeš odabrati umjesto da čekaš.",
-    "sourceAuto": "Mi ćemo odabrati najbolju verziju za tebe",
-    "searched": "Tražio/la si: \"{query}\"",
-    "details": "Tvoji podaci: {name}",
-    "detailsWithPhone": "Tvoji podaci: {name} · {phone}",
     "partnersTitle": "Pjevaš li s još nekim? (opcionalno)",
     "partnerName": "Ime (npr. Ana B.)",
     "partnerPhone": "Broj mobitela (opcionalno)",
@@ -421,16 +403,11 @@
     "partnerOnList": "Na večerašnjem popisu",
     "maxSingers": "To je maksimum — ukupno {count} pjevača.",
     "partnerPhoneInvalid": "Pjevač {n}: taj broj mobitela izgleda neispravno.",
-    "back": "← Odaberi drugu pjesmu",
-    "send": "Da — pošalji",
-    "sendChange": "Da — zamijeni moju pjesmu",
     "tooMany": "Poslao/la si puno prijava — molim te pričekaj nekoliko minuta.",
     "restricted": "Prijave pjesama su trenutno ograničene. Molim te osvježi ovu stranicu za ažurirane opcije.",
     "failed": "Ne mogu poslati — pitaj voditelja jesu li prijave pauzirane.",
     "makeLimit": "Već si zatražio/la izradu nekoliko pjesama večeras — odaberi jednu iz kataloga ili pitaj KJ-a.",
-    "makeDisabled": "KJ trenutno ne prima zahtjeve za izradu pjesama — umjesto toga odaberi pjesmu iz kataloga.",
-    "makeEmail": "Također ćemo ti poslati gotov video i YouTube link na e-mail ({email}).",
-    "detailsFriend": "Pjevač/ica: {name} (zatraženo s tvog mobitela)"
+    "makeDisabled": "KJ trenutno ne prima zahtjeve za izradu pjesama — umjesto toga odaberi pjesmu iz kataloga."
   },
   "mySongs": {
     "title": "Tvoje pjesme večeras",
@@ -518,6 +495,8 @@
     "forFriend": "Za: {name}",
     "sentNote": "✓ Poslano: {song}",
     "sentNoteMake": "✓ Poslano! Pripremamo pjesmu {song} za tebe (oko 30 min). Ulazi na red čim bude spremna.",
+    "undo": "Poništi",
+    "addSinger": "+ Dodaj pjevača",
     "makeShortMaking": "✨ Izrađuje se (oko 30 min)",
     "makeShortWaitingHost": "✨ Izrađuje se · čeka se {host}",
     "makeShortReview": "✨ Izrađuje se · potrebna provjera teksta",
@@ -676,7 +655,8 @@
     "socialUnset": "Još nije odgovoreno"
   },
   "saveSongs": {
-    "link": "Spremi večerašnje pjesme na svoj Nomad Karaoke račun",
+    "linkShort": "Spremi večerašnje pjesme na račun",
+    "whatIsThis": "Što je ovo?",
     "explainer": "Spremit ćemo pjesme koje večeras pjevaš na tvoj Nomad Karaoke račun kako bi ti aplikacija mogla prikazati povijest pjevanja i preporučiti pjesme.",
     "saving": "Spremanje večerašnjih pjesama na {email}",
     "stop": "Prekini spremanje",

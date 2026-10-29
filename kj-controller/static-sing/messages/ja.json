@@ -100,11 +100,6 @@
       "other": "▸ 他のアーティストの曲（{count}曲）"
     },
     "othersHide": "▾ 他のアーティストの曲を非表示",
-    "autoBest": "最適なバージョンを自動で選択",
-    "pickByFilter": {
-      "community": "原曲音源版を選択中（フィルター適用）",
-      "commercial": "カバーバンド版を選択中（フィルター適用）"
-    },
     "versionsToggle": {
       "one": "{count} つのバージョンから選ぶ →",
       "other": "{count} つのバージョンから選ぶ →"
@@ -391,19 +386,6 @@
     "socialFailed": "ログインできませんでした。もう一度試すか、メールアドレスをご利用ください。"
   },
   "confirm": {
-    "title": "この曲でいいですか？",
-    "changeTitle": "この曲に変更しますか？",
-    "changeHint": "これは {song} と入れ替わります。順番はそのままです。",
-    "sourceLocal": "ホストのPCから — 確実に歌えます",
-    "sourceCloud": "クラウドライブラリから — とても安定しています",
-    "sourceOnline": "YouTubeから — ほぼ確実に歌えます",
-    "sourceYouTube": "YouTubeリンクから — ほぼ確実に歌えます",
-    "sourceMake": "システムがこの曲のカラオケ動画を作成します。準備ができるまで、順番はリストの最後にキープされます（通常30分ほどかかります）。",
-    "sourceMakeQuick": "⚡ スクロール歌詞のクイックバージョンなら、通常数分で準備できます。用意ができ次第お知らせしますので、待たずにそちらで歌うこともできます。",
-    "sourceAuto": "最適なバージョンを自動で選択します",
-    "searched": "検索内容: \"{query}\"",
-    "details": "あなたの情報: {name}",
-    "detailsWithPhone": "あなたの情報: {name} · {phone}",
     "partnersTitle": "他の誰かと一緒に歌いますか？ (任意)",
     "partnerName": "名前 (例: Sarah B.)",
     "partnerPhone": "電話番号 (任意)",
@@ -421,16 +403,11 @@
     "partnerOnList": "今夜のリスト",
     "maxSingers": "これが最大です — 合計 {count} 人。",
     "partnerPhoneInvalid": "歌手 {n}: 電話番号が正しくないようです。",
-    "back": "← 別の曲を選ぶ",
-    "send": "はい、送信します",
-    "sendChange": "はい、曲を変更します",
     "tooMany": "送信回数が多すぎます — 数分待ってからもう一度お試しください。",
     "restricted": "現在、曲のリクエストは制限されています。このページを更新して最新のオプションを確認してください。",
     "failed": "送信できませんでした — リクエストが一時停止されていないかホストに聞いてみてください。",
     "makeLimit": "今夜はすでにいくつか曲の作成をリクエストしていますね。カタログから選ぶか、ホストに相談してみてください。",
-    "makeDisabled": "ただいまホストは曲の作成リクエストを受け付けていません。代わりにカタログから曲を選んでくださいね。",
-    "makeEmail": "完成した動画ファイルとYouTubeのリンクもメールでお送りします（{email}）。",
-    "detailsFriend": "シンガー: {name}（あなたのスマートフォンからリクエスト）"
+    "makeDisabled": "ただいまホストは曲の作成リクエストを受け付けていません。代わりにカタログから曲を選んでくださいね。"
   },
   "mySongs": {
     "title": "今夜のあなたの曲",
@@ -518,6 +495,8 @@
     "forFriend": "{name} さんへ",
     "sentNote": "✓ 送信完了: {song}",
     "sentNoteMake": "✓ 送信完了！ただいま「{song}」を作成中です（約30分）。準備ができ次第、順番に追加されます。",
+    "undo": "元に戻す",
+    "addSinger": "+ 歌う人を追加",
     "makeShortMaking": "✨ 作成中（約30分）",
     "makeShortWaitingHost": "✨ 作成中・{host}の確認待ち",
     "makeShortReview": "✨ 作成中・歌詞の確認が必要です",
@@ -676,7 +655,8 @@
     "socialUnset": "未回答"
   },
   "saveSongs": {
-    "link": "今夜歌った曲をNomad Karaokeアカウントに保存する",
+    "linkShort": "今夜の曲をアカウントに保存",
+    "whatIsThis": "これは何？",
     "explainer": "今夜歌った曲をNomad Karaokeアカウントに保存します。履歴の確認やおすすめの曲のチェックができるようになります。",
     "saving": "今夜歌った曲を{email}に保存中",
     "stop": "保存を停止",

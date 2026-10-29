@@ -24,31 +24,54 @@ def _login(page, live_server, live_token, name="Alice"):
     page.evaluate("window.__sing_state.phone = ''")
 
 
-class TestConfirmPartners:
+def _open_singers_modal(page, live_server, live_token, singers=None, status=200):
+    """My songs with one owned song (id 4242), then its 👥 Singers editor open.
+
+    The partner editor lives there (and on the make screen) since Request
+    sends straight from search. Returns the bodies POSTed to /singers."""
+    page.add_init_script("window.__SING_ARM_MS = 0;")
+    _login(page, live_server, live_token)   # identity = "Alice"
+    page.evaluate("""(t) => {
+        localStorage.setItem('sing_my_request_ids',
+          JSON.stringify({token: t, ids: [4242], tokens: {'4242': 'secret-xyz'}}));
+    }""", live_token)
+    page.route("**/sing/singers*", lambda r: r.fulfill(
+        status=status, content_type="application/json",
+        body=json.dumps({"singers": singers if singers is not None else ["Alice", "Bob"]})))
+    current = {"partners": []}
+    page.route("**/sing/my-requests*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=json.dumps({
+            "now_playing": {"now_singing": None, "up_next": None, "queued_count": 0},
+            "requests": [{"request": {"id": 4242, "singer_name": "Alice",
+                "song_artist": "Queen", "song_title": "Under Pressure",
+                "source_type": "local", "status": "approved",
+                "created_at": "now", "linked_entry_id": 7,
+                "additional_singers": current["partners"]}}]})))
+    sent = []
+
+    def handle(route):
+        body = json.loads(route.request.post_data or "{}")
+        sent.append(body)
+        current["partners"] = body["additional_singers"]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({
+            "success": True, "request": {"id": 4242, "status": "approved",
+                "additional_singers": body["additional_singers"]}}))
+    page.route("**/sing/requests/4242/singers*", handle)
+    page.evaluate("window.__sing_state._knownSingers = undefined; "
+                  "window.__sing_state.step = 'done'; window.__sing_render();")
+    page.locator('[data-testid="edit-singers"]').click()
+    expect(page.locator(".sing-modal.edit-singers")).to_be_visible()
+    return sent
+
+
+class TestPartnersEditor:
     def test_partners_section_starts_collapsed(self, page, live_server, live_token):
-        _login(page, live_server, live_token)
-        page.evaluate("""
-            window.__sing_state.selected = {
-                source_type: 'local',
-                source_ref: '/tmp/x.mp4',
-                song_artist: 'Queen', song_title: 'Bohemian Rhapsody',
-                label: 'Bohemian Rhapsody — Queen (in library)',
-            };
-            window.__sing_state.step = 'confirm';
-            window.__sing_render();
-        """)
+        _open_singers_modal(page, live_server, live_token)
         expect(page.locator('[data-testid="add-singer"]')).to_be_visible()
         expect(page.locator('[data-testid="partner-row"]')).to_have_count(0)
 
     def test_can_add_up_to_three_partners(self, page, live_server, live_token):
-        _login(page, live_server, live_token)
-        page.evaluate("""
-            window.__sing_state.selected = { source_type: 'local',
-                source_ref: '/tmp/x.mp4',
-                song_artist: 'Q', song_title: 'B', label: 'X' };
-            window.__sing_state.step = 'confirm';
-            window.__sing_render();
-        """)
+        _open_singers_modal(page, live_server, live_token)
         for _ in range(3):
             page.locator('[data-testid="add-singer"]').click()
         expect(page.locator('[data-testid="partner-row"]')).to_have_count(3)
@@ -56,14 +79,7 @@ class TestConfirmPartners:
 
     def test_can_remove_a_partner_row(self, page, live_server, live_token):
         """Tapping the × removes the row and re-opens the add affordance."""
-        _login(page, live_server, live_token)
-        page.evaluate("""
-            window.__sing_state.selected = { source_type: 'local',
-                source_ref: '/tmp/x.mp4',
-                song_artist: 'Q', song_title: 'B', label: 'X' };
-            window.__sing_state.step = 'confirm';
-            window.__sing_render();
-        """)
+        _open_singers_modal(page, live_server, live_token)
         for _ in range(3):
             page.locator('[data-testid="add-singer"]').click()
         expect(page.locator('[data-testid="partner-row"]')).to_have_count(3)
@@ -71,31 +87,6 @@ class TestConfirmPartners:
         page.locator('.partner-remove').first.click()
         expect(page.locator('[data-testid="partner-row"]')).to_have_count(2)
         expect(page.locator('[data-testid="add-singer"]')).to_be_visible()
-
-    def test_submit_sends_partners(self, page, live_server, live_token):
-        _login(page, live_server, live_token)
-        captured = {}
-        def handle(route):
-            captured['body'] = route.request.post_data_json
-            route.continue_()
-        page.route('**/sing/submit*', handle)
-
-        page.evaluate("""
-            window.__sing_state.selected = { source_type: 'local',
-                source_ref: '/tmp/x.mp4',
-                song_artist: 'Queen', song_title: 'Bohemian Rhapsody',
-                label: 'X' };
-            window.__sing_state.step = 'confirm';
-            window.__sing_render();
-        """)
-        page.locator('[data-testid="add-singer"]').click()
-        page.locator('[data-testid="partner-name-0"]').fill('Sarah B.')
-        page.locator('[data-testid="partner-phone-0"]').fill('+61 400 111 222')
-        page.locator('.submit-btn').click()
-        expect(page.locator('text=Your songs tonight')).to_be_visible(timeout=5000)
-        assert captured['body']['additional_singers'] == [
-            {"name": "Sarah B.", "phone": "+61 400 111 222"},
-        ]
 
 
 class TestDoneMultiSong:
@@ -240,32 +231,79 @@ class TestSearchRace:
         page.evaluate("window.__SING_ARM_MS = 0; window.__sing_render();")
         expect(page.locator(".btn-primary-cta")).to_be_visible()
         page.locator(".btn-primary-cta").click()
-        assert page.evaluate("window.__sing_state.step") == "confirm"
+        expect(page.locator('[data-testid="sent-banner"]')).to_be_visible(timeout=5000)
+        assert page.evaluate("window.__sing_state.step") == "done"
 
 
-class TestConfirmHardening:
-    def _confirm(self, page, live_server, live_token):
+class TestRequestSendsDirectly:
+    """Request sends from the search row: no "Is this the right song?" step.
+    Undo and + Add singer ride on the Sent note instead (Andrew, 2026-10-29)."""
+
+    _SONGS = {"songs": [{"key": "q:1", "artist": "Queen", "title": "Bohemian Rhapsody",
+                         "version_count": 1,
+                         "versions": [{"source": "local",
+                                       "local": {"path": "/tmp/x.mp4", "artist": "Queen",
+                                                 "title": "Bohemian Rhapsody"}}]}]}
+
+    def _search(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
         _login(page, live_server, live_token)
-        page.evaluate("""
-            window.__sing_state.query = 'bohemian';
-            window.__sing_state.selected = {
-                source_type: 'local', source_ref: '/x.mp4',
-                song_artist: 'Queen', song_title: 'Bohemian Rhapsody',
-                label: 'Bohemian Rhapsody — Queen (in library)',
-            };
-            window.__sing_state.step = 'confirm';
-            window.__sing_render();
-        """)
+        page.route("**/sing/search*", lambda r: r.fulfill(
+            status=200, content_type="application/json", body=json.dumps(self._SONGS)))
+        page.evaluate("window.__sing_state.step = 'search'; window.__sing_render();")
+        page.locator('input[type="search"]').fill("bohemian")
+        expect(page.locator('[data-testid="request-song"]')).to_be_visible()
 
-    def test_confirm_shows_song_source_and_breadcrumb(self, page, live_server, live_token):
-        self._confirm(page, live_server, live_token)
-        expect(page.locator(".confirm-title")).to_have_text("Bohemian Rhapsody")
-        expect(page.locator(".confirm-artist")).to_have_text("Queen")
-        expect(page.locator(".confirm-source")).to_have_text(
-            "On the host's machine — definitely available")
-        expect(page.locator(".confirm-searched")).to_contain_text("bohemian")
-        expect(page.locator(".submit-btn")).to_have_text("Yes — send it in")
-        expect(page.get_by_role("button", name="← Pick a different song")).to_be_visible()
+    def test_request_lands_on_my_songs_with_sent_note(self, page, live_server, live_token):
+        captured = {}
+
+        def handle(route):
+            captured["body"] = route.request.post_data_json
+            route.continue_()
+        page.route("**/sing/submit*", handle)
+        self._search(page, live_server, live_token)
+        page.locator('[data-testid="request-song"]').click()
+        note = page.locator('[data-testid="sent-banner"]')
+        expect(note).to_contain_text("Bohemian Rhapsody", timeout=5000)
+        expect(note.locator('[data-testid="sent-undo"]')).to_have_text("Undo")
+        expect(note.locator('[data-testid="sent-add-singer"]')).to_have_text("+ Add singer")
+        expect(page.locator("text=Your songs tonight")).to_be_visible()
+        assert captured["body"]["source_type"] == "local"
+        assert captured["body"]["song_title"] == "Bohemian Rhapsody"
+        assert "additional_singers" not in captured["body"]
+
+    def test_undo_cancels_the_request(self, page, live_server, live_token):
+        cancels = []
+        page.route("**/sing/requests/*/cancel*", lambda r: (
+            cancels.append(r.request.post_data_json), r.continue_()))
+        self._search(page, live_server, live_token)
+        page.locator('[data-testid="request-song"]').click()
+        page.locator('[data-testid="sent-undo"]').click()
+        expect(page.locator('[data-testid="sent-banner"]')).to_have_count(0)
+        expect(page.locator(".song-card", has_text="Bohemian Rhapsody")).to_have_count(0, timeout=5000)
+        assert len(cancels) == 1 and cancels[0]["edit_token"]
+
+    def test_add_singer_opens_the_singers_editor(self, page, live_server, live_token):
+        self._search(page, live_server, live_token)
+        page.locator('[data-testid="request-song"]').click()
+        page.locator('[data-testid="sent-add-singer"]').click()
+        expect(page.locator(".sing-modal.edit-singers")).to_be_visible()
+        expect(page.locator('[data-testid="add-existing-singer"]')).to_be_visible()
+
+    def test_failed_send_stays_on_search_with_the_reason(self, page, live_server, live_token):
+        page.route("**/sing/submit*", lambda r: r.fulfill(
+            status=429, content_type="application/json", body=json.dumps({"error": "rate_limited"})))
+        self._search(page, live_server, live_token)
+        page.locator('[data-testid="request-song"]').click()
+        expect(page.locator('[data-testid="send-status"]')).to_have_text(
+            "You've submitted a lot — please wait a few minutes.")
+        assert page.evaluate("window.__sing_state.step") == "search"
+        expect(page.locator('[data-testid="request-song"]')).to_be_enabled()
+
+    def test_old_confirm_hash_falls_back_to_search(self, page, live_server, live_token):
+        _login(page, live_server, live_token)
+        page.goto(f"{live_server}/sing/?t={live_token}#confirm")
+        expect(page.locator('input[type="search"]')).to_be_visible()
 
 
 class TestVersionList:
@@ -1108,38 +1146,26 @@ class TestEditSingers:
 
 
 class TestExistingSingerPicker:
-    """Confirm screen: "Existing singer" / "New singer" instead of an
+    """Partner editor: "Existing singer" / "New singer" instead of an
     always-visible wall of everyone's names."""
 
     _SINGERS = ["Sarah B.", "mike", "Alice", "Zoë", "Bob"] + [f"Guest {i:02d}" for i in range(50)]
 
     def _to_confirm(self, page, live_server, live_token, singers=None, status=200):
-        page.add_init_script("window.__SING_ARM_MS = 0;")
-        _login(page, live_server, live_token)   # identity = "Alice"
-        page.route("**/sing/singers*", lambda r: r.fulfill(
-            status=status, content_type="application/json",
-            body=json.dumps({"singers": singers if singers is not None else self._SINGERS})))
-        page.evaluate(
-            """() => {
-                window.__sing_state._knownSingers = undefined;
-                window.__sing_state.selected = {
-                    source_type: 'local', source_ref: '/m/x.mp4',
-                    song_artist: 'Queen', song_title: 'Under Pressure',
-                };
-                window.__sing_state.step = 'confirm';
-                window.__sing_render();
-            }""")
+        return _open_singers_modal(page, live_server, live_token,
+                                   singers=singers if singers is not None else self._SINGERS,
+                                   status=status)
 
     def test_no_names_shown_until_existing_tapped(self, page, live_server, live_token):
         self._to_confirm(page, live_server, live_token)
         expect(page.locator('[data-testid="add-existing-singer"]')).to_have_text("👥 Existing singer")
         expect(page.locator('[data-testid="add-singer"]')).to_have_text("+ New singer")
         expect(page.locator('[data-testid="partner-picker-row"]')).to_have_count(0)
-        expect(page.locator(".sing-card")).not_to_contain_text("Sarah B.")
+        expect(page.locator(".sing-modal")).not_to_contain_text("Sarah B.")
 
     def test_long_list_sorted_scrollable_excludes_self(self, page, live_server, live_token):
         self._to_confirm(page, live_server, live_token)
-        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
         rows = page.locator('[data-testid="partner-picker-row"]')
         # 55 names minus the requester (Alice).
         expect(rows).to_have_count(54)
@@ -1153,34 +1179,29 @@ class TestExistingSingerPicker:
         assert scrolls
 
     def test_filter_then_tap_adds_existing_partner(self, page, live_server, live_token):
-        captured = {}
-        def handle(route):
-            captured["body"] = route.request.post_data_json
-            route.continue_()
-        page.route("**/sing/submit*", handle)
-        self._to_confirm(page, live_server, live_token)
-        page.locator('[data-testid="add-existing-singer"]').click()
+        sent = self._to_confirm(page, live_server, live_token)
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
         page.locator('[data-testid="partner-picker-filter"]').fill("zoe")   # accent-folded
         rows = page.locator('[data-testid="partner-picker-row"]')
         expect(rows).to_have_count(1)
         rows.first.click()
-        expect(page.locator(".sing-modal")).to_have_count(0)
+        # Picking re-opens the editor with the pick in the draft.
         expect(page.locator('[data-testid="partner-existing-0"]')).to_have_text("Zoë")
         # No name/phone inputs for someone already on the list.
         expect(page.locator('[data-testid="partner-name-0"]')).to_have_count(0)
         # Re-opening shows them as already added (disabled).
-        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
         page.locator('[data-testid="partner-picker-filter"]').fill("zo")
         expect(rows.first).to_be_disabled()
         expect(rows.first).to_contain_text("Added")
         page.keyboard.press("Escape")
-        page.locator(".submit-btn").click()
-        expect(page.locator("text=Your songs tonight")).to_be_visible(timeout=5000)
-        assert captured["body"]["additional_singers"] == [{"name": "Zoë", "phone": ""}]
+        page.locator('[data-testid="edit-singers-save"]').click()
+        expect(page.locator(".sing-modal")).to_have_count(0)
+        assert sent[-1]["additional_singers"] == [{"name": "Zoë", "phone": ""}]
 
     def test_no_match_offers_add_as_new(self, page, live_server, live_token):
         self._to_confirm(page, live_server, live_token)
-        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
         page.locator('[data-testid="partner-picker-filter"]').fill("Priya K.")
         expect(page.locator('[data-testid="partner-picker-row"]')).to_have_count(0)
         page.locator('[data-testid="partner-picker-new"]').click()
@@ -1188,7 +1209,7 @@ class TestExistingSingerPicker:
 
     def test_fetch_failure_falls_back_to_new_singer(self, page, live_server, live_token):
         self._to_confirm(page, live_server, live_token, status=500)
-        page.locator('[data-testid="add-existing-singer"]').click()
+        page.locator('.sing-modal [data-testid="add-existing-singer"]').click()
         page.locator('[data-testid="partner-picker-new"]').click()
         expect(page.locator('[data-testid="partner-name-0"]')).to_be_visible()
 
@@ -1511,11 +1532,8 @@ class TestSongForAFriend:
         page.evaluate("""
             window.__sing_state.selected = { source_type: 'local', source_ref: '/tmp/x.mp4',
                 song_artist: 'Papa Roach', song_title: 'Scars', label: 'Scars' };
-            window.__sing_state.step = 'confirm';
-            window.__sing_render();
+            window.__sing_send();
         """)
-        expect(page.locator('[data-testid="confirm-friend"]')).to_contain_text("Alex")
-        page.locator(".submit-btn").click()
         expect(page.locator('[data-testid="for-friend-line"]')).to_contain_text("Alex", timeout=5000)
         assert captured["body"]["singer_name"] == "Alex"
         assert captured["body"]["for_friend"] is True
