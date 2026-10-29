@@ -50,9 +50,12 @@ def account_names(store, email, display_name, app_device):
 
     Ownership (R49): ``app_device`` is the HMAC of the verified email, so all
     of its requests and its alias count. Any other device's requests count only
-    on the nights it was linked to this email, and its alias only while this
-    email is its latest owner (the rule ``forget_gen_account`` uses), so a
-    phone that became someone else's never lends their names.
+    on the nights it was linked to this email (``SingStore.linked_request_names``,
+    which also documents the accepted same-night risk), and its alias only
+    while this email is its latest owner (the rule ``forget_gen_account``
+    uses) and the alias was set at or after this email's latest link to it
+    (``SingStore.alias_since_link``), so a phone that was someone else's in
+    between never lends their names.
     """
     me = (email or "").strip().lower()
     others = [d for d in store.devices_for_email_any_night(email) if d and d != app_device]
@@ -66,7 +69,7 @@ def account_names(store, email, display_name, app_device):
         candidates.append(store.get_alias(app_device))
     for d in others:
         if owners.get(d) == me:
-            candidates.append(store.get_alias(d))
+            candidates.append(store.alias_since_link(d, email))
 
     names, seen, words = [], set(), set()
     for raw in candidates:

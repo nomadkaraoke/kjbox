@@ -128,6 +128,52 @@ def test_account_names_web_device_counts_only_linked_nights(store):
     assert account_names(store, EMAIL, None, "app-dev")["words"] == {"quill"}
 
 
+def test_account_names_window_ends_at_next_noon(store):
+    # Linked for the 2026-09-03 show: its requests run until noon on 09-04. A
+    # next-day show (no account linked, so no marker) inside 24 h doesn't count.
+    store.link_account("dev-w", EMAIL, "claimed", "2026-09-03 19:00:00")
+    _req(store, "dev-w", "Quill", created_at="2026-09-04 01:30:00")   # same night
+    _req(store, "dev-w", "Moss", created_at="2026-09-04 11:59:00")    # still that night
+    _req(store, "dev-w", "Fern", created_at="2026-09-04 14:00:00")    # next day's show
+    assert account_names(store, EMAIL, None, "app-dev")["words"] == {"quill", "moss"}
+
+
+def test_account_names_window_ends_at_next_known_marker(store):
+    store.link_account("dev-w", EMAIL, "claimed", "2026-09-03 19:00:00")
+    # A mid-show reset at 01:00 started a new night marker (seen on another device).
+    store.link_account("dev-x", "e2e-other@example.com", "app", "2026-09-04 01:00:00")
+    _req(store, "dev-w", "Quill", created_at="2026-09-03 23:00:00")
+    _req(store, "dev-w", "Moss", created_at="2026-09-04 02:00:00")
+    assert account_names(store, EMAIL, None, "app-dev")["words"] == {"quill"}
+
+
+def test_account_names_morning_marker_belongs_to_coming_night(store):
+    # A reset at 11:30 is prep for that evening (NightLog._live_night's rule).
+    store.link_account("dev-w", EMAIL, "claimed", "2026-09-03 11:30:00")
+    _req(store, "dev-w", "Quill", created_at="2026-09-03 21:00:00")
+    _req(store, "dev-w", "Moss", created_at="2026-09-04 12:30:00")
+    assert account_names(store, EMAIL, None, "app-dev")["words"] == {"quill"}
+
+
+def test_account_names_alias_from_before_my_latest_link_ignored(store):
+    # A -> B -> A on one phone: the alias B set must not carry over to A.
+    a, b = "e2e-a@example.com", "e2e-b@example.com"
+    conn = store._get_conn()
+    store.link_account("dev-1", a, "claimed", "2026-09-03 19:00:00")
+    store.link_account("dev-1", b, "claimed", "2026-09-10 19:00:00")
+    store.set_alias("dev-1", "Juniper B", origin="kj")
+    conn.execute("UPDATE singer_aliases SET updated_at='2026-09-10 21:00:00'")
+    store.link_account("dev-1", a, "claimed", "2026-09-17 19:00:00")
+    conn.execute("UPDATE singer_accounts SET linked_at=night_started_at")
+    conn.commit()
+    assert "juniper" not in account_names(store, a, None, "app-dev-a")["words"]
+    # A sets their own alias after re-linking: that one counts.
+    store.set_alias("dev-1", "Quill", origin="self")
+    conn.execute("UPDATE singer_aliases SET updated_at='2026-09-17 21:00:00'")
+    conn.commit()
+    assert account_names(store, a, None, "app-dev-a")["words"] == {"quill"}
+
+
 def test_account_names_app_device_needs_no_link(store):
     # The app device is the HMAC of the verified email: every request is theirs.
     _req(store, "app-dev", "Quill", created_at="2026-05-01 21:00:00")

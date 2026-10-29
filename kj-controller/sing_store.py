@@ -2220,9 +2220,15 @@ class SingStore:
         box (history claims, R35)."""
         return self._request_names(device_ids, since=None, songs_only=True)
 
-    # A linked night's requests are those from its marker up to the next known
-    # marker, and never more than this long after it.
-    _NIGHT_WINDOW = datetime.timedelta(hours=24)
+    @staticmethod
+    def _night_window_end(marker_dt):
+        """Noon after the night a marker belongs to (the Night Log's noon roll):
+        a marker before 06:00 is a mid-show reset of the previous evening's
+        night, any later one starts the night of its own date."""
+        night = (marker_dt - datetime.timedelta(days=1)
+                 if marker_dt.hour < 6 else marker_dt).date()
+        return datetime.datetime.combine(night + datetime.timedelta(days=1),
+                                         datetime.time(12, 0))
 
     def _known_night_markers(self, conn):
         markers = {r[0] for r in conn.execute(
@@ -2238,7 +2244,13 @@ class SingStore:
         """``request_names_any_night`` for the devices ``singer_accounts``
         linked to ``gen_email``, counting each device's requests only on the
         nights it was linked to this email (R49): a phone that later became
-        someone else's never lends their names."""
+        someone else's never lends their names.
+
+        A linked night runs from its marker to the EARLIER of the next known
+        marker and the noon that ends that night. Accepted risk: requests made
+        on the same night before the device was linked still count (the link
+        happens mid-night, and the person holding the phone is usually the
+        same all evening)."""
         email = self._norm_email(gen_email)
         if not email:
             return []
@@ -2256,7 +2268,7 @@ class SingStore:
             t = self._parse_marker(start)
             if t is None:
                 continue
-            end = (t + self._NIGHT_WINDOW).strftime("%Y-%m-%d %H:%M:%S")
+            end = self._night_window_end(t).strftime("%Y-%m-%d %H:%M:%S")
             later = [m for m in markers if m > start]
             if later and later[0] < end:
                 end = later[0]
@@ -2581,6 +2593,30 @@ class SingStore:
             if r["device_id"] not in latest or cand[0] >= latest[r["device_id"]][0]:
                 latest[r["device_id"]] = cand
         return latest
+
+    def alias_since_link(self, device_id, gen_email):
+        """The device's alias when it was set at or after ``gen_email``'s
+        latest link to the device (``singer_accounts.linked_at`` or
+        ``sing_gen_accounts.verified_at``), else None: on a phone that went
+        A -> B -> A, the alias B set never becomes A's."""
+        email = self._norm_email(gen_email)
+        if not device_id or not email:
+            return None
+        conn = self._get_conn()
+        row = conn.execute("SELECT canonical_name, updated_at FROM singer_aliases "
+                           "WHERE device_id=?", (device_id,)).fetchone()
+        if row is None:
+            return None
+        link = conn.execute(
+            "SELECT MAX(ts) FROM ("
+            "  SELECT linked_at AS ts FROM singer_accounts "
+            "  WHERE device_id=? AND lower(gen_email)=? "
+            "  UNION ALL SELECT verified_at FROM sing_gen_accounts "
+            "  WHERE device_id=? AND lower(email)=?)",
+            (device_id, email, device_id, email)).fetchone()[0]
+        if link is None or (row["updated_at"] or "") < link:
+            return None
+        return row["canonical_name"]
 
     def latest_owner_emails(self, device_ids):
         """``{device_id: email}`` (lowercased) for the devices' current owners."""
