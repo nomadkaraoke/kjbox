@@ -307,3 +307,123 @@ def test_push_outbox_absent_without_test_api(mock_config, monkeypatch):
         assert c.get(f"{TEST}/push-outbox").status_code == 404
         assert c.delete(f"{TEST}/push-outbox").status_code == 404
     app.catalog.close()
+
+
+# --- past nights for the claim flows (Phase 4c E8) ---------------------------------
+
+HIST_WREN = "e2e-me-13-1@example.com"
+HIST_JUNO = "e2e-me-13-2@example.com"
+
+
+def _history_verifier(app, monkeypatch, users):
+    from app_identity import GenTokenVerifier
+
+    class _Gen:
+        def get_me(self, session_token):
+            from gen_client import GenApiError
+            if session_token not in users:
+                raise GenApiError(401, "Invalid session")
+            return {"user": dict(users[session_token]), "has_session": True}
+
+    monkeypatch.setattr(app, "gen_verifier",
+                        GenTokenVerifier(_Gen(), secret=app.app_identity_secret), raising=False)
+
+
+def _seed_body():
+    return {
+        "nights": [
+            {"date": "2026-10-08", "entries": [
+                {"ref": "w1", "singer": "Wren B", "artist": "Muse", "title": "Starlight",
+                 "link": "exact", "played": True},
+                {"ref": "w2", "singer": "Wren", "artist": "Adele", "title": "Hello",
+                 "link": "inferred"},
+                {"ref": "w3", "singer": "Wren B", "artist": "Muse", "title": "Uprising",
+                 "link": "none"},
+                {"ref": "j1", "singer": "Juno", "artist": "Adele", "title": "Hello",
+                 "link": "exact", "claimed_by": HIST_JUNO},
+                {"ref": "d1", "singer": "Juno & Wren B", "singers": ["Juno", "Wren B"],
+                 "artist": "Muse", "title": "Madness", "link": "exact"},
+                {"ref": "x1", "singer": "Wren", "artist": "Muse", "title": "Hysteria",
+                 "link": "exact", "status": "Left"},
+            ]},
+            {"date": "2026-05-14", "entries": [
+                {"ref": "w4", "singer": "Wren", "artist": "Adele", "title": "Skyfall",
+                 "link": "exact"},
+            ]},
+        ],
+        "identity": {"email": HIST_WREN, "names": ["Wren B"], "date": "2026-10-08"},
+    }
+
+
+def test_history_seed_suggest_claim_state_reset(tc, test_api_app, monkeypatch):
+    from tests.integration.v1_contract import V1, assert_matches_contract, bearer
+    _history_verifier(test_api_app, monkeypatch,
+                      {"tok-wren": {"email": HIST_WREN, "display_name": None,
+                                    "tenant_id": None}})
+    tc.post(f"{TEST}/reset", json={"fixture": "empty"})
+    seeded = tc.post(f"{TEST}/history/seed", json=_seed_body())
+    assert seeded.status_code == 200, seeded.get_json()
+    nights = {n["date"]: n for n in seeded.get_json()["nights"]}
+    assert set(nights) == {"2026-10-08", "2026-05-14"}
+    refs = nights["2026-10-08"]["entries"]
+    assert set(refs) == {"w1", "w2", "w3", "j1", "d1", "x1"}
+    # Ids sit above the live rotation's, and the live rotation continues above them.
+    live = test_api_app.rotation.add_entry("Live Singer", "Song - Band")
+    assert live["id"] > max(refs.values())
+
+    resp = tc.get(f"{V1}/history/suggestions", headers=bearer("tok-wren"))
+    body = assert_matches_contract(resp, "getHistorySuggestions")
+    assert resp.status_code == 200, body
+    got = {n["date"]: n for n in body["nights"]}
+    oct8 = got["2026-10-08"]
+    assert oct8["night_id"] == nights["2026-10-08"]["night_id"]
+    assert [s["entry_id"] for s in oct8["songs"]] == [refs["w1"], refs["w2"], refs["d1"]]
+    assert oct8["unmatched"] == 1                       # w3: no entry id
+    assert oct8["songs"][0]["state"] == "sung" and oct8["songs"][0]["started_at"]
+    assert (oct8["songs"][0]["artist"], oct8["songs"][0]["title"]) == ("Muse", "Starlight")
+    assert [s["entry_id"] for s in got["2026-05-14"]["songs"]] == [
+        nights["2026-05-14"]["entries"]["w4"]]
+
+    resp = tc.post(f"{V1}/history/claim", headers=bearer("tok-wren"), json={
+        "night_id": oct8["night_id"], "mine": [refs["w1"]], "not_mine": [refs["w2"]]})
+    assert assert_matches_contract(resp, "claimHistory")["saved"] == 1
+
+    state = tc.get(f"{TEST}/history/state", query_string={"email": HIST_WREN}).get_json()
+    assert [(c["night"], c["entry_id"]) for c in state["claims"]] == [("2026-10-08", refs["w1"])]
+    assert state["rejections"] == [{"night": "2026-10-08", "entry_id": refs["w2"]}]
+    [row] = state["outbox"]
+    assert (row["op"], row["state"], row["entry_id"], row["gen_email"]) == (
+        "put", "pending", str(refs["w1"]), HIST_WREN)
+    everyone = tc.get(f"{TEST}/history/state").get_json()
+    assert {c["gen_email"] for c in everyone["claims"]} == {HIST_WREN, HIST_JUNO}
+    juno = tc.get(f"{TEST}/history/state", query_string={"email": HIST_JUNO}).get_json()
+    assert juno["rejections"] == [] and juno["outbox"] == []
+
+    tc.post(f"{TEST}/reset", json={"fixture": "empty"})
+    assert tc.get(f"{TEST}/history/state").get_json() == {
+        "claims": [], "rejections": [], "outbox": []}
+    resp = tc.get(f"{V1}/history/suggestions", headers=bearer("tok-wren"))
+    assert resp.get_json()["nights"] == []
+
+
+@pytest.mark.parametrize("body", [
+    {},
+    {"nights": []},
+    {"nights": [{"date": "2026-13-45", "entries": [
+        {"ref": "a", "singer": "Wren", "title": "Hello", "link": "exact"}]}]},
+    {"nights": [{"date": "2026-10-08", "entries": []}]},
+    {"nights": [{"date": "2026-10-08", "entries": [
+        {"ref": "a", "singer": "Wren", "title": "Hello", "link": "sideways"}]}]},
+    {"nights": [{"date": "2026-10-08", "entries": [
+        {"ref": "a", "singer": "", "title": "Hello", "link": "exact"}]}]},
+    {"nights": [{"date": "2026-10-08", "entries": [
+        {"ref": "a", "singer": "Wren", "title": "Hello"},
+        {"ref": "a", "singer": "Wren", "title": "Hello"}]}]},
+    {"nights": [{"date": "2026-10-08", "entries": [
+        {"ref": "a", "singer": "Wren", "title": "Hello"}]}],
+     "identity": {"email": "", "names": ["Wren"], "date": "2026-10-08"}},
+])
+def test_history_seed_validation(tc, body):
+    resp = tc.post(f"{TEST}/history/seed", json=body)
+    assert resp.status_code == 400, resp.get_json()
+    assert resp.get_json()["error"] == "invalid"
