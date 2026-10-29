@@ -1521,6 +1521,7 @@ button.status-tile:active { transform: scale(0.99); }
 .sing-song-format { letter-spacing: 0.02em; }
 /* An open row has room to wrap, so the format never gets cut off. */
 .result-row.grouped.open .sing-song-facts { white-space: normal; }
+.result-row.grouped.open .sing-song-facts > span { white-space: nowrap; }   /* wrap between items, never inside a brand */
 
 /* --- Change-song mode banner ------------------------------------------------- */
 .sing-change-banner {

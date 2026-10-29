@@ -2,6 +2,12 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-29 - Singer search: open-row facts wrap between items (v0.145.1)
+
+- Seen on prod after v0.145.0: "🎵 Original · CC Karaoke · CDG+MP3" wrapped inside "CC Karaoke". Each fact now
+  stays on one line and the row wraps between them. CSS only; reaches phones once kj-controller next restarts
+  (the `?v=` cache-bust is read at startup).
+
 ## 2026-10-29 - Singer flow: one tap to request, quieter My songs (v0.145.0)
 
 Andrew tried the singer flow himself and found three screens repeating themselves:
