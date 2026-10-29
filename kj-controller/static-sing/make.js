@@ -688,6 +688,7 @@ export function createMakeFlow(deps) {
     }
     const results = s.search.results;
     if (!results.length) {
+      if (s.pick) out.push(pickCard(s.pick, false));   // the YouTube link they chose
       out.push(el("div", { class: "mk-none" },
         el("h4", {}, t("make.noResultsTitle")), el("p", { class: "sing-empty-desc" }, t("make.noResultsDesc"))));
       out.push(fallbackSection(false));

@@ -3334,6 +3334,8 @@ function sentBanner() {
   const j = state.justSent;
   if (!j) return null;
   const close = () => {
+    clearTimeout(j.closeTimer);
+    if (state.justSent !== j) return;   // a later send has its own note
     state.justSent = null;
     const node = root.querySelector('[data-testid="sent-banner"]');
     if (node) node.remove();
