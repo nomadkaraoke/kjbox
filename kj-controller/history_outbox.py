@@ -320,7 +320,11 @@ class HistoryOutbox:
     def _release_undone_claims(self, now):
         """R52: a claimed entry of tonight that the host un-Done'd is no longer
         sung, so its claims are released (claimable again) and each claim's
-        record is retracted from decide. Claim rows live under the night
+        record is retracted from decide. The same goes for a claimed entry the
+        host deleted: on nights from ``since`` on, a claim whose entry id is in
+        neither ``rotation_entries`` nor ``rotation_archive`` is released (the
+        archive check keeps New Rotation, which moves every entry there, from
+        looking like a mass deletion). Claim rows live under the night
         ``claim:<date>``, which the comparison below never sees."""
         from night_log import marker_night
         store = self.sing_store
@@ -330,8 +334,8 @@ class HistoryOutbox:
         # Tonight's claims only. A day of slack: the Night Log's noon roll and
         # the marker's 06:00 rule can put one show on adjacent dates.
         since = (dt.date.fromisoformat(start) - dt.timedelta(days=1)).isoformat()
-        undone = [e["id"] for e in self.rotation_store.get_entries(include_done=True)
-                  if not _is_done(e)]
+        live = self.rotation_store.get_entries(include_done=True)
+        undone = [e["id"] for e in live if not _is_done(e)]
         from history_claims import release_claims  # lazy: history_claims imports us
         changed = 0
         for row in store.claim_rows_for_entries(undone):
@@ -339,6 +343,15 @@ class HistoryOutbox:
                 continue
             changed += len(release_claims(store, row["night"], row["entry_id"],
                                           email=row["gen_email"], now=now))
+        recent = store.claim_rows_since(since)
+        if recent:
+            live_ids = {e["id"] for e in live}
+            candidates = {r["entry_id"] for r in recent} - live_ids
+            gone = candidates - self.rotation_store.archived_entry_ids(candidates)
+            for row in recent:
+                if row["entry_id"] in gone:
+                    changed += len(release_claims(store, row["night"], row["entry_id"],
+                                                  email=row["gen_email"], now=now))
         return changed
 
     def _scan(self):
@@ -346,7 +359,13 @@ class HistoryOutbox:
         night = store.get_night_started_at()
         if not night:
             return 0
-        released = self._release_undone_claims(self._clock())
+        try:
+            released = self._release_undone_claims(self._clock())
+        except Exception:
+            # Never let a claim release stop tonight's live attribution below.
+            logger.warning("history outbox: releasing undone/deleted claims failed",
+                           exc_info=True)
+            released = 0
         accounts = store.night_accounts(night)
         rows = store.outbox_rows_for_night(night)
         if not accounts and not rows:

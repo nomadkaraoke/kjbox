@@ -401,7 +401,7 @@ def test_host_undone_live_entry_releases_claim_and_retracts(env):
     row = next(r for r in env.outbox_rows() if r["history_id"] == hid)
     assert row["op"] == "delete"
     assert env.payload(hid) == {"history_id": hid, "gen_email": WREN,
-                                "entry_id": str(e["id"])}
+                                "entry_id": str(e["id"]), "night_id": night["night_id"]}
     # Sung again: claimable again.
     env.rs.update_status(e["id"], "Done")
     [again] = env.suggest()["nights"]
@@ -440,7 +440,8 @@ def test_release_claims_deletes_and_queues_retractions(env):
     rows = release_claims(env.ss, NIGHT, 5001, email=JUNO.upper(), now=NOW)
     assert [r["gen_email"] for r in rows] == [JUNO]
     hj = history_id_for(BOX, 5001, JUNO)
-    assert env.payload(hj) == {"history_id": hj, "gen_email": JUNO, "entry_id": "5001"}
+    assert env.payload(hj) == {"history_id": hj, "gen_email": JUNO, "entry_id": "5001",
+                               "night_id": nid}
     ops = {r["history_id"]: (r["op"], r["night_started_at"]) for r in env.outbox_rows()}
     assert ops[hj] == ("delete", "claim:" + NIGHT)
     assert ops[history_id_for(BOX, 5001, WREN)][0] == "put"
@@ -479,3 +480,75 @@ def test_release_undone_leaves_old_night_claims_alone(env):
     assert env.ss.try_claim("2026-07-01", live["id"], WREN, "kj_old", "Wren B", 1) == "claimed"
     env.outbox().scan()
     assert env.ss.claims_for_nights(["2026-07-01"]) == {("2026-07-01", live["id"]): [WREN]}
+
+
+# --- whole-branch review fixes --------------------------------------------------------
+
+def test_release_claims_is_atomic_when_the_enqueue_fails(env, monkeypatch):
+    # The retraction can't be queued: the claim row must stay (nothing half-done).
+    from history_claims import release_claims
+    _done(env, 5001, "Wren B")
+    env.claim(env.night_id(), mine=[5001])
+    hid = history_id_for(BOX, 5001, WREN)
+
+    def boom(self, conn, *a, **kw):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(SingStore, "_outbox_upsert", boom)
+    with pytest.raises(RuntimeError):
+        release_claims(env.ss, NIGHT, 5001, now=NOW)
+    monkeypatch.undo()
+    assert env.ss.claims_for_nights([NIGHT]) == {(NIGHT, 5001): [WREN]}
+    assert [r["op"] for r in env.outbox_rows() if r["history_id"] == hid] == ["put"]
+    assert not env.ss._get_conn().in_transaction
+
+
+def test_release_keeps_night_id_so_claim_night_ids_stay_stable(env):
+    from history_claims import release_claims
+    _done(env, 5001, "Wren B")
+    nid = env.night_id()
+    env.claim(nid, mine=[5001])
+    assert env.ss.claim_night_ids() == {NIGHT: nid}
+    release_claims(env.ss, NIGHT, 5001, now=NOW)
+    hid = history_id_for(BOX, 5001, WREN)
+    assert env.payload(hid)["night_id"] == nid
+    assert env.ss.claim_night_ids() == {NIGHT: nid}
+    assert env.night_id() == nid  # offered again under the same id
+
+
+def test_host_deleted_done_entry_releases_its_claim(env):
+    e = _live_closed_night(env)
+    [night] = env.suggest()["nights"]
+    env.claim(night["night_id"], mine=[e["id"]])
+    hid = history_id_for(BOX, e["id"], WREN)
+    env.outbox().scan()
+    env.rs.delete_entry(e["id"])  # the host deleted the sung entry
+    env.outbox().scan()
+    assert env.ss.claims_for_nights([night["date"]]) == {}
+    row = next(r for r in env.outbox_rows() if r["history_id"] == hid)
+    assert row["op"] == "delete"
+
+
+def test_new_rotation_does_not_release_claims(env):
+    # New Rotation moves every entry to the archive: not a mass deletion.
+    e = _live_closed_night(env)
+    [night] = env.suggest()["nights"]
+    env.claim(night["night_id"], mine=[e["id"]])
+    env.outbox().scan()
+    env.rs.archive()
+    env.outbox().scan()
+    assert env.ss.claims_for_nights([night["date"]]) == {(night["date"], e["id"]): [WREN]}
+
+
+def test_a_failing_release_does_not_stop_live_attribution(env, monkeypatch, caplog):
+    _live_closed_night(env)
+
+    def boom(self, now):
+        raise RuntimeError("release broke")
+
+    monkeypatch.setattr(HistoryOutbox, "_release_undone_claims", boom)
+    with caplog.at_level("WARNING"):
+        env.outbox().scan()
+    rows = env.outbox_rows()
+    assert rows and all(r["op"] == "put" for r in rows)  # Juno's live record still queued
+    assert "release" in caplog.text.lower()

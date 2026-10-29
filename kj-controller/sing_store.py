@@ -2374,8 +2374,15 @@ class SingStore:
         a no-op. One atomic upsert, so concurrent scans from several request
         threads can't both write it.
         """
-        now_s = self._ts(now or datetime.datetime.now(datetime.timezone.utc))
         conn = self._get_conn()
+        changed = self._outbox_upsert(conn, history_id, op, payload, night_started_at, now)
+        conn.commit()
+        return changed
+
+    def _outbox_upsert(self, conn, history_id, op, payload, night_started_at, now=None):
+        """``outbox_enqueue``'s upsert on ``conn`` without committing, so a
+        caller can make it part of a larger transaction. True if the row changed."""
+        now_s = self._ts(now or datetime.datetime.now(datetime.timezone.utc))
         cur = conn.execute(
             "INSERT INTO history_outbox "
             "  (history_id, op, payload_json, state, attempts, next_attempt_at, "
@@ -2391,7 +2398,6 @@ class SingStore:
             (history_id, op, json.dumps(payload), now_s, night_started_at,
              now_s, now_s),
         )
-        conn.commit()
         return cur.rowcount == 1
 
     def outbox_rows_for_night(self, night_started_at):
@@ -2643,6 +2649,57 @@ class SingStore:
             conn.execute(f"DELETE {sql}", params)
             conn.commit()
         return rows
+
+    def release_claims(self, night, entry_id, email=None, now=None):
+        """Delete the claims on ``(night, entry_id)`` (only ``email``'s when
+        given) and queue each one's retraction, in ONE ``BEGIN IMMEDIATE``
+        transaction: either the claim rows go and their deletes are queued, or
+        nothing changes. Each delete body is ``{history_id, gen_email,
+        entry_id, night_id}``; ``night_id`` is copied from the claim's own
+        outbox row (else the night's other claim records), so
+        ``claim_night_ids`` keeps the night's id after an undo. Returns the
+        deleted claim rows."""
+        conn = self._get_conn()
+        if conn.in_transaction:
+            logger.warning("release_claims: rolling back a stray open transaction")
+            conn.rollback()
+        sql = "FROM history_claims WHERE night=? AND entry_id=?"
+        params = [night, int(entry_id)]
+        if email is not None:
+            sql += " AND gen_email=?"
+            params.append(self._norm_email(email))
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            rows = [dict(r) for r in conn.execute(f"SELECT * {sql}", params)]
+            if rows:
+                conn.execute(f"DELETE {sql}", params)
+                fallback = conn.execute(
+                    "SELECT json_extract(payload_json, '$.night_id') AS nid, COUNT(*) AS n "
+                    "FROM history_outbox WHERE night_started_at=? AND nid IS NOT NULL "
+                    "GROUP BY nid ORDER BY n DESC, nid DESC LIMIT 1",
+                    ("claim:" + night,)).fetchone()
+                for row in rows:
+                    own = conn.execute(
+                        "SELECT json_extract(payload_json, '$.night_id') FROM history_outbox "
+                        "WHERE history_id=?", (row["history_id"],)).fetchone()
+                    nid = (own[0] if own and own[0] else None) or (fallback[0] if fallback else None)
+                    gone = {"history_id": row["history_id"], "gen_email": row["gen_email"],
+                            "entry_id": str(row["entry_id"])}
+                    if nid:
+                        gone["night_id"] = nid
+                    self._outbox_upsert(conn, row["history_id"], "delete", gone,
+                                        "claim:" + row["night"], now)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return rows
+
+    def claim_rows_since(self, since):
+        """Full ``history_claims`` rows on nights ``>= since``."""
+        return [dict(r) for r in self._get_conn().execute(
+            "SELECT * FROM history_claims WHERE night >= ? ORDER BY night, entry_id, gen_email",
+            (since,))]
 
     # ------------------------------------------------------------------
     # Account deletion (gen account removed -> erase this person's links)

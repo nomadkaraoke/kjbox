@@ -533,3 +533,41 @@ def test_claims_undo_not_on_public_host(mock_config):
                 assert r.status_code == 404, path
     finally:
         app.catalog.close()
+
+
+def test_build_cached_is_single_flight(dbs, monkeypatch):
+    # Several requests missing the cache at once build it once, not once each.
+    import threading
+    import time
+    import night_log
+    store, _, stats = dbs
+    night_log.clear_build_cache()
+    _exact_archive(store, 8001, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    calls = []
+    real = NightLog._build
+
+    def slow(self):
+        calls.append(1)
+        time.sleep(0.2)
+        return real(self)
+
+    monkeypatch.setattr(NightLog, "_build", slow)
+    start = threading.Barrier(4)
+    got, errors = [], []
+
+    def worker():
+        try:
+            start.wait()
+            got.append([e["entry_id"] for e in _log(store, stats).build_cached()])
+        except Exception as exc:  # pragma: no cover - surfaced below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors
+    assert got == [[8001]] * 4
+    assert len(calls) == 1

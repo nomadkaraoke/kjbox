@@ -380,18 +380,12 @@ def _entry_ids(values):
 
 def release_claims(store, night, entry_id, email=None, now=None):
     """Release the claims on ``(night, entry_id)`` (only ``email``'s when
-    given) and retract each one's record from decide: ``delete_claim``, then a
-    ``delete`` for the stored ``history_id`` with the outbox's
-    ``{history_id, gen_email, entry_id}`` body, under the night
-    ``claim:<night>``. Returns the released rows. Used by the host undo
+    given) and retract each one's record from decide: the claim rows go and a
+    ``delete`` for each stored ``history_id`` (body ``{history_id, gen_email,
+    entry_id, night_id}``, night ``claim:<night>``) is queued, atomically
+    (``SingStore.release_claims``). Returns the released rows. Used by the host undo
     (R41) and by the outbox when the host un-Dones a claimed song (R52)."""
-    rows = store.delete_claim(night, entry_id, email=email)
-    for row in rows:
-        gone = {"history_id": row["history_id"], "gen_email": row["gen_email"],
-                "entry_id": str(row["entry_id"])}
-        store.outbox_enqueue(row["history_id"], "delete", gone,
-                             night_started_at="claim:" + row["night"], now=now)
-    return rows
+    return store.release_claims(night, entry_id, email=email, now=now)
 
 
 def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine, now=None):

@@ -68,6 +68,8 @@ _TS_FMT = "%Y-%m-%d %H:%M:%S"
 # NightLog is built per request, so the memo lives here, keyed on the rotation DB.
 _BUILD_CACHE = {}
 _BUILD_CACHE_LOCK = threading.Lock()
+# One lock per store key so concurrent misses build once (single flight).
+_BUILD_KEY_LOCKS = {}
 
 
 def clear_build_cache():
@@ -399,9 +401,16 @@ class NightLog:
             hit = _BUILD_CACHE.get(store_key)
             if hit and now - hit[0] < ttl_s and hit[1] == state:
                 return [dict(e) for e in hit[2]]
-        entries = self._build()
-        with _BUILD_CACHE_LOCK:
-            _BUILD_CACHE[store_key] = (now, state, entries)
+            key_lock = _BUILD_KEY_LOCKS.setdefault(store_key, threading.Lock())
+        with key_lock:
+            # Re-check: another request may have built it while we waited.
+            with _BUILD_CACHE_LOCK:
+                hit = _BUILD_CACHE.get(store_key)
+                if hit and time.monotonic() - hit[0] < ttl_s and hit[1] == state:
+                    return [dict(e) for e in hit[2]]
+            entries = self._build()
+            with _BUILD_CACHE_LOCK:
+                _BUILD_CACHE[store_key] = (time.monotonic(), state, entries)
         return [dict(e) for e in entries]
 
     @staticmethod
