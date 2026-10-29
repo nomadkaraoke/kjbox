@@ -427,3 +427,24 @@ def test_history_seed_validation(tc, body):
     resp = tc.post(f"{TEST}/history/seed", json=body)
     assert resp.status_code == 400, resp.get_json()
     assert resp.get_json()["error"] == "invalid"
+
+
+def test_history_seed_claims_on_a_file_db(mock_config, monkeypatch, tmp_path):
+    # The box's rotation and sing stores are separate connections to one file:
+    # a seeded claim must not wait on the archive rows' open write (found on the
+    # build host's local stack; the :memory: test DB shares one connection).
+    mock_config["rotation_db_path"] = str(tmp_path / "rotation.db")
+    monkeypatch.setenv("KJBOX_TEST_API", "1")
+    app = _app(mock_config)
+    localstack.make_hermetic(app, setattr_fn=monkeypatch.setattr)
+    sing_test_api.install_test_api(app, "127.0.0.1")
+    try:
+        with app.test_client() as c:
+            resp = c.post(f"{TEST}/history/seed", json={"nights": [{"date": "2026-10-08", "entries": [
+                {"ref": "j1", "singer": "Juno", "artist": "Adele", "title": "Hello",
+                 "claimed_by": HIST_JUNO}]}]})
+            assert resp.status_code == 200, resp.get_data(as_text=True)[:300]
+            claims = c.get(f"{TEST}/history/state").get_json()["claims"]
+            assert [c_["gen_email"] for c_ in claims] == [HIST_JUNO]
+    finally:
+        app.catalog.close()

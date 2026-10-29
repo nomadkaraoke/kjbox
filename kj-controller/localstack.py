@@ -603,6 +603,7 @@ def seed_history(app, nights, identity=None):
             sconn.commit()
 
     out = []
+    claims = []  # written after the archive rows commit (another connection)
     for n in nights:
         date = n["date"]
         refs = {}
@@ -638,10 +639,8 @@ def seed_history(app, nights, identity=None):
                      date, play_entry, artist or None, title))
                 sconn.commit()
             if e.get("claimed_by"):
-                email = str(e["claimed_by"]).strip().lower()
-                store.try_claim(date, eid, email,
-                                history_claims.claim_history_id(box_id, date, eid, email),
-                                singer, max(1, len(singers or [singer])))
+                claims.append((date, eid, str(e["claimed_by"]).strip().lower(), singer,
+                               max(1, len(singers or [singer]))))
         out.append({"date": date, "entries": refs})
     if row:
         conn.execute("UPDATE sqlite_sequence SET seq=? WHERE name='rotation_entries'",
@@ -650,6 +649,10 @@ def seed_history(app, nights, identity=None):
         conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('rotation_entries', ?)",
                      (next_id - 1,))
     conn.commit()
+    for date, eid, email, singer, capacity in claims:
+        store.try_claim(date, eid, email,
+                        history_claims.claim_history_id(box_id, date, eid, email),
+                        singer, capacity)
     night_log.clear_build_cache()
     markers = history_claims.store_night_markers(store)
     for night in out:
