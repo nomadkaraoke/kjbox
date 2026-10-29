@@ -171,9 +171,10 @@ class TestCompactResults:
         assert sel["source_type"] == "kn" and sel["source_ref"] == "https://youtu.be/CARPY"
 
     def test_and_credit_counts_as_the_artist(self, page, live_server, live_token):
-        songs = LANA + [_song("Duet Song", artist="Lana Del Rey and The Weeknd")]
-        self._search(page, live_server, live_token, songs, rows=7)
-        assert "Duet Song" in self._titles(page)
+        songs = LANA + [_song("Duet Song", artist="Lana Del Rey and The Weeknd"),
+                        _song("Feature Song", artist="Quavo (feat. Lana Del Rey)")]
+        self._search(page, live_server, live_token, songs, rows=8)
+        assert "Duet Song" in self._titles(page) and "Feature Song" in self._titles(page)
 
     def test_filter_matching_only_other_artists_shows_them(self, page, live_server, live_token):
         songs = [_song(t) for t in ("Love", "Ride", "Cola", "Yayo", "Carmen")] + [

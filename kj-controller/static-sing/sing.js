@@ -1523,9 +1523,12 @@ const _artistKey = (s) => String(s || "").toLowerCase().normalize("NFKD")
   .replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 // Every artist a song credits, as {key → name}: the whole credit plus each
 // featured/joint artist, so "Quavo & Lana Del Rey", "Lana Del Rey and X" and
-// "Lana Del Rey ft. X" all count as Lana Del Rey. Parenthesised tags ("(Wbgv)") are dropped.
+// "Lana Del Rey ft. X" all count as Lana Del Rey; so does "X (feat. Lana Del Rey)".
+// Other parenthesised tags ("(Wbgv)") are dropped.
 function _artistKeys(artist) {
-  const base = String(artist || "").replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+  const base = String(artist || "")
+    .replace(/[([]\s*(ft\.?|feat\.?|featuring)\s+([^)\]]*)[)\]]/gi, " feat. $2")   // keep "(feat. X)"
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
   const parts = base.split(/\s+(?:ft\.?|feat\.?|featuring|and)\s+|\s*[&,;/+]\s*/i);
   const out = new Map();
   for (const name of [base, ...parts]) {
