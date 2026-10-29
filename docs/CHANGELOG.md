@@ -2,6 +2,13 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-29 - NomadPC config: Android app-link fingerprints for release builds
+
+- `config.json` `app_android_sha256_fingerprints` on NomadPC went from the debug key only to debug + EAS upload key
+  + Google Play app signing key, so Play and release installs of the app verify `sing.nomadkaraoke.com` and
+  `kjbox.cc` links (Phase 6 release readiness). Backup at `config.json.bak-20261029-assetlinks`; `kj-controller`
+  restarted at 02:14 EDT (no show). Values and how to set them: MINIPC-SETUP.md § 3.4.2.
+
 ## 2026-10-29 - Singer search: compact rows, Original / Cover band, audio pills, other-artists group, sort (v0.143.0)
 
 - A singer browsing "lana del rey" got 83 songs at ~290px each (about 3 per phone screen) and no
