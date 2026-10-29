@@ -287,6 +287,32 @@ the song from the KJ UI, or have the singer expand the song and pick a specific
 version (sends one concrete version, not a `kj_pick`). The device budget clears 5 min
 after the last attempt.
 
+## A Singer Claimed a Past-Night Song That Wasn't Theirs
+
+The app's Me tab lets a signed-in singer claim songs from past Nomad nights
+whose singer name loosely matches theirs ("Wren" matches "Wren B"). The first
+account to claim a song holds it (one account per singer on the song). If the
+wrong person claimed it, undo the claim from the KJ side. There is no UI yet;
+it's one call on the KJ host (not the public singer host):
+
+```bash
+# Find the night and entry id: the Night Log JSON shows `claims` per entry.
+ssh nomadpc 'curl -s "http://localhost/history/night?night=2026-10-20"' \
+  | jq '.entries[] | select(.claims > 0) | {entry_id, singer, song, claims}'
+
+# Undo every claim on that song (or add "gen_email" to undo one account's):
+ssh nomadpc 'curl -s -X POST http://localhost/history/claims/undo \
+  -H "Content-Type: application/json" \
+  -d "{\"night\": \"2026-10-20\", \"entry_id\": 5012}"'
+# -> {"undone": 1}
+```
+
+This deletes the claim and queues a retraction of the song from that singer's
+karaoke log in decide (delivered by the history outbox within seconds). The
+song is then offered again to every matching account, including the one that
+claimed it. If the host un-marks a claimed song as Done on the live night, the
+claim is released and retracted automatically.
+
 ## Docker Containers Not Running
 
 ```bash

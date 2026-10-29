@@ -42,7 +42,8 @@ _STATE_TABLES = (
     "rotation_entries", "rotation_archive", "rotation_history", "gen_quick_versions",
     "sing_requests", "sing_push_subscriptions", "singer_aliases", "singer_photo_consent",
     "sing_gen_accounts", "song_media_consent", "photo_consent_events", "singer_accounts",
-    "app_idempotency", "app_friend_requests", "history_outbox", "sms_log", "sms_opt_outs",
+    "app_idempotency", "app_friend_requests", "history_outbox", "history_claims",
+    "history_rejections", "sms_log", "sms_opt_outs",
 )
 
 
@@ -328,7 +329,8 @@ def _clear_rate_limits():
     import sing_api_v1
     for clear in (sing._rate_limit_state.clear, sing._validate_rate_limit_state.clear,
                   sing_api_v1.failed_code_limit.clear, sing_api_v1.failed_code_ip_limit.clear,
-                  sing_api_v1.gen_verify_limit.clear):
+                  sing_api_v1.gen_verify_limit.clear, sing_api_v1.history_read_limit.clear,
+                  sing_api_v1.history_claim_limit.clear):
         clear()
 
 
@@ -401,6 +403,9 @@ def reset_night(app, fixture=None):
         for table in ("play_events", "preview_events"):
             conn.execute(f"DELETE FROM {table}")  # noqa: S608
         conn.commit()
+
+    import night_log
+    night_log.clear_build_cache()
 
     store = app.sing_store
     store.set_token(EVENT_CODE)
@@ -479,6 +484,215 @@ def seed_singers(app, singers):
     if outbox is not None and any(o["email"] for o in out):
         outbox.scan(force=True)   # what the v1 link path does (A8-R6)
     return out
+
+
+# --- past nights for the history-claim flows (Phase 4c) ------------------------
+
+_HISTORY_LINKS = ("exact", "inferred", "none")
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _valid_date(value):
+    import datetime as dt
+    if not isinstance(value, str) or not _DATE_RE.match(value):
+        return False
+    try:
+        dt.date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _local_plus(date, minutes):
+    import datetime as dt
+    t = dt.datetime.strptime(f"{date} 21:00:00", "%Y-%m-%d %H:%M:%S")
+    return (t + dt.timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _utc_of_local(local):
+    import datetime as dt
+    t = dt.datetime.strptime(local, "%Y-%m-%d %H:%M:%S")
+    return t.astimezone(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _check_history(nights, identity):
+    if not isinstance(nights, list) or not nights:
+        raise ValueError("nights (a non-empty list) is required")
+    refs = set()
+    for n in nights:
+        if not isinstance(n, dict) or not _valid_date(n.get("date")):
+            raise ValueError("each night needs a date (YYYY-MM-DD)")
+        entries = n.get("entries")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("each night needs a non-empty entries list")
+        for e in entries:
+            if not isinstance(e, dict):
+                raise ValueError("each entry must be an object")
+            ref = e.get("ref")
+            if not isinstance(ref, str) or not ref or ref in refs:
+                raise ValueError("each entry needs a unique ref")
+            refs.add(ref)
+            if not (isinstance(e.get("singer"), str) and e["singer"].strip()):
+                raise ValueError(f"{ref}: singer is required")
+            if not (isinstance(e.get("title"), str) and e["title"].strip()):
+                raise ValueError(f"{ref}: title is required")
+            if e.get("link", "exact") not in _HISTORY_LINKS:
+                raise ValueError(f"{ref}: link must be exact, inferred or none")
+            singers = e.get("singers")
+            if singers is not None and (not isinstance(singers, list)
+                                        or not all(isinstance(x, str) for x in singers)):
+                raise ValueError(f"{ref}: singers must be a list of names")
+    if identity is not None:
+        if (not isinstance(identity, dict) or not isinstance(identity.get("email"), str)
+                or not identity["email"].strip() or not _valid_date(identity.get("date"))
+                or not isinstance(identity.get("names"), list)
+                or not all(isinstance(x, str) and x.strip() for x in identity["names"])):
+            raise ValueError("identity needs email, names (a list) and date (YYYY-MM-DD)")
+
+
+def seed_history(app, nights, identity=None):
+    """Write past nights into the Night Log's sources, for the claim flows.
+
+    Each night is ``{date, entries: [{ref, singer, singers?, artist, title,
+    status?="Done", link: "exact"|"inferred"|"none", played?, claimed_by?}]}``:
+
+    - a ``rotation_archive`` row (created at date 21:00 + i min, a fixture
+      file with media id ``lib-hist<id>``);
+    - ``exact`` rows carry the entry id and ``done_at`` (+ 4 min);
+    - ``inferred`` rows have no entry id, plus a live play (+ 1 min) that knows
+      it (the pre-14-Oct reconstruction);
+    - ``none`` rows link to nothing (they only count as ``unmatched``);
+    - ``played`` adds a live play (+ 1 min) with the artist/title;
+    - ``claimed_by`` adds a ``history_claims`` row for that email.
+
+    Entry ids are taken above the live rotation's AUTOINCREMENT counter, and
+    the counter is moved past them, so ids stay unique as on a real box.
+    ``identity`` (``{email, names, date}``) writes one approved request per
+    name from that email's app device on that night, plus its
+    ``singer_accounts`` link (marker ``date 18:00:00``), so the account went by
+    those names through the app (R35).
+
+    Returns ``{nights: [{date, night_id, entries: {ref: entry_id}}]}``.
+    """
+    import history_claims
+    import night_log
+    from app_identity import app_device_id
+    _check_history(nights, identity)
+    rs, store = app.rotation.store, app.sing_store
+    stats = getattr(app, "stats", None)
+    conn = rs._get_conn()
+    row = conn.execute("SELECT seq FROM sqlite_sequence WHERE name='rotation_entries'").fetchone()
+    top = max(int(row[0]) if row else 0,
+              conn.execute("SELECT COALESCE(MAX(entry_id), 0) FROM rotation_archive").fetchone()[0],
+              conn.execute("SELECT COALESCE(MAX(id), 0) FROM rotation_entries").fetchone()[0])
+    next_id = top + 1
+    box_id = history_claims.box_id_of(app.kj_config)
+
+    if identity is not None:
+        email = identity["email"].strip().lower()
+        device = app_device_id(email, app.app_identity_secret)
+        store.link_account(device, email, "app", f"{identity['date']} 18:00:00")
+        for i, name in enumerate(identity["names"]):
+            req = store.create_request(name.strip(), "", song_artist="Localstack",
+                                       song_title=f"Seed {i + 1}", source_type="local",
+                                       device_id=device)
+            store.mark_approved(req["id"])
+            sconn = store._get_conn()
+            sconn.execute("UPDATE sing_requests SET created_at=?, reviewed_at=? WHERE id=?",
+                          (f"{identity['date']} 19:{i:02d}:00",) * 2 + (req["id"],))
+            sconn.commit()
+
+    out = []
+    claims = []  # written after the archive rows commit (another connection)
+    try:
+        for n in nights:
+            date = n["date"]
+            refs = {}
+            for i, e in enumerate(n["entries"]):
+                eid = next_id
+                next_id += 1
+                refs[e["ref"]] = eid
+                link = e.get("link", "exact")
+                singer = e["singer"].strip()
+                artist = (e.get("artist") or "").strip()
+                title = e["title"].strip()
+                created = _local_plus(date, i * 6)
+                media_id = f"lib-hist{eid}"
+                singers = e.get("singers")
+                conn.execute(
+                    "INSERT INTO rotation_archive (night_date, singer, song_artist, status, notes, "
+                    "position, file_path, duration, created_at, entry_id, done_at, singers_json) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (date, singer, song_text(artist, title), e.get("status") or "Done", "", i,
+                     f"/localstack/history/{artist} - {title} [{media_id}].mp4", None, created,
+                     eid if link == "exact" else None,
+                     _local_plus(date, i * 6 + 4) if link == "exact" else None,
+                     json.dumps(singers) if singers else None))
+                play_entry = eid if link in ("exact", "inferred") else None
+                if stats is not None and (link == "inferred" or e.get("played")):
+                    played = _local_plus(date, i * 6 + 1)
+                    sconn = stats._get_conn()
+                    sconn.execute(
+                        "INSERT INTO play_events (media_id, singer, singer_norm, played_at, "
+                        "night_date, entry_id, source, artist, title) "
+                        "VALUES (?,?,?,?,?,?, 'live', ?, ?)",
+                        (media_id, singer, " ".join(singer.split()).lower(), _utc_of_local(played),
+                         date, play_entry, artist or None, title))
+                    sconn.commit()
+                if e.get("claimed_by"):
+                    claims.append((date, eid, str(e["claimed_by"]).strip().lower(), singer,
+                                   max(1, len(singers or [singer]))))
+            out.append({"date": date, "entries": refs})
+        if row:
+            conn.execute("UPDATE sqlite_sequence SET seq=? WHERE name='rotation_entries'",
+                         (next_id - 1,))
+        else:
+            conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('rotation_entries', ?)",
+                         (next_id - 1,))
+        conn.commit()
+    except Exception:
+        # Leave no half-seeded night behind (play events live in the media DB
+        # and commit on their own; the next /reset clears them).
+        conn.rollback()
+        raise
+    for date, eid, email, singer, capacity in claims:
+        store.try_claim(date, eid, email,
+                        history_claims.claim_history_id(box_id, date, eid, email),
+                        singer, capacity)
+    night_log.clear_build_cache()
+    ids = history_claims.NightIds(store, box_id)
+    for night in out:
+        night["night_id"] = ids.for_night(night["date"])
+    return {"nights": out}
+
+
+def history_state(app, email=None):
+    """Claims, rejections and the claim outbox rows (filtered to ``email`` when
+    given; rejections by its email hash)."""
+    store = app.sing_store
+    conn = store._get_conn()
+    want = (email or "").strip().lower() or None
+    claims = [dict(r) for r in conn.execute(
+        "SELECT night, entry_id, gen_email, history_id, member FROM history_claims "
+        "ORDER BY night, entry_id, gen_email")]
+    if want:
+        claims = [c for c in claims if c["gen_email"].lower() == want]
+    sql = "SELECT night, entry_id FROM history_rejections"
+    params = ()
+    if want:
+        sql += " WHERE email_hash=?"
+        params = (store.email_hash(want),)
+    rejections = [dict(r) for r in conn.execute(sql + " ORDER BY night, entry_id", params)]
+    outbox = []
+    for r in conn.execute("SELECT history_id, op, state, payload_json FROM history_outbox "
+                          "WHERE night_started_at LIKE 'claim:%' ORDER BY history_id"):
+        payload = json.loads(r["payload_json"] or "{}")
+        gen_email = (payload.get("gen_email") or "").lower()
+        if want and gen_email != want:
+            continue
+        outbox.append({"history_id": r["history_id"], "op": r["op"], "state": r["state"],
+                       "entry_id": payload.get("entry_id"), "gen_email": gen_email})
+    return {"claims": claims, "rejections": rejections, "outbox": outbox}
 
 
 _SINGABLE = ("waiting", "up next", "next")

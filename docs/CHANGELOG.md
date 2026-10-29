@@ -2,6 +2,26 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-29 - App: claim your songs from past Nomad nights (v0.144.0)
+
+- Signed-in singers can now see and claim the songs they sang at past Nomad nights from the app's
+  Me tab, so their karaoke log in decide covers nights before they had the app. Two new app API v1
+  routes: **`GET /sing/api/v1/history/suggestions`** and **`POST /sing/api/v1/history/claim`**
+  (contract in `kj-controller/docs/api/singer-v1.openapi.json`). They need only the gen bearer: no
+  event code, no open night, no device link (R29), so they work any day.
+- Matching is loose but never automatic: a past entry is suggested when any singer's first name
+  (folded, 2+ letters) equals the first word of a name the account goes by ("Wren" matches
+  "Wren B"). The singer sees the songs and ticks the ones that were theirs; unticked ones are
+  remembered as "not mine". First account to claim a song holds it (one per singer on a duet).
+- Claims go to decide through the existing history outbox as ordinary `kj_` records (new tables
+  `history_claims`, `history_rejections` in `rotation.db`). The host can undo a wrong claim with
+  `POST /history/claims/undo` on the KJ host (docs/TROUBLESHOOTING.md); un-marking a claimed song as
+  Done tonight releases it automatically. Deleting a gen account also deletes its claims.
+- Rate limits: 30 suggestion reads and 20 claims per device per 10 min. App responses carry no
+  emails, devices, request ids, phones or notes.
+- Test API (loopback only): `POST /history/seed`, `GET /history/state`; `/reset` now also empties
+  past nights and claims (docs/TESTING.md).
+
 ## 2026-10-29 - NomadPC config: Android app-link fingerprints for release builds
 
 - `config.json` `app_android_sha256_fingerprints` on NomadPC went from the debug key only to debug + EAS upload key

@@ -3,8 +3,8 @@
 Lets the mobile app's Maestro flows (``stack.js`` ``ACTION: kjbox``) drive a
 real kjbox process the way a host would: reset to the fixture night, seed
 singers, advance the rotation, mark songs Done/undone, flip night flags, add or
-remove host entries, tune rate limits, drain the history outbox, and read the
-whole night back.
+remove host entries, tune rate limits, drain the history outbox, seed past
+nights for the history-claim flows, and read the whole night back.
 
 A12-R2: mounted ONLY when ``KJBOX_TEST_API=1`` AND the server binds a loopback
 address (``install_test_api(app, bind_host)`` decides; ``dev_server.py`` calls
@@ -118,6 +118,23 @@ def seed():
     except (ValueError, TypeError, AttributeError) as e:
         return _err("invalid", 400, str(e))
     return jsonify({"ok": True, "singers": out})
+
+
+@sing_test_api_bp.route("/history/seed", methods=["POST"])
+def history_seed():
+    """Past nights for the claim flows (``localstack.seed_history``)."""
+    body = _body()
+    try:
+        out = localstack.seed_history(_app(), body.get("nights"), body.get("identity"))
+    except (ValueError, TypeError, AttributeError) as e:
+        return _err("invalid", 400, str(e))
+    return jsonify({"ok": True, **out})
+
+
+@sing_test_api_bp.route("/history/state", methods=["GET"])
+def history_state():
+    """Claims, rejections and claim outbox rows (``?email=`` filters)."""
+    return jsonify(localstack.history_state(_app(), request.args.get("email")))
 
 
 @sing_test_api_bp.route("/advance", methods=["POST"])

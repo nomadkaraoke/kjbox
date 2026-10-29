@@ -46,6 +46,12 @@ def _seed(store, device, email, name):
     conn.execute("INSERT INTO photo_consent_events (night, scope, name_key, display_name, "
                  "request_id, consent, instagram, source) VALUES (?, 'singer', ?, ?, ?, 'yes', "
                  "'@handle', 'singer')", (NIGHT, name.lower(), name, req["id"]))
+    # A past-night claim and a "not mine" (Phase 4c).
+    conn.execute("INSERT INTO history_claims (night, entry_id, gen_email, history_id, member) "
+                 "VALUES ('2026-09-03', ?, ?, ?, ?)",
+                 (req["id"], email.lower(), "kj_claim_" + device, name))
+    conn.execute("INSERT INTO history_rejections (email_hash, night, entry_id) "
+                 "VALUES (?, '2026-09-03', 5)", (h(email),))
     conn.commit()
     store.outbox_enqueue("hid-" + device, "put", {"gen_email": email, "entry_id": 1}, NIGHT)
     return req
@@ -66,7 +72,12 @@ def test_forget_removes_linked_rows_only(store):
     assert counts["push_subscriptions"] == 1 and counts["aliases"] == 1
     assert counts["history_outbox"] == 1 and counts["app_friend_requests"] == 1
     assert counts["singer_photo_consent"] == 1 and counts["song_media_consent"] == 1
+    assert counts["history_claims"] == 1 and counts["history_rejections"] == 1
     conn = store._get_conn()
+    assert [r[0] for r in conn.execute("SELECT gen_email FROM history_claims")] == [
+        "bob@example.com"]
+    assert [r[0] for r in conn.execute("SELECT email_hash FROM history_rejections")] == [
+        h("bob@example.com")]
     # Ann's phone numbers are cleared; Bob's stay.
     phones = {r["device_id"]: r["phone"] for r in conn.execute(
         "SELECT device_id, phone FROM sing_requests")}
@@ -99,11 +110,14 @@ def test_forget_keeps_consent_for_name_shared_with_other_device(store):
     assert _count(store, "song_media_consent") == 1
 
 
-def test_forget_leaves_sent_history_rows(store):
+def test_forget_deletes_sent_history_rows(store):
+    # R50: decide removes its own copy on deletion, so the box keeps no sent
+    # record naming the email either (outbox_holders must never return it).
     _seed(store, "dev-a", "ann@example.com", "Ann")
     store.outbox_mark_sent("hid-dev-a")
-    assert store.forget_gen_account(h("ann@example.com"))["history_outbox"] == 0
-    assert _count(store, "history_outbox") == 1
+    assert store.forget_gen_account(h("ann@example.com"))["history_outbox"] == 1
+    assert _count(store, "history_outbox") == 0
+    assert store.outbox_holders([1]) == {}
 
 
 def test_consent_events_unlinked_not_deleted(store):
@@ -122,7 +136,9 @@ def test_idempotent(store):
     first = store.forget_gen_account(h("ann@example.com"))
     second = store.forget_gen_account(h("ann@example.com"))
     assert sum(first.values()) > 0
+    assert first["history_claims"] == 1 and first["history_rejections"] == 1
     assert sum(second.values()) == 0
+    assert _count(store, "history_claims") == 0 and _count(store, "history_rejections") == 0
 
 
 def test_unknown_or_empty_hash_is_a_noop(store):

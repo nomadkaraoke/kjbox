@@ -7415,6 +7415,40 @@ def history_night():
     return jsonify({"night": night, "entries": log.get_night(night)})
 
 
+@routes_bp.route('/history/claims/undo', methods=['POST'])
+def history_claims_undo():
+    """Host undo for a wrong past-night claim (Phase 4c, R41; no UI yet, see
+    docs/TROUBLESHOOTING.md). Body ``{night: YYYY-MM-DD, entry_id: int,
+    gen_email?: str}``: deletes the claim(s) on that song (only that
+    account's with ``gen_email``), retracts each claim's record from decide
+    through the history outbox and returns ``{undone: n}``. KJ-side only
+    (Cloudflare Access on the KJ host; the public host's guard 404s it)."""
+    import datetime as _dt
+    body = request.get_json(silent=True)
+    body = body if isinstance(body, dict) else {}
+    night = body.get('night')
+    entry_id = body.get('entry_id')
+    email = body.get('gen_email')
+    try:
+        valid_night = (isinstance(night, str) and bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}', night))
+                       and bool(_dt.date.fromisoformat(night)))
+    except ValueError:
+        valid_night = False
+    if (not valid_night or isinstance(entry_id, bool) or not isinstance(entry_id, int)
+            or (email is not None and not isinstance(email, str))):
+        return jsonify({"error": "send night (YYYY-MM-DD), entry_id (int) and "
+                                 "optionally gen_email"}), 400
+    store = getattr(current_app, 'sing_store', None)
+    if store is None:
+        return jsonify({"error": "sing store unavailable"}), 503
+    from history_claims import release_claims
+    rows = release_claims(store, night, entry_id, email=email)
+    outbox = getattr(current_app, 'history_outbox', None)
+    if rows and outbox is not None:
+        outbox.notify_rotation_changed()
+    return jsonify({"undone": len(rows)})
+
+
 @routes_bp.route('/history/night-media', methods=['GET'])
 def history_night_media():
     """Sung songs of one night with each performer's resolved social-media

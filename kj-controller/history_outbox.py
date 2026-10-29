@@ -17,6 +17,13 @@ decide's partner API, so a record survives restarts and is never counted twice:
 - **When.** ``sung_at`` is the first live play start (A.96); ``ended_at`` is
   ``done_at``. Done without a play is ``sung_unplayed`` with ``sung_at`` null
   (A.97).
+- **Claims.** An entry someone claimed from the app (``history_claims``,
+  Phase 4c) keeps its claimers; live attribution only fills the singer slots
+  left, so a claimed solo entry is never re-attributed to another account
+  (R47). Claim rows themselves sit under the night ``claim:<date>``, so this
+  scan never compares or retracts them.
+- **Host undid a claimed song.** A claimed entry of tonight that is no
+  longer Done has its claims released and their records retracted (R52).
 - **Undo.** An entry that is no longer Done gets a delete for the same id. Only
   tonight's rows and entries are compared (A.15), so a New Rotation never
   retracts last night's songs.
@@ -101,6 +108,9 @@ class _NightContext:
                 continue
             self.requests.setdefault(r["linked_entry_id"], []).append(r)
         self.friend_ids = sing_store.friend_request_ids([r["id"] for r in rows])
+        # Accounts that claimed tonight's entries from the app after requests
+        # closed (R34): they hold the singer slots first (R47).
+        self.claims = sing_store.claim_holders([e["id"] for e in done_entries])
         self.identity = {email: self._identity(devs) for email, devs in accounts.items()}
         self._claimed = {}
 
@@ -210,6 +220,19 @@ class HistoryOutbox:
             matched = folds & ctx.identity.get(email, set())
             if matched and not any(ctx.claimed(f, email) for f in matched):
                 emails.append(email)
+        held = ctx.claims.get(entry["id"]) if getattr(ctx, "claims", None) else None
+        if held:
+            # R47: an entry claimed from the app keeps its claimers; other
+            # accounts only fill the singer slots left (a solo entry: none).
+            room = max(1, len(members)) - len(held)
+            kept = []
+            for email in emails:
+                if email.strip().lower() in held:
+                    kept.append(email)
+                elif room > 0:
+                    kept.append(email)
+                    room -= 1
+            emails = kept
         song_req = next((r for r in reversed(reqs) if r["id"] not in ctx.friend_ids),
                         reqs[-1] if reqs else None)
         return emails, members, song_req
@@ -294,23 +317,67 @@ class HistoryOutbox:
             self._wake.set()
             return 0
 
+    def _release_undone_claims(self, now):
+        """R52: a claimed entry of tonight that the host un-Done'd is no longer
+        sung, so its claims are released (claimable again) and each claim's
+        record is retracted from decide. The same goes for a claimed entry the
+        host deleted: on nights from ``since`` on, a claim whose entry id is in
+        neither ``rotation_entries`` nor ``rotation_archive`` is released (the
+        archive check keeps New Rotation, which moves every entry there, from
+        looking like a mass deletion). Claim rows live under the night
+        ``claim:<date>``, which the comparison below never sees."""
+        from night_log import marker_night
+        store = self.sing_store
+        start = marker_night(store.get_night_started_at())
+        if not start:
+            return 0
+        # Tonight's claims only. A day of slack: the Night Log's noon roll and
+        # the marker's 06:00 rule can put one show on adjacent dates.
+        since = (dt.date.fromisoformat(start) - dt.timedelta(days=1)).isoformat()
+        live = self.rotation_store.get_entries(include_done=True)
+        undone = [e["id"] for e in live if not _is_done(e)]
+        from history_claims import release_claims  # lazy: history_claims imports us
+        changed = 0
+        for row in store.claim_rows_for_entries(undone):
+            if row["night"] < since:
+                continue
+            changed += len(release_claims(store, row["night"], row["entry_id"],
+                                          email=row["gen_email"], now=now))
+        recent = store.claim_rows_since(since)
+        if recent:
+            live_ids = {e["id"] for e in live}
+            candidates = {r["entry_id"] for r in recent} - live_ids
+            gone = candidates - self.rotation_store.archived_entry_ids(candidates)
+            for row in recent:
+                if row["entry_id"] in gone:
+                    changed += len(release_claims(store, row["night"], row["entry_id"],
+                                                  email=row["gen_email"], now=now))
+        return changed
+
     def _scan(self):
         store = self.sing_store
         night = store.get_night_started_at()
         if not night:
             return 0
+        try:
+            released = self._release_undone_claims(self._clock())
+        except Exception:
+            # Never let a claim release stop tonight's live attribution below.
+            logger.warning("history outbox: releasing undone/deleted claims failed",
+                           exc_info=True)
+            released = 0
         accounts = store.night_accounts(night)
         rows = store.outbox_rows_for_night(night)
         if not accounts and not rows:
-            return 0
+            return released
         done = [e for e in self.rotation_store.get_completed_entries() if _is_done(e)]
         if store.get_night_started_at() != night:
             # A New Rotation landed mid-scan: tonight's entries are gone, so
             # comparing them with the old night's rows would retract them all.
             self._wake.set()
-            return 0
+            return released
         now = self._clock()
-        changed = 0
+        changed = released
         wanted = set()
         if accounts and done:
             ctx = _NightContext(store, night, accounts, done)
@@ -321,6 +388,19 @@ class HistoryOutbox:
                 wanted.update(hids)
                 if all((rows.get(h) or {}).get("op") == "put" for h in hids):
                     continue  # already queued/sent: steady state builds nothing
+                # R47: an app claim may have landed since the context was read.
+                # Re-read this entry's claimers right before enqueueing (only on
+                # this rare path). A claim in the moments between this read and
+                # the enqueue below can still let a solo entry be recorded for
+                # two accounts; try_claim counts outbox puts, so the reverse
+                # order is always caught. (history_claims.claim closes its own
+                # orphan-put window after its enqueue.)
+                fresh = store.claim_holders([entry["id"]]).get(entry["id"])
+                if fresh != ctx.claims.get(entry["id"]):
+                    ctx.claims[entry["id"]] = fresh
+                    emails, members, song_req = self._attribution(entry, ctx)
+                    hids = {history_id_for(self.box_id, entry["id"], e): e for e in emails}
+                    wanted.update(hids)
                 if venue is None:
                     venue = self._venue_name() or ""
                 base = self._payload(entry, night, song_req, members, venue or None)

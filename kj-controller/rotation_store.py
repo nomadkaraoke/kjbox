@@ -337,6 +337,15 @@ class RotationStore:
             ).fetchone()
         )
 
+    def archived_entry_ids(self, entry_ids):
+        """The subset of ``entry_ids`` that a ``rotation_archive`` row carries."""
+        ids = sorted({int(e) for e in (entry_ids or []) if e is not None})
+        if not ids:
+            return set()
+        marks = ",".join("?" * len(ids))
+        return {r[0] for r in self._get_conn().execute(
+            f"SELECT DISTINCT entry_id FROM rotation_archive WHERE entry_id IN ({marks})", ids)}
+
     def get_entries(self, include_done=False):
         """Return all entries ordered by position.
 

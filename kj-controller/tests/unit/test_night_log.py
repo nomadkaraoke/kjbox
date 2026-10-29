@@ -7,6 +7,13 @@ from night_log import NightLog, night_of
 from rotation_store import RotationStore
 from sing_store import SingStore
 from stats_store import StatsStore
+from tests.unit.night_log_helpers import (
+    _exact_archive,
+    _legacy_archive,
+    _play,
+    _request,
+    _utc_of_local,
+)
 
 
 @pytest.fixture
@@ -23,44 +30,6 @@ def dbs(tmp_path):
 
 def _log(store, stats):
     return NightLog(store, stats._get_conn)
-
-
-def _legacy_archive(store, singer, song, file_path, created_at, status="Done", night_date="2026-10-09"):
-    """Insert an archive row the way pre-night-log archives looked (no entry id)."""
-    conn = store._get_conn()
-    conn.execute(
-        "INSERT INTO rotation_archive (night_date, singer, song_artist, status, notes, "
-        "position, file_path, duration, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-        (night_date, singer, song, status, "", 0, file_path, None, created_at))
-    conn.commit()
-
-
-def _request(store, singer, artist, title, source_type, reviewed_at, linked_entry_id=None,
-             status="approved"):
-    conn = store._get_conn()
-    conn.execute(
-        "INSERT INTO sing_requests (created_at, token, singer_name, phone, song_artist, "
-        "song_title, source_type, status, reviewed_at, linked_entry_id) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (reviewed_at, "tok", singer, "+15550000000", artist, title, source_type, status,
-         reviewed_at, linked_entry_id))
-    conn.commit()
-
-
-def _play(stats, media_id, entry_id, singer, played_utc):
-    conn = stats._get_conn()
-    conn.execute(
-        "INSERT INTO play_events (media_id, singer, singer_norm, played_at, night_date, "
-        "entry_id, source) VALUES (?,?,?,?,?,?, 'live')",
-        (media_id, singer, (singer or "").lower(), played_utc, played_utc[:10], entry_id))
-    conn.commit()
-
-
-def _utc_of_local(local):
-    """Convert a local 'YYYY-MM-DD HH:MM:SS' to the UTC string play_events stores."""
-    import datetime as dt
-    t = dt.datetime.strptime(local, "%Y-%m-%d %H:%M:%S")
-    return t.astimezone(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ---------------------------------------------------------------------------
@@ -315,3 +284,290 @@ def test_started_at_none_without_play_event(dbs):
     _legacy_archive(store, "Jude", "Song - Artist", None, "2026-10-08 20:57:51")
     [e] = _log(store, stats).get_night("2026-10-08")
     assert e["started_at"] is None
+
+
+# --- history-claim fields (Phase 4c) ------------------------------------------
+
+def test_exact_row_link_exact_and_started_at_from_play(dbs):
+    store, _, stats = dbs
+    _exact_archive(store, 5012, "Wren B", "Starlight - Muse", "2026-10-20 21:40:00",
+                   "2026-10-20 22:10:00", file_path="/media/x [lib-star1].mp4")
+    _play(stats, "lib-star1", 5012, "Wren B", _utc_of_local("2026-10-20 22:06:00"),
+          artist="Muse", title="Starlight")
+    [e] = _log(store, stats).get_night("2026-10-20")
+    assert e["link"] == "exact"
+    assert e["entry_id"] == 5012
+    assert e["started_at"] == "2026-10-20 22:06:00"  # play start
+    assert e["sung_at"] == "2026-10-20 22:10:00"     # Done = END (#284), unchanged
+    assert e["done_at"] == "2026-10-20 22:10:00"
+    assert e["members"] == ["Wren B"]
+
+
+def test_legacy_row_inferred_link_via_play_event(dbs):
+    store, ml, stats = dbs
+    path = "/media/nomad/SSD/SC1234-01 - Muse - Starlight.zip"
+    ml.upsert({"media_id": "lib-muse1", "source": "library", "file_path": path,
+               "artist": "Muse", "title": "Starlight"})
+    _legacy_archive(store, "Juno & Wren B", "Starlight - Muse", path, "2026-10-08 20:57:51")
+    _play(stats, "lib-muse1", 1477, "Juno & Wren B", _utc_of_local("2026-10-08 21:04:32"))
+    [e] = _log(store, stats).get_night("2026-10-08")
+    assert e["link"] == "inferred"
+    assert e["entry_id"] == 1477
+    assert e["done_at"] is None
+    assert e["started_at"] == "2026-10-08 21:04:32"
+    assert e["members"] == ["Juno", "Wren B"]
+
+
+def test_legacy_unlinked_row_link_none(dbs):
+    store, _, stats = dbs
+    _legacy_archive(store, "Quill", "Hello - Adele", None, "2026-10-08 20:55:05")
+    [e] = _log(store, stats).get_night("2026-10-08")
+    assert e["link"] == "none"
+    assert e["entry_id"] is None
+    assert e["song_identity"] == {"artist": "Adele", "title": "Hello"}
+
+
+def test_members_from_singers_json(dbs):
+    store, _, stats = dbs
+    _exact_archive(store, 6001, "Juno", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00", singers_json='["Juno", "Wren B"]')
+    [e] = _log(store, stats).get_night("2026-10-20")
+    assert e["members"] == ["Juno", "Wren B"]
+
+
+def test_song_identity_precedence(dbs):
+    store, _, stats = dbs
+    # 1. The linked request's artist/title wins over the play and the text.
+    _exact_archive(store, 7001, "Wren", "Starlite - Muse (KJ typo)", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    _play(stats, "lib-a", 7001, "Wren", _utc_of_local("2026-10-20 21:01:00"),
+          artist="Muse (Play)", title="Starlight (Play)")
+    _request(store, "Wren", "Muse", "Starlight", "local", "2026-10-20 20:59:00",
+             linked_entry_id=7001)
+    # 2. No request: the play's media identity.
+    _exact_archive(store, 7002, "Juno", "Helo - Adele", "2026-10-20 21:10:00",
+                   "2026-10-20 21:15:00")
+    _play(stats, "lib-b", 7002, "Juno", _utc_of_local("2026-10-20 21:11:00"),
+          artist="Adele", title="Hello")
+    # 3. Neither: the rotation text, split "Title - Artist".
+    _exact_archive(store, 7003, "Quill", "Uprising - Muse", "2026-10-20 21:20:00",
+                   "2026-10-20 21:25:00")
+    by_id = {e["entry_id"]: e for e in _log(store, stats).get_night("2026-10-20")}
+    assert by_id[7001]["song_identity"] == {"artist": "Muse", "title": "Starlight"}
+    assert by_id[7002]["song_identity"] == {"artist": "Adele", "title": "Hello"}
+    assert by_id[7003]["song_identity"] == {"artist": "Muse", "title": "Uprising"}
+
+
+def test_build_cached_invalidates_on_new_archive_row(dbs, monkeypatch):
+    import night_log
+    store, _, stats = dbs
+    night_log.clear_build_cache()
+    _exact_archive(store, 8001, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    calls = []
+    real = NightLog._build
+
+    def counting(self):
+        calls.append(1)
+        return real(self)
+
+    monkeypatch.setattr(NightLog, "_build", counting)
+    first = _log(store, stats).build_cached()
+    again = _log(store, stats).build_cached()  # a new NightLog per request, as in routes
+    assert len(calls) == 1
+    assert [e["entry_id"] for e in again] == [e["entry_id"] for e in first] == [8001]
+
+    _exact_archive(store, 8002, "Juno", "Uprising - Muse", "2026-10-20 21:10:00",
+                   "2026-10-20 21:15:00")
+    fresh = _log(store, stats).build_cached()
+    assert len(calls) == 2
+    assert sorted(e["entry_id"] for e in fresh) == [8001, 8002]
+
+    # A rotation rev bump and a new play also invalidate; the TTL expires it.
+    store.bump_rev()
+    _log(store, stats).build_cached()
+    assert len(calls) == 3
+    _play(stats, "lib-z", 8002, "Juno", _utc_of_local("2026-10-20 21:11:00"))
+    _log(store, stats).build_cached()
+    assert len(calls) == 4
+    _log(store, stats).build_cached(ttl_s=0)
+    assert len(calls) == 5
+
+    # The KJ modal paths stay uncached.
+    _log(store, stats).get_night("2026-10-20")
+    _log(store, stats).list_nights(min_songs=0)
+    assert len(calls) == 7
+
+
+def test_build_cached_returns_copies(dbs):
+    import night_log
+    store, _, stats = dbs
+    night_log.clear_build_cache()
+    _exact_archive(store, 8101, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    first = _log(store, stats).build_cached()
+    first[0]["singer"] = "changed by a caller"
+    first.append({"entry_id": "junk"})
+    again = _log(store, stats).build_cached()
+    assert [e["singer"] for e in again] == ["Wren"]
+
+
+def test_build_cached_keeps_in_memory_stores_apart():
+    import night_log
+    night_log.clear_build_cache()
+    a, b = RotationStore(":memory:"), RotationStore(":memory:")
+    # Same state key on both (one archive row each, same rev, no media DB).
+    _exact_archive(a, 9001, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    _exact_archive(b, 9002, "Juno", "Uprising - Muse", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    assert [e["entry_id"] for e in NightLog(a).build_cached()] == [9001]
+    assert [e["entry_id"] for e in NightLog(b).build_cached()] == [9002]
+
+
+# --- claims on the Night Log + host undo (Phase 4c E7) -----------------------------
+
+def test_entries_carry_claim_counts(dbs):
+    store, _, stats = dbs
+    sing = SingStore(store.db_path)
+    _exact_archive(store, 8201, "Juno", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00", singers_json='["Juno", "Wren B"]')
+    _exact_archive(store, 8202, "Wren", "Uprising - Muse", "2026-10-20 21:10:00",
+                   "2026-10-20 21:15:00")
+    sing.try_claim("2026-10-20", 8201, "e2e-a@example.com", "kj_a", "Juno", 2)
+    sing.try_claim("2026-10-20", 8201, "e2e-b@example.com", "kj_b", "Wren B", 2)
+    by_id = {e["entry_id"]: e for e in _log(store, stats).get_night("2026-10-20")}
+    assert by_id[8201]["claims"] == 2
+    assert by_id[8202]["claims"] == 0
+    sing.close()
+
+
+class _FakeHttp:
+    def __init__(self):
+        self.calls = []
+
+    def put(self, url, json=None, headers=None, timeout=None):
+        self.calls.append(("PUT", url, json))
+        return type("R", (), {"status_code": 200, "text": ""})()
+
+    def delete(self, url, params=None, headers=None, timeout=None):
+        self.calls.append(("DELETE", url, params))
+        return type("R", (), {"status_code": 204, "text": ""})()
+
+
+def _claimed_past_song(flask_app, email="e2e-wren@example.com", eid=8301):
+    rs, ss = flask_app.rotation.store, flask_app.sing_store
+    _exact_archive(rs, eid, "Wren B", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    hid = f"kj_test_{email[:8]}_{eid}"
+    assert ss.try_claim("2026-10-20", eid, email, hid, "Wren B", 1) == "claimed"
+    ss.outbox_enqueue(hid, "put", {"history_id": hid, "gen_email": email,
+                                   "entry_id": str(eid)}, "claim:2026-10-20")
+    return hid
+
+
+def test_claims_undo_route_deletes_claim_and_retracts_record(flask_app, flask_test_client):
+    import night_log as nl
+    from history_claims import suggestions
+    ss = flask_app.sing_store
+    hid = _claimed_past_song(flask_app)
+    ob = flask_app.history_outbox
+    http = _FakeHttp()
+    ob._put, ob._delete = http.put, http.delete
+    ob.cfg.update({"decide_api_url": "https://decide.test", "decide_kjbox_secret": "s"})
+    ss.outbox_mark_sent(hid)
+
+    r = flask_test_client.post("/history/claims/undo",
+                               json={"night": "2026-10-20", "entry_id": 8301})
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json() == {"undone": 1}
+    assert ss.claims_for_nights(["2026-10-20"]) == {}
+    row = ss._get_conn().execute("SELECT op, state, payload_json FROM history_outbox "
+                                 "WHERE history_id=?", (hid,)).fetchone()
+    assert (row["op"], row["state"]) == ("delete", "pending")
+    import json
+    assert json.loads(row["payload_json"]) == {"history_id": hid,
+                                               "gen_email": "e2e-wren@example.com",
+                                               "entry_id": "8301"}
+    assert ob._wake.is_set()
+    assert ob.deliver_due() == 1
+    assert http.calls == [("DELETE", "https://decide.test/api/partner/kjbox/karaoke-log/"
+                           + hid, {"gen_email": "e2e-wren@example.com"})]
+    # The song is suggestible again.
+    nl.clear_build_cache()
+    names = {"words": {"wren"}, "names": []}
+    log = nl.NightLog(flask_app.rotation.store, flask_app.stats._get_conn)
+    got = suggestions(log, ss, flask_app.kj_config, names, "e2e-other@example.com")
+    assert [s["entry_id"] for s in got["nights"][0]["songs"]] == [8301]
+
+
+def test_claims_undo_route_one_email_and_validation(flask_app, flask_test_client):
+    ss = flask_app.sing_store
+    _exact_archive(flask_app.rotation.store, 8401, "Juno & Wren B", "Hello - Adele",
+                   "2026-10-20 21:00:00", "2026-10-20 21:05:00")
+    ss.try_claim("2026-10-20", 8401, "e2e-a@example.com", "kj_a", "Juno", 2)
+    ss.try_claim("2026-10-20", 8401, "e2e-b@example.com", "kj_b", "Wren B", 2)
+    r = flask_test_client.post("/history/claims/undo", json={
+        "night": "2026-10-20", "entry_id": 8401, "gen_email": "E2E-B@example.com"})
+    assert r.get_json() == {"undone": 1}
+    assert ss.claims_for_nights(["2026-10-20"]) == {("2026-10-20", 8401): ["e2e-a@example.com"]}
+    assert flask_test_client.post("/history/claims/undo", json={
+        "night": "2026-10-20", "entry_id": 8401, "gen_email": "nobody@example.com"}
+    ).get_json() == {"undone": 0}
+    for bad in ({}, {"night": "2026-13-45", "entry_id": 1}, {"night": "2026-10-20"},
+                {"night": "2026-10-20", "entry_id": "x"}, {"night": "2026-10-20", "entry_id": True},
+                {"night": "2026-10-20", "entry_id": 1, "gen_email": 5}):
+        assert flask_test_client.post("/history/claims/undo", json=bad).status_code == 400, bad
+
+
+def test_claims_undo_not_on_public_host(mock_config):
+    from app import create_app
+    mock_config["sing_public_host"] = "sing.nomadkaraoke.com"
+    app = create_app(config=mock_config)
+    app.config["TESTING"] = True
+    try:
+        with app.test_client() as c:
+            for path in ("/history/claims/undo", "/sing/history/claims/undo"):
+                r = c.post(path, json={"night": "2026-10-20", "entry_id": 1},
+                           headers={"Host": "sing.nomadkaraoke.com"})
+                assert r.status_code == 404, path
+    finally:
+        app.catalog.close()
+
+
+def test_build_cached_is_single_flight(dbs, monkeypatch):
+    # Several requests missing the cache at once build it once, not once each.
+    import threading
+    import time
+    import night_log
+    store, _, stats = dbs
+    night_log.clear_build_cache()
+    _exact_archive(store, 8001, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    calls = []
+    real = NightLog._build
+
+    def slow(self):
+        calls.append(1)
+        time.sleep(0.2)
+        return real(self)
+
+    monkeypatch.setattr(NightLog, "_build", slow)
+    start = threading.Barrier(4)
+    got, errors = [], []
+
+    def worker():
+        try:
+            start.wait()
+            got.append([e["entry_id"] for e in _log(store, stats).build_cached()])
+        except Exception as exc:  # pragma: no cover - surfaced below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors
+    assert got == [[8001]] * 4
+    assert len(calls) == 1

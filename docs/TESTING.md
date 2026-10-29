@@ -152,7 +152,9 @@ refused); the data paths and hermetic switches are re-asserted after it.
 Mounted only when `KJBOX_TEST_API=1` **and** the bind host is loopback
 (`sing_test_api.install_test_api`); otherwise every path 404s, and the public sing host
 404s it too, as does any request carrying `X-Forwarded-For` / `CF-Connecting-IP` (proxied).
-`/reset` reloads the fixture file the server was started with. JSON in and out; errors are `{"error": "invalid"|"not_found", "message"?}`.
+`/reset` reloads the fixture file the server was started with, and also empties the past
+nights (`rotation_archive`, play events) and the history-claim tables (`history_claims`,
+`history_rejections`). JSON in and out; errors are `{"error": "invalid"|"not_found", "message"?}`.
 
 | Endpoint | Does |
 |---|---|
@@ -168,6 +170,8 @@ Mounted only when `KJBOX_TEST_API=1` **and** the bind host is loopback
 | `POST /outbox/drain` | scan + deliver everything due to decide now → `{ok, sent}` |
 | `GET /state` | `{event_code, night_started_at, night_id, rev, flags, rotation[], requests[], outbox[], pushes}` |
 | `GET /push-outbox`, `DELETE /push-outbox` | `{pushes[]}` of the Expo and web pushes captured instead of sent (`{kind, sub, message or payload}`); DELETE clears them |
+| `POST /history/seed {nights: [{date, entries: [{ref, singer, singers?, artist, title, status?, link: "exact"\|"inferred"\|"none", played?, claimed_by?}]}], identity?: {email, names, date}}` | past nights for the history-claim flows (Phase 4c): archive rows (`exact` = entry id + Done time, `inferred` = no entry id but a play that knows it, `none` = unlinkable, only counted as `unmatched`), `played` adds a play, `claimed_by` a claim; ids above the live rotation's. `identity` = the account sang under `names` through the app on `date` → `{ok, nights: [{date, night_id, entries: {ref: entry_id}}]}` |
+| `GET /history/state?email=` | `{claims[], rejections: [{night, entry_id}], outbox: [claim rows {history_id, op, state, entry_id, gen_email}]}`, filtered to `email` when given (rejections by its hash) |
 
 ### The fixture night and the replay test
 

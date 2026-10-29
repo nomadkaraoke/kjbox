@@ -19,6 +19,10 @@ Every endpoint is wrapped in ``@app_auth``, which checks, in order:
 5. the night marker is set (fail closed)                       → 403 not_open
 6. a ``night_id`` the client sends (query or JSON) is tonight's → 409 night_changed
 
+``@app_auth(require_night=False)`` (the history-claim routes, R29) runs only
+steps 1 and 2: those routes work any day, with no event code and requests
+closed, and never link the device to tonight.
+
 The bearer is verified before the code so code failures can be counted per
 device: every phone on venue wifi shares one IP, and a few phones still
 polling with a stale code must not lock the whole venue out.
@@ -113,6 +117,9 @@ failed_code_limit = SlidingWindow(10, 300)
 failed_code_ip_limit = SlidingWindow(100, 300)
 # gen token checks that miss the verifier cache, per IP.
 gen_verify_limit = SlidingWindow(30, 60)
+# Past-night history claims, per app device (R37).
+history_read_limit = SlidingWindow(30, 600)
+history_claim_limit = SlidingWindow(20, 600)
 
 
 # --- Response helpers ----------------------------------------------------
@@ -180,7 +187,7 @@ def _param(name):
 
 # --- Auth decorator ------------------------------------------------------
 
-def app_auth(view=None, *, on_closed=None):
+def app_auth(view=None, *, on_closed=None, require_night=True):
     """Authenticate a v1 call and scope it to tonight.
 
     On success sets on ``g``:
@@ -196,6 +203,10 @@ def app_auth(view=None, *, on_closed=None):
     first call of the night. ``on_closed(reason)`` (reason ``closed`` |
     ``bad_code`` | ``no_night``) replaces the 403 ``not_open`` response; GET
     /night uses it to return ``{open: false}``.
+
+    ``require_night=False`` stops after the gen check (steps 1-2): it sets
+    only ``app_user`` and ``app_gen_account``, reads no event code, needs no
+    open night or marker, and never links the device (R29).
     """
     def decorate(fn):
         @wraps(fn)
@@ -224,6 +235,11 @@ def app_auth(view=None, *, on_closed=None):
                 if exc.code == "gen_unavailable":
                     return v1_error("gen_unavailable", 503, retry_after=5)
                 return v1_error("unauthenticated", 401)
+
+            if not require_night:
+                g.app_user = user
+                g.app_gen_account = {"email": user.email, "session_token": token}
+                return fn(*args, **kwargs)
 
             code_key = f"{ip}:{user.device_id}"
             waits = [w for w in (failed_code_limit.retry_after(code_key),
@@ -1587,3 +1603,98 @@ def install_v1_error_handlers(flask_app):
         logger.error("v1 %s %s failed", request.method, request.path,
                      exc_info=(type(exc), exc, exc.__traceback__))
         return v1_error("internal", 500)
+
+
+# --- Past Nomad nights: suggestions + claims (Phase 4c, spec 6.10) -----------
+#
+# R29: the gen bearer only. No event code, no open night, no night_id and no
+# device link: the app opens Me any day, usually while the box is closed.
+# The box's past-night entries are the KJ's view; history_claims builds the
+# app's view from an allowlist (no emails, devices, request ids, phones or
+# notes, R37).
+
+_MAX_CLAIM_IDS = 200
+_MAX_NIGHT_ID_LEN = 64
+
+
+def _history_limited(limit):
+    key = g.app_user.device_id
+    wait = limit.retry_after(key)
+    if wait is not None:
+        return v1_error("rate_limited", 429, "too many history calls", retry_after=wait)
+    limit.hit(key)
+    return None
+
+
+def _history_parts():
+    """``(night_log, outbox)``, or None while the box can't serve history."""
+    outbox = getattr(current_app, "history_outbox", None)
+    if outbox is None:
+        return None
+    from routes import _night_log
+    log = _night_log()
+    if log is None:
+        return None
+    return log, outbox
+
+
+def _account_names():
+    import history_claims
+    user = g.app_user
+    return history_claims.account_names(current_app.sing_store, user.email,
+                                        user.display_name, user.device_id)
+
+
+@app_api_bp.route("/history/suggestions", methods=["GET"])
+@app_auth(require_night=False)
+def get_history_suggestions():
+    limited = _history_limited(history_read_limit)
+    if limited is not None:
+        return limited
+    parts = _history_parts()
+    if parts is None:
+        return v1_error("gen_unavailable", 503, "history is unavailable", retry_after=60)
+    import history_claims
+    log, _outbox = parts
+    result = history_claims.suggestions(log, current_app.sing_store, current_app.kj_config,
+                                        _account_names(), g.app_user.email)
+    return v1_json(result)
+
+
+def _claim_ids(body, key):
+    value = body.get(key, [])
+    if not isinstance(value, list) or len(value) > _MAX_CLAIM_IDS:
+        return None
+    if any(isinstance(v, bool) or not isinstance(v, int) for v in value):
+        return None
+    return value
+
+
+@app_api_bp.route("/history/claim", methods=["POST"])
+@app_auth(require_night=False)
+def claim_history():
+    limited = _history_limited(history_claim_limit)
+    if limited is not None:
+        return limited
+    parts = _history_parts()
+    if parts is None:
+        return v1_error("gen_unavailable", 503, "history is unavailable", retry_after=60)
+    body = _json_body()
+    night_id = body.get("night_id")
+    mine, not_mine = _claim_ids(body, "mine"), _claim_ids(body, "not_mine")
+    if (not isinstance(night_id, str) or not night_id
+            or len(night_id) > _MAX_NIGHT_ID_LEN or mine is None or not_mine is None
+            or not (mine or not_mine)):
+        return v1_error("invalid", 400,
+                        "send night_id and up to 200 integer ids in mine / not_mine")
+    import history_claims
+    log, outbox = parts
+    try:
+        result = history_claims.claim(log, current_app.sing_store, outbox,
+                                      current_app.kj_config, _account_names(),
+                                      g.app_user.email, night_id, mine, not_mine)
+    except history_claims.ClaimError as exc:
+        if exc.code == "not_found":
+            return v1_error("not_found", 404, "no such night for this account")
+        return v1_error("invalid", 400, "an id is not one of this night's songs for you")
+    return v1_json(result)
