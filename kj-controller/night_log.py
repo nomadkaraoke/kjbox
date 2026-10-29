@@ -26,6 +26,8 @@ import bisect
 import datetime as dt
 import json
 import os
+import threading
+import time
 
 from naming import extract_media_id
 
@@ -55,6 +57,16 @@ MEDIA_LABELS = {
 # still count as the request that created it (approval -> add_entry).
 _REQUEST_MATCH_SECONDS = 5
 _TS_FMT = "%Y-%m-%d %H:%M:%S"
+
+# NightLog.build_cached memo (R43): {store key: (built_at, state key, entries)}.
+# NightLog is built per request, so the memo lives here, keyed on the rotation DB.
+_BUILD_CACHE = {}
+_BUILD_CACHE_LOCK = threading.Lock()
+
+
+def clear_build_cache():
+    with _BUILD_CACHE_LOCK:
+        _BUILD_CACHE.clear()
 
 
 def _parse_ts(ts):
@@ -166,7 +178,7 @@ class NightLog:
             return []
         try:
             return [dict(r) for r in conn.execute(
-                "SELECT media_id, entry_id, singer_norm, "
+                "SELECT media_id, entry_id, singer_norm, artist, title, "
                 "datetime(played_at, 'localtime') AS played_local "
                 "FROM play_events WHERE source='live'")]
         except Exception:
@@ -318,6 +330,69 @@ class NightLog:
         # Reset in the small hours = mid-show reset of that night; any later
         # reset (e.g. the next morning) is prep for the coming night.
         return (t - dt.timedelta(days=1) if t.hour < 6 else t).date().isoformat()
+    # ------------------------------------------------------------------
+    # Cached build (history claims)
+    # ------------------------------------------------------------------
+
+    def _state_key(self):
+        """``(max archive id, rotation rev, live play count)``: changes whenever
+        anything ``_build`` reads for past nights could have changed."""
+        conn = self.rotation_store._get_conn()
+        max_archive = conn.execute("SELECT MAX(id) FROM rotation_archive").fetchone()[0]
+        try:
+            rev = self.rotation_store.get_rev()
+        except Exception:
+            rev = None
+        plays = None
+        mconn = self._media_conn()
+        if mconn is not None:
+            try:
+                plays = mconn.execute(
+                    "SELECT COUNT(*) FROM play_events WHERE source='live'").fetchone()[0]
+            except Exception:
+                plays = None
+        return (max_archive, rev, plays)
+
+    def build_cached(self, ttl_s=300):
+        """``_build()`` memoized for ``ttl_s`` seconds and while ``_state_key``
+        is unchanged (R43), for the history-claim routes. The KJ modal
+        (``list_nights`` / ``get_night``) keeps building uncached. The entries
+        are shared between callers: treat them as read-only."""
+        store_key = getattr(self.rotation_store, "db_path", None) or id(self.rotation_store)
+        state = self._state_key()
+        now = time.monotonic()
+        with _BUILD_CACHE_LOCK:
+            hit = _BUILD_CACHE.get(store_key)
+            if hit and now - hit[0] < ttl_s and hit[1] == state:
+                return hit[2]
+        entries = self._build()
+        with _BUILD_CACHE_LOCK:
+            _BUILD_CACHE[store_key] = (now, state, entries)
+        return entries
+
+    @staticmethod
+    def _song_identity(r, play, req):
+        """``{artist, title}``: the linked request's, else the play's media
+        identity, else the rotation text split "Title - Artist" (the same
+        precedence as ``HistoryOutbox._payload``)."""
+        artist = ((req or {}).get("song_artist") or "").strip()
+        title = ((req or {}).get("song_title") or "").strip()
+        if artist and title:
+            return {"artist": artist, "title": title}
+        p_artist = ((play or {}).get("artist") or "").strip()
+        p_title = ((play or {}).get("title") or "").strip()
+        if p_artist and p_title:
+            return {"artist": p_artist, "title": p_title}
+        from kj_make import _naive_split
+        split = _naive_split(r.get("song_artist") or "")
+        return {"artist": split["artist"], "title": split["title"]}
+
+    @staticmethod
+    def _members(r):
+        import sing  # _entry_members: the web's duet split (singers_json or "A & B")
+        return sing._entry_members({"singers_json": r.get("singers_json"),
+                                    "singer": r.get("singer")})
+
     @staticmethod
     def _to_entry(r):
         play = r.get("_play") or {}
@@ -362,6 +437,12 @@ class NightLog:
             added_by = {"by": "kj", "inferred": True}
 
         file_path = r.get("file_path")
+        if r.get("entry_id") is not None:
+            link = "exact"
+        elif r.get("entry_id_inferred") is not None:
+            link = "inferred"
+        else:
+            link = "none"
         return {
             "night": night_of(anchor),
             "live": r.get("live", False),
@@ -377,6 +458,12 @@ class NightLog:
             # When playback started (play_events). sung_at is when the KJ marked the
             # entry Done, i.e. the song's END on nights since the Night Log shipped.
             "started_at": play.get("played_local"),
+            "done_at": r.get("done_at"),
+            # History claims: how the row knows its entry id, the song as a
+            # real artist/title, and every person singing it.
+            "link": link,
+            "song_identity": NightLog._song_identity(r, play, req),
+            "members": NightLog._members(r),
             "notes": r.get("notes") or "",
             "paid": bool(r.get("paid")),
             "added_by": added_by,

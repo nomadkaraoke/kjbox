@@ -47,12 +47,26 @@ def _request(store, singer, artist, title, source_type, reviewed_at, linked_entr
     conn.commit()
 
 
-def _play(stats, media_id, entry_id, singer, played_utc):
+def _play(stats, media_id, entry_id, singer, played_utc, artist=None, title=None):
     conn = stats._get_conn()
     conn.execute(
         "INSERT INTO play_events (media_id, singer, singer_norm, played_at, night_date, "
-        "entry_id, source) VALUES (?,?,?,?,?,?, 'live')",
-        (media_id, singer, (singer or "").lower(), played_utc, played_utc[:10], entry_id))
+        "entry_id, source, artist, title) VALUES (?,?,?,?,?,?, 'live',?,?)",
+        (media_id, singer, (singer or "").lower(), played_utc, played_utc[:10], entry_id,
+         artist, title))
+    conn.commit()
+
+
+def _exact_archive(store, entry_id, singer, song, created_at, done_at, file_path=None,
+                   singers_json=None, status="Done", night_date="2026-10-20"):
+    """Insert an archive row the way archives look since the Night Log shipped."""
+    conn = store._get_conn()
+    conn.execute(
+        "INSERT INTO rotation_archive (night_date, singer, song_artist, status, notes, "
+        "position, file_path, duration, created_at, entry_id, done_at, singers_json) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (night_date, singer, song, status, "", 0, file_path, None, created_at, entry_id,
+         done_at, singers_json))
     conn.commit()
 
 
@@ -315,3 +329,116 @@ def test_started_at_none_without_play_event(dbs):
     _legacy_archive(store, "Jude", "Song - Artist", None, "2026-10-08 20:57:51")
     [e] = _log(store, stats).get_night("2026-10-08")
     assert e["started_at"] is None
+
+
+# --- history-claim fields (Phase 4c) ------------------------------------------
+
+def test_exact_row_link_exact_and_started_at_from_play(dbs):
+    store, _, stats = dbs
+    _exact_archive(store, 5012, "Wren B", "Starlight - Muse", "2026-10-20 21:40:00",
+                   "2026-10-20 22:10:00", file_path="/media/x [lib-star1].mp4")
+    _play(stats, "lib-star1", 5012, "Wren B", _utc_of_local("2026-10-20 22:06:00"),
+          artist="Muse", title="Starlight")
+    [e] = _log(store, stats).get_night("2026-10-20")
+    assert e["link"] == "exact"
+    assert e["entry_id"] == 5012
+    assert e["started_at"] == "2026-10-20 22:06:00"  # play start
+    assert e["sung_at"] == "2026-10-20 22:10:00"     # Done = END (#284), unchanged
+    assert e["done_at"] == "2026-10-20 22:10:00"
+    assert e["members"] == ["Wren B"]
+
+
+def test_legacy_row_inferred_link_via_play_event(dbs):
+    store, ml, stats = dbs
+    path = "/media/nomad/SSD/SC1234-01 - Muse - Starlight.zip"
+    ml.upsert({"media_id": "lib-muse1", "source": "library", "file_path": path,
+               "artist": "Muse", "title": "Starlight"})
+    _legacy_archive(store, "Juno & Wren B", "Starlight - Muse", path, "2026-10-08 20:57:51")
+    _play(stats, "lib-muse1", 1477, "Juno & Wren B", _utc_of_local("2026-10-08 21:04:32"))
+    [e] = _log(store, stats).get_night("2026-10-08")
+    assert e["link"] == "inferred"
+    assert e["entry_id"] == 1477
+    assert e["done_at"] is None
+    assert e["started_at"] == "2026-10-08 21:04:32"
+    assert e["members"] == ["Juno", "Wren B"]
+
+
+def test_legacy_unlinked_row_link_none(dbs):
+    store, _, stats = dbs
+    _legacy_archive(store, "Quill", "Hello - Adele", None, "2026-10-08 20:55:05")
+    [e] = _log(store, stats).get_night("2026-10-08")
+    assert e["link"] == "none"
+    assert e["entry_id"] is None
+    assert e["song_identity"] == {"artist": "Adele", "title": "Hello"}
+
+
+def test_members_from_singers_json(dbs):
+    store, _, stats = dbs
+    _exact_archive(store, 6001, "Juno", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00", singers_json='["Juno", "Wren B"]')
+    [e] = _log(store, stats).get_night("2026-10-20")
+    assert e["members"] == ["Juno", "Wren B"]
+
+
+def test_song_identity_precedence(dbs):
+    store, _, stats = dbs
+    # 1. The linked request's artist/title wins over the play and the text.
+    _exact_archive(store, 7001, "Wren", "Starlite - Muse (KJ typo)", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    _play(stats, "lib-a", 7001, "Wren", _utc_of_local("2026-10-20 21:01:00"),
+          artist="Muse (Play)", title="Starlight (Play)")
+    _request(store, "Wren", "Muse", "Starlight", "local", "2026-10-20 20:59:00",
+             linked_entry_id=7001)
+    # 2. No request: the play's media identity.
+    _exact_archive(store, 7002, "Juno", "Helo - Adele", "2026-10-20 21:10:00",
+                   "2026-10-20 21:15:00")
+    _play(stats, "lib-b", 7002, "Juno", _utc_of_local("2026-10-20 21:11:00"),
+          artist="Adele", title="Hello")
+    # 3. Neither: the rotation text, split "Title - Artist".
+    _exact_archive(store, 7003, "Quill", "Uprising - Muse", "2026-10-20 21:20:00",
+                   "2026-10-20 21:25:00")
+    by_id = {e["entry_id"]: e for e in _log(store, stats).get_night("2026-10-20")}
+    assert by_id[7001]["song_identity"] == {"artist": "Muse", "title": "Starlight"}
+    assert by_id[7002]["song_identity"] == {"artist": "Adele", "title": "Hello"}
+    assert by_id[7003]["song_identity"] == {"artist": "Muse", "title": "Uprising"}
+
+
+def test_build_cached_invalidates_on_new_archive_row(dbs, monkeypatch):
+    import night_log
+    store, _, stats = dbs
+    night_log.clear_build_cache()
+    _exact_archive(store, 8001, "Wren", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    calls = []
+    real = NightLog._build
+
+    def counting(self):
+        calls.append(1)
+        return real(self)
+
+    monkeypatch.setattr(NightLog, "_build", counting)
+    first = _log(store, stats).build_cached()
+    again = _log(store, stats).build_cached()  # a new NightLog per request, as in routes
+    assert len(calls) == 1
+    assert [e["entry_id"] for e in again] == [e["entry_id"] for e in first] == [8001]
+
+    _exact_archive(store, 8002, "Juno", "Uprising - Muse", "2026-10-20 21:10:00",
+                   "2026-10-20 21:15:00")
+    fresh = _log(store, stats).build_cached()
+    assert len(calls) == 2
+    assert sorted(e["entry_id"] for e in fresh) == [8001, 8002]
+
+    # A rotation rev bump and a new play also invalidate; the TTL expires it.
+    store.bump_rev()
+    _log(store, stats).build_cached()
+    assert len(calls) == 3
+    _play(stats, "lib-z", 8002, "Juno", _utc_of_local("2026-10-20 21:11:00"))
+    _log(store, stats).build_cached()
+    assert len(calls) == 4
+    _log(store, stats).build_cached(ttl_s=0)
+    assert len(calls) == 5
+
+    # The KJ modal paths stay uncached.
+    _log(store, stats).get_night("2026-10-20")
+    _log(store, stats).list_nights(min_songs=0)
+    assert len(calls) == 7
