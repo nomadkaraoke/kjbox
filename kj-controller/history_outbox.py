@@ -22,6 +22,8 @@ decide's partner API, so a record survives restarts and is never counted twice:
   left, so a claimed solo entry is never re-attributed to another account
   (R47). Claim rows themselves sit under the night ``claim:<date>``, so this
   scan never compares or retracts them.
+- **Host undid a claimed song.** A claimed entry of tonight that is no
+  longer Done has its claims released and their records retracted (R52).
 - **Undo.** An entry that is no longer Done gets a delete for the same id. Only
   tonight's rows and entries are compared (A.15), so a New Rotation never
   retracts last night's songs.
@@ -315,23 +317,51 @@ class HistoryOutbox:
             self._wake.set()
             return 0
 
+    def _release_undone_claims(self, now):
+        """R52: a claimed entry of tonight that the host un-Done'd is no longer
+        sung, so its claims are released (claimable again) and each claim's
+        record is retracted from decide. Claim rows live under the night
+        ``claim:<date>``, which the comparison below never sees."""
+        from night_log import marker_night
+        store = self.sing_store
+        start = marker_night(store.get_night_started_at())
+        if not start:
+            return 0
+        # Tonight's claims only. A day of slack: the Night Log's noon roll and
+        # the marker's 06:00 rule can put one show on adjacent dates.
+        since = (dt.date.fromisoformat(start) - dt.timedelta(days=1)).isoformat()
+        undone = [e["id"] for e in self.rotation_store.get_entries(include_done=True)
+                  if not _is_done(e)]
+        changed = 0
+        for row in store.claim_rows_for_entries(undone):
+            if row["night"] < since:
+                continue
+            store.delete_claim(row["night"], row["entry_id"], email=row["gen_email"])
+            gone = {"history_id": row["history_id"], "gen_email": row["gen_email"],
+                    "entry_id": str(row["entry_id"])}
+            if store.outbox_enqueue(row["history_id"], "delete", gone,
+                                    night_started_at="claim:" + row["night"], now=now):
+                changed += 1
+        return changed
+
     def _scan(self):
         store = self.sing_store
         night = store.get_night_started_at()
         if not night:
             return 0
+        released = self._release_undone_claims(self._clock())
         accounts = store.night_accounts(night)
         rows = store.outbox_rows_for_night(night)
         if not accounts and not rows:
-            return 0
+            return released
         done = [e for e in self.rotation_store.get_completed_entries() if _is_done(e)]
         if store.get_night_started_at() != night:
             # A New Rotation landed mid-scan: tonight's entries are gone, so
             # comparing them with the old night's rows would retract them all.
             self._wake.set()
-            return 0
+            return released
         now = self._clock()
-        changed = 0
+        changed = released
         wanted = set()
         if accounts and done:
             ctx = _NightContext(store, night, accounts, done)

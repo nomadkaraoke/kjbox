@@ -310,3 +310,24 @@ def test_not_mine_on_own_claim_is_a_no_op(env):
     assert env.ss.claims_for_nights([NIGHT]) == {(NIGHT, 5001): [WREN]}
     assert env.ss.rejections_for(SingStore.email_hash(WREN)) == {(NIGHT, 5002)}
     assert [r["op"] for r in env.outbox_rows()] == ["put"]
+
+
+# --- R52: the host un-Dones a claimed song from tonight ---------------------------------
+
+def test_host_undone_live_entry_releases_claim_and_retracts(env):
+    e = _live_closed_night(env)
+    [night] = env.suggest()["nights"]
+    env.claim(night["night_id"], mine=[e["id"]])
+    hid = history_id_for(BOX, e["id"], WREN)
+    env.outbox().scan()
+    env.rs.update_status(e["id"], "Waiting")  # the host undid the song
+    env.outbox().scan()
+    assert env.ss.claims_for_nights([night["date"]]) == {}
+    row = next(r for r in env.outbox_rows() if r["history_id"] == hid)
+    assert row["op"] == "delete"
+    assert env.payload(hid) == {"history_id": hid, "gen_email": WREN,
+                                "entry_id": str(e["id"])}
+    # Sung again: claimable again.
+    env.rs.update_status(e["id"], "Done")
+    [again] = env.suggest()["nights"]
+    assert [s["entry_id"] for s in again["songs"]] == [e["id"]]

@@ -423,3 +423,116 @@ def test_build_cached_keeps_in_memory_stores_apart():
                    "2026-10-20 21:05:00")
     assert [e["entry_id"] for e in NightLog(a).build_cached()] == [9001]
     assert [e["entry_id"] for e in NightLog(b).build_cached()] == [9002]
+
+
+# --- claims on the Night Log + host undo (Phase 4c E7) -----------------------------
+
+def test_entries_carry_claim_counts(dbs):
+    store, _, stats = dbs
+    sing = SingStore(store.db_path)
+    _exact_archive(store, 8201, "Juno", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00", singers_json='["Juno", "Wren B"]')
+    _exact_archive(store, 8202, "Wren", "Uprising - Muse", "2026-10-20 21:10:00",
+                   "2026-10-20 21:15:00")
+    sing.try_claim("2026-10-20", 8201, "e2e-a@example.com", "kj_a", "Juno", 2)
+    sing.try_claim("2026-10-20", 8201, "e2e-b@example.com", "kj_b", "Wren B", 2)
+    by_id = {e["entry_id"]: e for e in _log(store, stats).get_night("2026-10-20")}
+    assert by_id[8201]["claims"] == 2
+    assert by_id[8202]["claims"] == 0
+    sing.close()
+
+
+class _FakeHttp:
+    def __init__(self):
+        self.calls = []
+
+    def put(self, url, json=None, headers=None, timeout=None):
+        self.calls.append(("PUT", url, json))
+        return type("R", (), {"status_code": 200, "text": ""})()
+
+    def delete(self, url, params=None, headers=None, timeout=None):
+        self.calls.append(("DELETE", url, params))
+        return type("R", (), {"status_code": 204, "text": ""})()
+
+
+def _claimed_past_song(flask_app, email="e2e-wren@example.com", eid=8301):
+    from history_claims import claim_payload
+    rs, ss = flask_app.rotation.store, flask_app.sing_store
+    _exact_archive(rs, eid, "Wren B", "Hello - Adele", "2026-10-20 21:00:00",
+                   "2026-10-20 21:05:00")
+    hid = f"kj_test_{email[:8]}_{eid}"
+    assert ss.try_claim("2026-10-20", eid, email, hid, "Wren B", 1) == "claimed"
+    ss.outbox_enqueue(hid, "put", {"history_id": hid, "gen_email": email,
+                                   "entry_id": str(eid)}, "claim:2026-10-20")
+    assert claim_payload  # the real payload shape is covered in test_history_claim.py
+    return hid
+
+
+def test_claims_undo_route_deletes_claim_and_retracts_record(flask_app, flask_test_client):
+    import night_log as nl
+    from history_claims import account_names, suggestions
+    ss = flask_app.sing_store
+    hid = _claimed_past_song(flask_app)
+    ob = flask_app.history_outbox
+    http = _FakeHttp()
+    ob._put, ob._delete = http.put, http.delete
+    ob.cfg.update({"decide_api_url": "https://decide.test", "decide_kjbox_secret": "s"})
+    ss.outbox_mark_sent(hid)
+
+    r = flask_test_client.post("/history/claims/undo",
+                               json={"night": "2026-10-20", "entry_id": 8301})
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json() == {"undone": 1}
+    assert ss.claims_for_nights(["2026-10-20"]) == {}
+    row = ss._get_conn().execute("SELECT op, state, payload_json FROM history_outbox "
+                                 "WHERE history_id=?", (hid,)).fetchone()
+    assert (row["op"], row["state"]) == ("delete", "pending")
+    import json
+    assert json.loads(row["payload_json"]) == {"history_id": hid,
+                                               "gen_email": "e2e-wren@example.com",
+                                               "entry_id": "8301"}
+    assert ob._wake.is_set()
+    assert ob.deliver_due() == 1
+    assert http.calls == [("DELETE", "https://decide.test/api/partner/kjbox/karaoke-log/"
+                           + hid, {"gen_email": "e2e-wren@example.com"})]
+    # The song is suggestible again.
+    nl.clear_build_cache()
+    names = {"words": {"wren"}, "names": []}
+    log = nl.NightLog(flask_app.rotation.store, flask_app.stats._get_conn)
+    got = suggestions(log, ss, flask_app.kj_config, names, "e2e-other@example.com")
+    assert [s["entry_id"] for s in got["nights"][0]["songs"]] == [8301]
+    assert account_names  # imported for symmetry with the v1 route
+
+
+def test_claims_undo_route_one_email_and_validation(flask_app, flask_test_client):
+    ss = flask_app.sing_store
+    _exact_archive(flask_app.rotation.store, 8401, "Juno & Wren B", "Hello - Adele",
+                   "2026-10-20 21:00:00", "2026-10-20 21:05:00")
+    ss.try_claim("2026-10-20", 8401, "e2e-a@example.com", "kj_a", "Juno", 2)
+    ss.try_claim("2026-10-20", 8401, "e2e-b@example.com", "kj_b", "Wren B", 2)
+    r = flask_test_client.post("/history/claims/undo", json={
+        "night": "2026-10-20", "entry_id": 8401, "gen_email": "E2E-B@example.com"})
+    assert r.get_json() == {"undone": 1}
+    assert ss.claims_for_nights(["2026-10-20"]) == {("2026-10-20", 8401): ["e2e-a@example.com"]}
+    assert flask_test_client.post("/history/claims/undo", json={
+        "night": "2026-10-20", "entry_id": 8401, "gen_email": "nobody@example.com"}
+    ).get_json() == {"undone": 0}
+    for bad in ({}, {"night": "2026-13-45", "entry_id": 1}, {"night": "2026-10-20"},
+                {"night": "2026-10-20", "entry_id": "x"}, {"night": "2026-10-20", "entry_id": True},
+                {"night": "2026-10-20", "entry_id": 1, "gen_email": 5}):
+        assert flask_test_client.post("/history/claims/undo", json=bad).status_code == 400, bad
+
+
+def test_claims_undo_not_on_public_host(mock_config):
+    from app import create_app
+    mock_config["sing_public_host"] = "sing.nomadkaraoke.com"
+    app = create_app(config=mock_config)
+    app.config["TESTING"] = True
+    try:
+        with app.test_client() as c:
+            for path in ("/history/claims/undo", "/sing/history/claims/undo"):
+                r = c.post(path, json={"night": "2026-10-20", "entry_id": 1},
+                           headers={"Host": "sing.nomadkaraoke.com"})
+                assert r.status_code == 404, path
+    finally:
+        app.catalog.close()

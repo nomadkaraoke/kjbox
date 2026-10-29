@@ -2527,6 +2527,17 @@ class SingStore:
             "AND state IN ('pending','sent')", (history_id,)).fetchone()
         return row is not None
 
+    def claim_rows_for_entries(self, entry_ids):
+        """Full ``history_claims`` rows for ``entry_ids`` on nights from
+        ``ENTRY_IDS_UNIQUE_SINCE`` on (where an entry id names one entry)."""
+        ids = sorted({int(e) for e in (entry_ids or []) if e is not None})
+        if not ids:
+            return []
+        marks = ",".join("?" * len(ids))
+        return [dict(r) for r in self._get_conn().execute(
+            f"SELECT * FROM history_claims WHERE night >= ? AND entry_id IN ({marks}) "
+            "ORDER BY night, entry_id, gen_email", (ENTRY_IDS_UNIQUE_SINCE, *ids))]
+
     def claim_holders(self, entry_ids):
         """``{entry_id: {gen_email}}`` from ``history_claims`` on nights from
         ``ENTRY_IDS_UNIQUE_SINCE`` on (where an entry id names one entry): the

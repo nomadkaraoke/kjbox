@@ -91,6 +91,16 @@ def night_of(ts):
     return (t - dt.timedelta(hours=12)).date().isoformat()
 
 
+def marker_night(ts):
+    """Night (ISO date) a night marker (``night_started_at``, box-local) starts:
+    a reset before 06:00 is a mid-show reset of the previous evening's night,
+    any later one (e.g. a morning reset) starts the night of its own date."""
+    t = _parse_ts(ts) if isinstance(ts, str) else ts
+    if t is None:
+        return None
+    return (t - dt.timedelta(days=1) if t.hour < 6 else t).date().isoformat()
+
+
 def _norm(s):
     return " ".join((s or "").split()).lower()
 
@@ -314,13 +324,26 @@ class NightLog:
                     break
 
         live_night = self._live_night()
+        claims = self._claim_counts()
         entries = [self._to_entry(r) for r in rows]
+        for e in entries:
+            e["claims"] = claims.get((e["night"], e["entry_id"]), 0)
         for e in entries:
             # Tonight's not-yet-sung entries (e.g. the starter added when the
             # rotation was reset that morning) belong to the coming night.
             if e["live"] and not e["sung_at"] and live_night:
                 e["night"] = live_night
         return entries
+
+    def _claim_counts(self):
+        """``{(night, entry_id): n}`` from ``history_claims`` (one read per
+        build; the table sits in the same DB as the rotation)."""
+        try:
+            return {(r[0], r[1]): r[2] for r in self.rotation_store._get_conn().execute(
+                "SELECT night, entry_id, COUNT(*) FROM history_claims "
+                "GROUP BY night, entry_id")}
+        except Exception:
+            return {}  # history_claims absent (fresh / test DB without SingStore)
 
     def _live_night(self):
         """Night the live rotation belongs to, from when it was last reset."""
@@ -365,7 +388,9 @@ class NightLog:
 
         The key sees new archive rows, rotation revisions and new live plays.
         Anything else ``_build`` reads (``sing_requests`` links and approvals,
-        ``media_library`` rows) shows up only once the TTL expires. Each call
+        ``media_library`` rows, each entry's ``claims`` count) shows up only once
+        the TTL expires; claim routes read claims from the store, never from
+        ``claims``. Each call
         returns a new list of shallow entry copies; nested dicts (``added_by``,
         ``media``, ``song_identity``, lists) are shared, so don't mutate them."""
         db_path = getattr(self.rotation_store, "db_path", None)
