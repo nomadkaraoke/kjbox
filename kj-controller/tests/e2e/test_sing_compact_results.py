@@ -182,3 +182,32 @@ class TestCompactResults:
         page.locator('[data-testid="filter-community"]').click()
         assert self._titles(page) == ["ILYSB"]
         expect(page.locator('[data-testid="others-toggle"]')).to_have_count(0)
+
+    def _retype(self, page, query, rows):
+        page.locator('input[type="search"]').fill(query)
+        expect(page.locator(".result-row")).to_have_count(rows)
+
+    def test_filter_is_not_applied_to_a_short_list_without_pills(self, page, live_server, live_token):
+        self._search(page, live_server, live_token, LANA, rows=6)
+        page.locator('[data-testid="filter-community"]').click()
+        # Next search: 2 songs → no pills, so Request is the normal kj_pick again.
+        short = [_song("Video Games", versions=[_local("commercial", "KV", "Video Games"), _kn_community("CARPY")]),
+                 _song("Love")]
+        page.unroute("**/sing/search?*")
+        page.route("**/sing/search?*", lambda r: r.fulfill(status=200, content_type="application/json",
+                   body=json.dumps({"songs": short, "make_requests_enabled": True, "simple_mode": False})))
+        self._retype(page, "video games lana", 2)
+        expect(page.locator('[data-testid="filter-bar"]')).to_have_count(0)
+        page.locator(".result-row", has_text="Video Games").locator('[data-testid="request-song"]').click()
+        assert page.evaluate("window.__sing_state.selected.source_type") == "kj_pick"
+
+    def test_kept_filter_with_no_matches_falls_back_to_all(self, page, live_server, live_token):
+        self._search(page, live_server, live_token, LANA, rows=6)
+        page.locator('[data-testid="filter-community"]').click()
+        covers = [_song(t, artist="Sunfly Band") for t in ("A", "B", "C", "D", "E", "F")]
+        page.unroute("**/sing/search?*")
+        page.route("**/sing/search?*", lambda r: r.fulfill(status=200, content_type="application/json",
+                   body=json.dumps({"songs": covers, "make_requests_enabled": True, "simple_mode": False})))
+        self._retype(page, "sunfly band", 6)
+        expect(page.locator('[data-testid="filter-all"]')).to_have_attribute("aria-checked", "true")
+        expect(page.locator('[data-testid="filter-community"]')).to_have_count(0)

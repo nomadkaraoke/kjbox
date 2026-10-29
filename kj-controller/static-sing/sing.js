@@ -2084,6 +2084,9 @@ function renderSearch() {
   // commercial = Cover band) and a sort. Both are the singer's taste, so they
   // survive a new query; the "other artists" group's open state does not.
   const filters = { audio: "all", sort: "best" };
+  // The audio filter the rows actually follow: only while its pills are on
+  // screen, so a short list never silently requests a filtered version.
+  let audioShown = "all";
   let othersOpen = false;
   let filtersQuery = "";
 
@@ -2943,9 +2946,9 @@ function renderSearch() {
     // With an audio filter on, the singer has said which kind they want: the
     // row previews, shows and requests the best version of that kind even when
     // the KJ's overall best is the other kind.
-    const featured = (filters.audio !== "all" && (group.versions || []).find((v) => _versionClass(v) === filters.audio)) || best;
+    const featured = (audioShown !== "all" && (group.versions || []).find((v) => _versionClass(v) === audioShown)) || best;
     // Bound to that version (not kj_pick), so approval can't swap in the other kind.
-    const ownPick = filters.audio !== "all" && !!featured && _versionClass(featured) === filters.audio;
+    const ownPick = audioShown !== "all" && !!featured && _versionClass(featured) === audioShown;
     const toggleOpen = (e) => {
       e.stopPropagation();
       if (!armed()) return;
@@ -3013,7 +3016,7 @@ function renderSearch() {
       } else if (state.simpleMode) {
         children.push(renderVersionsExpander(group));
       } else {
-        children.push(el("div", { class: "sing-auto-hint" }, t(ownPick ? `search.pickByFilter.${filters.audio}` : "search.autoBest")));
+        children.push(el("div", { class: "sing-auto-hint" }, t(ownPick ? `search.pickByFilter.${audioShown}` : "search.autoBest")));
         if (!isExpanded) children.push(renderVersionRow(group, featured, featured === best, { compact: true }));
         children.push(el("button", {
           class: "sing-versions-toggle",
@@ -3069,7 +3072,12 @@ function renderSearch() {
     // Browsing a long list: audio-type pills + sort over the rows, and for an
     // artist search, songs by other artists tucked into a group at the end.
     let others = [];
+    audioShown = "all";
     if (!missing && songs.length >= FILTER_MIN) {
+      // A kept-over choice with no matches in this search falls back to All
+      // (its pill then hides), rather than leaving an empty list.
+      if (filters.audio !== "all" && !songs.some((g) => _hasClass(g, filters.audio))) filters.audio = "all";
+      audioShown = filters.audio;
       container.appendChild(renderFilterBar(songs));
       shownSongs = applyFilters(songs);
       const artist = _searchedArtist(songs, q);
