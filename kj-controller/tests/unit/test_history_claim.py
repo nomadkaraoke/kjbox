@@ -427,3 +427,55 @@ def test_scan_rechecks_claims_before_enqueueing(env, monkeypatch):
     env.outbox().scan()
     emails = {env.payload(r["history_id"])["gen_email"] for r in env.outbox_rows()}
     assert emails == {WREN}
+
+
+# --- release_claims: one retraction path (host undo + R52) ---------------------------
+
+def test_release_claims_deletes_and_queues_retractions(env):
+    from history_claims import release_claims
+    _done(env, 5001, "Juno & Wren B")
+    nid = env.night_id()
+    env.claim(nid, mine=[5001])
+    env.claim(nid, mine=[5001], email=JUNO, words=("juno",))
+    rows = release_claims(env.ss, NIGHT, 5001, email=JUNO.upper(), now=NOW)
+    assert [r["gen_email"] for r in rows] == [JUNO]
+    hj = history_id_for(BOX, 5001, JUNO)
+    assert env.payload(hj) == {"history_id": hj, "gen_email": JUNO, "entry_id": "5001"}
+    ops = {r["history_id"]: (r["op"], r["night_started_at"]) for r in env.outbox_rows()}
+    assert ops[hj] == ("delete", "claim:" + NIGHT)
+    assert ops[history_id_for(BOX, 5001, WREN)][0] == "put"
+    assert [r["gen_email"] for r in release_claims(env.ss, NIGHT, 5001)] == [WREN]
+    assert release_claims(env.ss, NIGHT, 5001) == []
+
+
+def test_claim_released_mid_claim_leaves_no_orphan_put(env, monkeypatch):
+    # The host undoes the claim between try_claim and the put's enqueue: the
+    # put must not survive without its claim row.
+    from history_claims import release_claims
+    _done(env, 5001, "Wren B")
+    nid = env.night_id()
+    real = SingStore.outbox_enqueue
+    fired = []
+
+    def undo_first(self, hid, op, payload, night_started_at, now=None):
+        if op == "put" and not fired:
+            fired.append(1)
+            release_claims(self, NIGHT, 5001)
+        return real(self, hid, op, payload, night_started_at, now=now)
+
+    monkeypatch.setattr(SingStore, "outbox_enqueue", undo_first)
+    env.claim(nid, mine=[5001])
+    assert env.ss.claims_for_nights([NIGHT]) == {}
+    [row] = env.outbox_rows()
+    assert row["op"] == "delete"
+
+
+def test_release_undone_leaves_old_night_claims_alone(env):
+    # Since 2026-06-04 ids don't collide, but if one did, tonight's un-Done live
+    # entry must never release an older night's claim on the same id.
+    night = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    env.ss._set_meta("night_started_at", night)
+    live = env.rs.add_entry("Wren B", "Uprising - Muse")  # not Done
+    assert env.ss.try_claim("2026-07-01", live["id"], WREN, "kj_old", "Wren B", 1) == "claimed"
+    env.outbox().scan()
+    assert env.ss.claims_for_nights(["2026-07-01"]) == {("2026-07-01", live["id"]): [WREN]}

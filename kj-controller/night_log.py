@@ -31,6 +31,7 @@ import bisect
 import datetime as dt
 import json
 import os
+import sqlite3
 import threading
 import time
 
@@ -342,7 +343,7 @@ class NightLog:
             return {(r[0], r[1]): r[2] for r in self.rotation_store._get_conn().execute(
                 "SELECT night, entry_id, COUNT(*) FROM history_claims "
                 "GROUP BY night, entry_id")}
-        except Exception:
+        except sqlite3.OperationalError:
             return {}  # history_claims absent (fresh / test DB without SingStore)
 
     def _live_night(self):

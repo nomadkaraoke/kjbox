@@ -604,51 +604,57 @@ def seed_history(app, nights, identity=None):
 
     out = []
     claims = []  # written after the archive rows commit (another connection)
-    for n in nights:
-        date = n["date"]
-        refs = {}
-        for i, e in enumerate(n["entries"]):
-            eid = next_id
-            next_id += 1
-            refs[e["ref"]] = eid
-            link = e.get("link", "exact")
-            singer = e["singer"].strip()
-            artist = (e.get("artist") or "").strip()
-            title = e["title"].strip()
-            created = _local_plus(date, i * 6)
-            media_id = f"lib-hist{eid}"
-            singers = e.get("singers")
-            conn.execute(
-                "INSERT INTO rotation_archive (night_date, singer, song_artist, status, notes, "
-                "position, file_path, duration, created_at, entry_id, done_at, singers_json) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (date, singer, song_text(artist, title), e.get("status") or "Done", "", i,
-                 f"/localstack/history/{artist} - {title} [{media_id}].mp4", None, created,
-                 eid if link == "exact" else None,
-                 _local_plus(date, i * 6 + 4) if link == "exact" else None,
-                 json.dumps(singers) if singers else None))
-            play_entry = eid if link in ("exact", "inferred") else None
-            if stats is not None and (link == "inferred" or e.get("played")):
-                played = _local_plus(date, i * 6 + 1)
-                sconn = stats._get_conn()
-                sconn.execute(
-                    "INSERT INTO play_events (media_id, singer, singer_norm, played_at, "
-                    "night_date, entry_id, source, artist, title) "
-                    "VALUES (?,?,?,?,?,?, 'live', ?, ?)",
-                    (media_id, singer, " ".join(singer.split()).lower(), _utc_of_local(played),
-                     date, play_entry, artist or None, title))
-                sconn.commit()
-            if e.get("claimed_by"):
-                claims.append((date, eid, str(e["claimed_by"]).strip().lower(), singer,
-                               max(1, len(singers or [singer]))))
-        out.append({"date": date, "entries": refs})
-    if row:
-        conn.execute("UPDATE sqlite_sequence SET seq=? WHERE name='rotation_entries'",
-                     (next_id - 1,))
-    else:
-        conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('rotation_entries', ?)",
-                     (next_id - 1,))
-    conn.commit()
+    try:
+        for n in nights:
+            date = n["date"]
+            refs = {}
+            for i, e in enumerate(n["entries"]):
+                eid = next_id
+                next_id += 1
+                refs[e["ref"]] = eid
+                link = e.get("link", "exact")
+                singer = e["singer"].strip()
+                artist = (e.get("artist") or "").strip()
+                title = e["title"].strip()
+                created = _local_plus(date, i * 6)
+                media_id = f"lib-hist{eid}"
+                singers = e.get("singers")
+                conn.execute(
+                    "INSERT INTO rotation_archive (night_date, singer, song_artist, status, notes, "
+                    "position, file_path, duration, created_at, entry_id, done_at, singers_json) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (date, singer, song_text(artist, title), e.get("status") or "Done", "", i,
+                     f"/localstack/history/{artist} - {title} [{media_id}].mp4", None, created,
+                     eid if link == "exact" else None,
+                     _local_plus(date, i * 6 + 4) if link == "exact" else None,
+                     json.dumps(singers) if singers else None))
+                play_entry = eid if link in ("exact", "inferred") else None
+                if stats is not None and (link == "inferred" or e.get("played")):
+                    played = _local_plus(date, i * 6 + 1)
+                    sconn = stats._get_conn()
+                    sconn.execute(
+                        "INSERT INTO play_events (media_id, singer, singer_norm, played_at, "
+                        "night_date, entry_id, source, artist, title) "
+                        "VALUES (?,?,?,?,?,?, 'live', ?, ?)",
+                        (media_id, singer, " ".join(singer.split()).lower(), _utc_of_local(played),
+                         date, play_entry, artist or None, title))
+                    sconn.commit()
+                if e.get("claimed_by"):
+                    claims.append((date, eid, str(e["claimed_by"]).strip().lower(), singer,
+                                   max(1, len(singers or [singer]))))
+            out.append({"date": date, "entries": refs})
+        if row:
+            conn.execute("UPDATE sqlite_sequence SET seq=? WHERE name='rotation_entries'",
+                         (next_id - 1,))
+        else:
+            conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES ('rotation_entries', ?)",
+                         (next_id - 1,))
+        conn.commit()
+    except Exception:
+        # Leave no half-seeded night behind (play events live in the media DB
+        # and commit on their own; the next /reset clears them).
+        conn.rollback()
+        raise
     for date, eid, email, singer, capacity in claims:
         store.try_claim(date, eid, email,
                         history_claims.claim_history_id(box_id, date, eid, email),

@@ -448,3 +448,23 @@ def test_history_seed_claims_on_a_file_db(mock_config, monkeypatch, tmp_path):
             assert [c_["gen_email"] for c_ in claims] == [HIST_JUNO]
     finally:
         app.catalog.close()
+
+
+def test_history_seed_failure_leaves_no_half_night(test_api_app, monkeypatch):
+    calls = []
+    real = localstack.song_text
+
+    def boom_on_second(artist, title):
+        calls.append(title)
+        if len(calls) == 2:
+            raise RuntimeError("disk full")
+        return real(artist, title)
+
+    monkeypatch.setattr(localstack, "song_text", boom_on_second)
+    nights = [{"date": "2026-10-08", "entries": [
+        {"ref": "a", "singer": "Wren", "title": "Hello"},
+        {"ref": "b", "singer": "Juno", "title": "Uprising"}]}]
+    with pytest.raises(RuntimeError):
+        localstack.seed_history(test_api_app, nights)
+    conn = test_api_app.rotation.store._get_conn()
+    assert conn.execute("SELECT COUNT(*) FROM rotation_archive").fetchone()[0] == 0

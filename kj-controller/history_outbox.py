@@ -332,16 +332,13 @@ class HistoryOutbox:
         since = (dt.date.fromisoformat(start) - dt.timedelta(days=1)).isoformat()
         undone = [e["id"] for e in self.rotation_store.get_entries(include_done=True)
                   if not _is_done(e)]
+        from history_claims import release_claims  # lazy: history_claims imports us
         changed = 0
         for row in store.claim_rows_for_entries(undone):
             if row["night"] < since:
                 continue
-            store.delete_claim(row["night"], row["entry_id"], email=row["gen_email"])
-            gone = {"history_id": row["history_id"], "gen_email": row["gen_email"],
-                    "entry_id": str(row["entry_id"])}
-            if store.outbox_enqueue(row["history_id"], "delete", gone,
-                                    night_started_at="claim:" + row["night"], now=now):
-                changed += 1
+            changed += len(release_claims(store, row["night"], row["entry_id"],
+                                          email=row["gen_email"], now=now))
         return changed
 
     def _scan(self):
@@ -377,7 +374,8 @@ class HistoryOutbox:
                 # this rare path). A claim in the moments between this read and
                 # the enqueue below can still let a solo entry be recorded for
                 # two accounts; try_claim counts outbox puts, so the reverse
-                # order is always caught.
+                # order is always caught. (history_claims.claim closes its own
+                # orphan-put window after its enqueue.)
                 fresh = store.claim_holders([entry["id"]]).get(entry["id"])
                 if fresh != ctx.claims.get(entry["id"]):
                     ctx.claims[entry["id"]] = fresh

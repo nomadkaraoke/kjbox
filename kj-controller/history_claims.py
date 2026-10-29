@@ -378,17 +378,38 @@ def _entry_ids(values):
     return out
 
 
+def release_claims(store, night, entry_id, email=None, now=None):
+    """Release the claims on ``(night, entry_id)`` (only ``email``'s when
+    given) and retract each one's record from decide: ``delete_claim``, then a
+    ``delete`` for the stored ``history_id`` with the outbox's
+    ``{history_id, gen_email, entry_id}`` body, under the night
+    ``claim:<night>``. Returns the released rows. Used by the host undo
+    (R41) and by the outbox when the host un-Dones a claimed song (R52)."""
+    rows = store.delete_claim(night, entry_id, email=email)
+    for row in rows:
+        gone = {"history_id": row["history_id"], "gen_email": row["gen_email"],
+                "entry_id": str(row["entry_id"])}
+        store.outbox_enqueue(row["history_id"], "delete", gone,
+                             night_started_at="claim:" + row["night"], now=now)
+    return rows
+
+
 def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine, now=None):
     """Save the ticked songs of one night as this account's (``mine``) and
-    remember the unticked ones (``not_mine``, R33). Every id must be a song of
-    that night that matches the account (or one it already holds), else
-    ``ClaimError("invalid")`` and nothing is written; an unknown night is
-    ``ClaimError("not_found")``. Returns ``{saved, already_saved, taken,
-    rejected}``. ``not_mine`` on a song the account holds is ``invalid`` (R51:
-    a stored rejection would hide it if a host undo later frees it); ``mine``
-    on a song it once marked not mine clears that rejection. Claims are first-come per singer slot (``try_claim``) and go
-    to decide through the outbox under the night ``claim:<date>``, which
-    tonight's scan never compares or retracts."""
+    remember the unticked ones (``not_mine``, R33).
+
+    Every id must be a song of that night that matches the account (or one it
+    already holds), else ``ClaimError("invalid")`` and nothing is written; an
+    unknown night is ``ClaimError("not_found")``. ``not_mine`` on a song the
+    account holds is also ``invalid`` (R51: a stored rejection would hide it if
+    a host undo later frees it); ``mine`` on a song it once marked not mine
+    clears that rejection.
+
+    Claims are first come per singer slot (``try_claim``) and go to decide
+    through the outbox under the night ``claim:<date>``, which tonight's scan
+    never compares or retracts. Returns ``{saved, already_saved, taken,
+    rejected}``.
+    """
     me = (email or "").strip().lower()
     mine, not_mine = _entry_ids(mine), _entry_ids(not_mine)
     if not me or (not mine and not not_mine) or set(mine) & set(not_mine):
@@ -427,6 +448,15 @@ def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine,
         payload = claim_payload(entry, night, night_id, me, hid, venue, box_id)
         store.outbox_enqueue(hid, "put", payload, night_started_at="claim:" + night, now=now)
         queued = True
+        # Orphan-put window: a release (host undo, or the host un-Doning the
+        # song) between try_claim and the enqueue above already queued its
+        # delete, which this put just replaced. With the claim row gone, put
+        # the delete back so decide never keeps a record nobody holds. (Next
+        # to the R47 re-check in HistoryOutbox._scan: the same kind of window.)
+        if (night, eid) not in store.claims_for_email(me):
+            store.outbox_enqueue(hid, "delete", {"history_id": hid, "gen_email": me,
+                                                 "entry_id": str(eid)},
+                                 night_started_at="claim:" + night, now=now)
     if not_mine:
         store.add_rejections(store.email_hash(me), night, not_mine)
     if queued and outbox is not None:

@@ -7441,12 +7441,8 @@ def history_claims_undo():
     store = getattr(current_app, 'sing_store', None)
     if store is None:
         return jsonify({"error": "sing store unavailable"}), 503
-    rows = store.delete_claim(night, entry_id, email=email)
-    for row in rows:
-        gone = {"history_id": row["history_id"], "gen_email": row["gen_email"],
-                "entry_id": str(row["entry_id"])}
-        store.outbox_enqueue(row["history_id"], "delete", gone,
-                             night_started_at="claim:" + night)
+    from history_claims import release_claims
+    rows = release_claims(store, night, entry_id, email=email)
     outbox = getattr(current_app, 'history_outbox', None)
     if rows and outbox is not None:
         outbox.notify_rotation_changed()

@@ -456,7 +456,6 @@ class _FakeHttp:
 
 
 def _claimed_past_song(flask_app, email="e2e-wren@example.com", eid=8301):
-    from history_claims import claim_payload
     rs, ss = flask_app.rotation.store, flask_app.sing_store
     _exact_archive(rs, eid, "Wren B", "Hello - Adele", "2026-10-20 21:00:00",
                    "2026-10-20 21:05:00")
@@ -464,13 +463,12 @@ def _claimed_past_song(flask_app, email="e2e-wren@example.com", eid=8301):
     assert ss.try_claim("2026-10-20", eid, email, hid, "Wren B", 1) == "claimed"
     ss.outbox_enqueue(hid, "put", {"history_id": hid, "gen_email": email,
                                    "entry_id": str(eid)}, "claim:2026-10-20")
-    assert claim_payload  # the real payload shape is covered in test_history_claim.py
     return hid
 
 
 def test_claims_undo_route_deletes_claim_and_retracts_record(flask_app, flask_test_client):
     import night_log as nl
-    from history_claims import account_names, suggestions
+    from history_claims import suggestions
     ss = flask_app.sing_store
     hid = _claimed_past_song(flask_app)
     ob = flask_app.history_outbox
@@ -501,7 +499,6 @@ def test_claims_undo_route_deletes_claim_and_retracts_record(flask_app, flask_te
     log = nl.NightLog(flask_app.rotation.store, flask_app.stats._get_conn)
     got = suggestions(log, ss, flask_app.kj_config, names, "e2e-other@example.com")
     assert [s["entry_id"] for s in got["nights"][0]["songs"]] == [8301]
-    assert account_names  # imported for symmetry with the v1 route
 
 
 def test_claims_undo_route_one_email_and_validation(flask_app, flask_test_client):
