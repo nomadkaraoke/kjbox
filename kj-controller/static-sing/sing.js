@@ -1522,11 +1522,11 @@ function _hasClass(group, cls) {
 const _artistKey = (s) => String(s || "").toLowerCase().normalize("NFKD")
   .replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 // Every artist a song credits, as {key → name}: the whole credit plus each
-// featured/joint artist, so "Quavo & Lana Del Rey" and "Lana Del Rey ft. X"
-// both count as Lana Del Rey. Parenthesised tags ("(Wbgv)") are dropped.
+// featured/joint artist, so "Quavo & Lana Del Rey", "Lana Del Rey and X" and
+// "Lana Del Rey ft. X" all count as Lana Del Rey. Parenthesised tags ("(Wbgv)") are dropped.
 function _artistKeys(artist) {
   const base = String(artist || "").replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
-  const parts = base.split(/\s+(?:ft\.?|feat\.?|featuring)\s+|\s*[&,;/+]\s*/i);
+  const parts = base.split(/\s+(?:ft\.?|feat\.?|featuring|and)\s+|\s*[&,;/+]\s*/i);
   const out = new Map();
   for (const name of [base, ...parts]) {
     const key = _artistKey(name);
@@ -2944,7 +2944,8 @@ function renderSearch() {
     // row previews, shows and requests the best version of that kind even when
     // the KJ's overall best is the other kind.
     const featured = (filters.audio !== "all" && (group.versions || []).find((v) => _versionClass(v) === filters.audio)) || best;
-    const ownPick = featured !== best;
+    // Bound to that version (not kj_pick), so approval can't swap in the other kind.
+    const ownPick = filters.audio !== "all" && !!featured && _versionClass(featured) === filters.audio;
     const toggleOpen = (e) => {
       e.stopPropagation();
       if (!armed()) return;
@@ -3013,7 +3014,7 @@ function renderSearch() {
         children.push(renderVersionsExpander(group));
       } else {
         children.push(el("div", { class: "sing-auto-hint" }, t(ownPick ? `search.pickByFilter.${filters.audio}` : "search.autoBest")));
-        if (!isExpanded) children.push(renderVersionRow(group, featured, !ownPick, { compact: true }));
+        if (!isExpanded) children.push(renderVersionRow(group, featured, featured === best, { compact: true }));
         children.push(el("button", {
           class: "sing-versions-toggle",
           "aria-expanded": isExpanded ? "true" : "false",
@@ -3076,6 +3077,8 @@ function renderSearch() {
         const byArtist = (g) => _artistKeys(g.artist).has(artist.key);
         others = shownSongs.filter((g) => !byArtist(g));
         shownSongs = shownSongs.filter(byArtist);
+        // Nothing by the artist matches the filter: show the matches, not a closed group.
+        if (!shownSongs.length) { shownSongs = others; others = []; }
       }
     }
 

@@ -158,3 +158,27 @@ class TestCompactResults:
         self._search(page, live_server, live_token, LANA, rows=6)
         page.locator(".result-row", has_text="Video Games").locator('[data-testid="request-song"]').click()
         assert page.evaluate("window.__sing_state.selected.source_type") == "kj_pick"
+
+    def test_filter_binds_request_even_when_best_already_matches(self, page, live_server, live_token):
+        # Best version is already the Original one; with the filter on, Request must still
+        # bind it (not kj_pick), so approval can't swap in the cover band version.
+        songs = list(LANA)
+        songs[0] = _song("Video Games", versions=[_kn_community("CARPY"), _local("commercial", "KV", "Video Games")])
+        self._search(page, live_server, live_token, songs, rows=6)
+        page.locator('[data-testid="filter-community"]').click()
+        page.locator(".result-row", has_text="Video Games").locator('[data-testid="request-song"]').click()
+        sel = page.evaluate("window.__sing_state.selected")
+        assert sel["source_type"] == "kn" and sel["source_ref"] == "https://youtu.be/CARPY"
+
+    def test_and_credit_counts_as_the_artist(self, page, live_server, live_token):
+        songs = LANA + [_song("Duet Song", artist="Lana Del Rey and The Weeknd")]
+        self._search(page, live_server, live_token, songs, rows=7)
+        assert "Duet Song" in self._titles(page)
+
+    def test_filter_matching_only_other_artists_shows_them(self, page, live_server, live_token):
+        songs = [_song(t) for t in ("Love", "Ride", "Cola", "Yayo", "Carmen")] + [
+            _song("ILYSB", artist="LANY", versions=[_kn_community("LANY")])]
+        self._search(page, live_server, live_token, songs, rows=5)
+        page.locator('[data-testid="filter-community"]').click()
+        assert self._titles(page) == ["ILYSB"]
+        expect(page.locator('[data-testid="others-toggle"]')).to_have_count(0)
