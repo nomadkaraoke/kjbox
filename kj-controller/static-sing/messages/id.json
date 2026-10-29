@@ -84,7 +84,27 @@
     "changingHint": "Pilih lagu baru di bawah — posisi antreanmu tetap sama.",
     "keepSong": "Pertahankan laguku",
     "requestCta": "Minta lagu ini →",
+    "requestShort": "Minta",
+    "chooseShort": "Pilih",
+    "versionCount": {
+      "one": "{count} versi",
+      "other": "{count} versi"
+    },
+    "filterLabel": "Saring lagu",
+    "filterAll": "Semua",
+    "sortLabel": "Urutkan:",
+    "sortBest": "Paling cocok",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} lagu dari artis lain",
+      "other": "▸ {count} lagu dari artis lain"
+    },
+    "othersHide": "▾ Sembunyikan lagu dari artis lain",
     "autoBest": "Versi terbaik dipilih otomatis",
+    "pickByFilter": {
+      "community": "Versi audio asli dipilih (filter Anda)",
+      "commercial": "Versi cover band dipilih (filter Anda)"
+    },
     "versionsToggle": {
       "one": "Pilih dari {count} versi →",
       "other": "Pilih dari {count} versi →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Di pustaka kami",
     "sectionCloud": "Di pustaka cloud kami",
     "sectionOnline": "Hanya online (perlu diunduh)",
-    "sectionCommunity": "Komunitas (penghapusan vokal AI)",
+    "sectionCommunity": "Audio asli (vokal dihilangkan dengan AI)",
     "moreOnline": {
       "one": "▸ {count} versi online lagi (perlu diunduh)",
       "other": "▸ {count} versi online lagi (perlu diunduh)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Sangat andal — dari pustaka cloud kami · {size}",
     "sourceCloudNoSize": "Sangat andal — dari pustaka cloud kami",
     "sourceYouTube": "Hampir selalu berhasil — unduhan YouTube kadang-kadang gagal",
-    "community": "Komunitas",
-    "commercial": "Komersial",
+    "community": "🎵 Asli",
+    "commercial": "🎸 Cover band",
     "classTitle": "Apa artinya ini?",
     "formatTitle": "Detail teknis",
     "brandTitle": "Tentang produser ini",
     "preview": "▶ Pratinjau",
     "pick": "Pilih versi ini →",
-    "ccTitle": "ℹ️ Komersial vs Komunitas",
+    "ccTitle": "ℹ️ Audio Asli vs Cover Band",
     "ccCommercial": "trek karaoke profesional: band cover merekam musik latarnya, lirik ada di layar, kamu yang menyanyi vokal utamanya. Terdengar seperti karaoke.",
     "ccCommunity": "rekaman asli, dengan vokal utama yang dihapus oleh AI. Terdengar seperti lagu aslinya.",
-    "ccHint": "Kebanyakan penyanyi memilih komersial untuk lagu klasik dan komunitas untuk lagu baru atau langka.",
+    "ccHint": "Sebagian besar penyanyi memilih trek cover band untuk lagu klasik dan audio asli untuk lagu baru atau lagu khusus.",
     "gotIt": "Mengerti",
     "explainer": {
       "whatItIs": "Apa itu",
       "howItSounds": "Bagaimana suaranya",
       "goodFor": "Bagus untuk",
-      "communityTitle": "Trek komunitas",
-      "communityWhat": "Rekaman asli lagu, dengan vokal utama yang dihapus oleh AI dan lirik karaoke ditambahkan oleh produser hobi.",
+      "communityTitle": "🎵 Audio asli",
+      "communityWhat": "Rekaman asli dari lagunya, dengan vokal utama yang dihilangkan oleh AI dan lirik karaoke yang ditambahkan oleh pembuat hobi. Penggemar karaoke menyebut ini trek \"komunitas\".",
       "communityHow": "Seperti lagu aslinya — instrumen sama, vokal latar sama, energi sama.",
       "communityGood": "Rilis terbaru, lagu langka, dan siapa saja yang ingin suaranya persis seperti rekaman asli.",
-      "commercialTitle": "Trek komersial",
-      "commercialWhat": "Produksi karaoke profesional: band cover merekam ulang musik latarnya dan sebuah perusahaan menambahkan liriknya.",
+      "commercialTitle": "🎸 Audio cover band",
+      "commercialWhat": "Produksi karaoke profesional: band pengiring merekam ulang trek latar dan sebuah perusahaan menambahkan liriknya. Penggemar karaoke menyebut ini trek \"komersial\".",
       "commercialHow": "Seperti karaoke klasik — cover yang mirip, tapi bukan rekaman aslinya.",
       "commercialGood": "Lagu klasik dan hits terkenal; timing lirik biasanya sangat bisa diandalkan.",
-      "commercialSummary": "Sebagai perbandingan, lagu komersial adalah versi cover yang direkam ulang untuk karaoke — suaranya seperti musik karaoke.",
-      "communitySummary": "Sebagai perbandingan, lagu komunitas menggunakan audio lagu asli dengan suara vokal yang dihilangkan — suaranya seperti rekaman aslinya."
+      "commercialSummary": "Sebagai perbandingan, trek cover band direkam ulang khusus untuk karaoke — suaranya khas karaoke.",
+      "communitySummary": "Sebagai perbandingan, trek audio asli memakai rekaman lagu itu sendiri dengan vokal yang dihilangkan — suaranya persis rekaman aslinya."
     },
     "brands": {
       "CC": "CC Karaoke — salah satu produser komunitas paling produktif — trek rekaman asli dengan penghapusan vokal AI dan lirik yang bersih serta mudah dibaca.",

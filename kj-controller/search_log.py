@@ -45,6 +45,7 @@ CHOICE_ACTIONS = {
     "youtube_submit",       # pasted a YouTube link
     "describe_open",        # opened "Can't remember the name? Describe it"
     "describe_submit",      # sent a description to the Gemini fallback
+    "filter_toggle",        # toggled a results filter chip (data.filter: audio | sort | others_open, data.value)
 }
 MAX_DATA_BYTES = 4000
 # Retention: a year of shows is plenty for review; the row cap bounds the file

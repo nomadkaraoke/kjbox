@@ -84,7 +84,27 @@
     "changingHint": "Kies hieronder het nieuwe nummer — je behoudt je plek in de rij.",
     "keepSong": "Mijn nummer behouden",
     "requestCta": "Vraag dit nummer aan →",
+    "requestShort": "Aanvragen",
+    "chooseShort": "Kiezen",
+    "versionCount": {
+      "one": "{count} versie",
+      "other": "{count} versies"
+    },
+    "filterLabel": "Nummers filteren",
+    "filterAll": "Alles",
+    "sortLabel": "Sorteren:",
+    "sortBest": "Beste match",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} nummer van andere artiesten",
+      "other": "▸ {count} nummers van andere artiesten"
+    },
+    "othersHide": "▾ Verberg nummers van andere artiesten",
     "autoBest": "Beste versie automatisch gekozen",
+    "pickByFilter": {
+      "community": "Originele audioversie gekozen (jouw filter)",
+      "commercial": "Coverbandversie gekozen (jouw filter)"
+    },
     "versionsToggle": {
       "one": "Kies uit {count} versie →",
       "other": "Kies uit {count} versies →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "In onze bibliotheek",
     "sectionCloud": "In onze cloudbibliotheek",
     "sectionOnline": "Alleen online (download nodig)",
-    "sectionCommunity": "Community (AI-zangverwijdering)",
+    "sectionCommunity": "Originele audio (zang verwijderd met AI)",
     "moreOnline": {
       "one": "▸ nog {count} online versie (download nodig)",
       "other": "▸ nog {count} online versies (download nodig)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Zeer betrouwbaar — uit onze cloudbibliotheek · {size}",
     "sourceCloudNoSize": "Zeer betrouwbaar — uit onze cloudbibliotheek",
     "sourceYouTube": "Werkt bijna altijd — YouTube-downloads mislukken soms",
-    "community": "Community",
-    "commercial": "Commercieel",
+    "community": "🎵 Origineel",
+    "commercial": "🎸 Coverband",
     "classTitle": "Wat betekent dit?",
     "formatTitle": "Technische details",
     "brandTitle": "Over deze producent",
     "preview": "▶ Voorbeeld",
     "pick": "Kies deze versie →",
-    "ccTitle": "ℹ️ Commercieel vs Community",
+    "ccTitle": "ℹ️ Origineel vs. Coverband",
     "ccCommercial": "een professionele karaoketrack: een coverband neemt de muziek op, songteksten staan op het scherm, jij zingt de lead. Klinkt als karaoke.",
     "ccCommunity": "de originele opname, waarbij de zang door AI is verwijderd. Klinkt als het echte nummer.",
-    "ccHint": "De meeste zangers kiezen commercieel voor klassiekers en community voor recente of niche nummers.",
+    "ccHint": "De meeste zangers kiezen coverbandtracks voor klassiekers en originele audio voor recente nummers of niche nummers.",
     "gotIt": "Begrepen",
     "explainer": {
       "whatItIs": "Wat het is",
       "howItSounds": "Hoe het klinkt",
       "goodFor": "Goed voor",
-      "communityTitle": "Community track",
-      "communityWhat": "De originele opname van het nummer, waarbij de zang door AI is verwijderd en karaokesongteksten zijn toegevoegd door een hobby-producent.",
+      "communityTitle": "🎵 Originele audio",
+      "communityWhat": "De originele opname van het nummer, waarbij de leadzang met AI is verwijderd en de karaoketekst is toegevoegd door een hobbymatige maker. Karaokefans noemen dit 'community'-tracks.",
       "communityHow": "Zoals het echte nummer — dezelfde instrumenten, dezelfde achtergrondzang, dezelfde energie.",
       "communityGood": "Recente releases, niche nummers, en iedereen die wil dat het precies klinkt als de plaat.",
-      "commercialTitle": "Commerciële track",
-      "commercialWhat": "Een professionele karaokeproductie: een coverband neemt de muziek opnieuw op en een bedrijf voegt de songteksten toe.",
+      "commercialTitle": "🎸 Coverband-audio",
+      "commercialWhat": "Een professionele karaokeproductie: een coverband speelt de muziek opnieuw in en een bedrijf voegt de songtekst toe. Karaokefans noemen dit 'commerciële' tracks.",
       "commercialHow": "Zoals klassieke karaoke — een trouwe cover, maar niet de originele opname.",
       "commercialGood": "Klassiekers en bekende hits; timing van songteksten is meestal erg betrouwbaar.",
-      "commercialSummary": "Ter vergelijking: commerciële nummers zijn covers die opnieuw zijn opgenomen voor karaoke — ze klinken als karaoke.",
-      "communitySummary": "Ter vergelijking: community-nummers gebruiken de originele audio zonder de zang — ze klinken als het origineel."
+      "commercialSummary": "Ter vergelijking: coverbandtracks zijn opnieuw opgenomen voor karaoke — ze klinken echt als karaoke.",
+      "communitySummary": "Ter vergelijking: originele audiotracks gebruiken de opname van het nummer zelf met de zang verwijderd — ze klinken precies zoals de plaat."
     },
     "brands": {
       "CC": "Een van de meest productieve community producenten — originele opnames met AI-zangverwijdering en duidelijke, leesbare songteksten.",

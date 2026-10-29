@@ -84,7 +84,27 @@
     "changingHint": "Aşağıdan yeni şarkıyı seç — sıradaki yerini korursun.",
     "keepSong": "Şarkımı tut",
     "requestCta": "Bu şarkıyı iste →",
+    "requestShort": "İste",
+    "chooseShort": "Seç",
+    "versionCount": {
+      "one": "{count} versiyon",
+      "other": "{count} versiyon"
+    },
+    "filterLabel": "Şarkıları filtrele",
+    "filterAll": "Tümü",
+    "sortLabel": "Sırala:",
+    "sortBest": "En iyi eşleşme",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ Diğer sanatçılardan {count} şarkı",
+      "other": "▸ Diğer sanatçılardan {count} şarkı"
+    },
+    "othersHide": "▾ Diğer sanatçıların şarkılarını gizle",
     "autoBest": "En iyi versiyon otomatik seçildi",
+    "pickByFilter": {
+      "community": "Orijinal ses versiyonu seçildi (filtrene göre)",
+      "commercial": "Cover grubu versiyonu seçildi (filtrene göre)"
+    },
     "versionsToggle": {
       "one": "{count} versiyon arasından seç →",
       "other": "{count} versiyon arasından seç →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Kütüphanemizde",
     "sectionCloud": "Bulut kütüphanemizde",
     "sectionOnline": "Sadece çevrimiçi (indirme gerekir)",
-    "sectionCommunity": "Topluluk (Yapay zeka vokal çıkarma)",
+    "sectionCommunity": "Orijinal ses (Yapay zekayla vokal çıkarma)",
     "moreOnline": {
       "one": "▸ {count} çevrimiçi versiyon daha (indirme gerekir)",
       "other": "▸ {count} çevrimiçi versiyon daha (indirme gerekir)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Çok güvenilir — bulut kütüphanemizden · {size}",
     "sourceCloudNoSize": "Çok güvenilir — bulut kütüphanemizden",
     "sourceYouTube": "Neredeyse her zaman çalışır — YouTube indirmeleri bazen başarısız olabilir",
-    "community": "Topluluk",
-    "commercial": "Ticari",
+    "community": "🎵 Orijinal",
+    "commercial": "🎸 Cover grubu",
     "classTitle": "Bu ne anlama geliyor?",
     "formatTitle": "Teknik detaylar",
     "brandTitle": "Bu yapımcı hakkında",
     "preview": "▶ Önizleme",
     "pick": "Bu versiyonu seç →",
-    "ccTitle": "ℹ️ Ticari ve Topluluk",
+    "ccTitle": "ℹ️ Orijinal vs. Cover grubu",
     "ccCommercial": "profesyonel bir karaoke parçası: bir cover grubu altyapıyı kaydeder, sözler ekrandadır, sen ana vokali söylersin. Karaoke gibi duyulur.",
     "ccCommunity": "orijinal kayıt, yapay zeka ile ana vokal çıkarılmış. Gerçek şarkı gibi duyulur.",
-    "ccHint": "Çoğu şarkıcı klasikler için ticariyi, yeni veya niş şarkılar için topluluğu seçer.",
+    "ccHint": "Çoğu şarkıcı klasikler için cover grubunu, yeni veya niş şarkılar içinse orijinal sesi tercih eder.",
     "gotIt": "Anladım",
     "explainer": {
       "whatItIs": "Nedir",
       "howItSounds": "Nasıl duyulur",
       "goodFor": "Şunlar için iyi",
-      "communityTitle": "Topluluk parçası",
-      "communityWhat": "Şarkının orijinal kaydı, yapay zeka ile ana vokal çıkarılmış ve hobi olarak yapan bir yapımcı tarafından karaoke sözleri eklenmiş.",
+      "communityTitle": "🎵 Orijinal ses kaydı",
+      "communityWhat": "Şarkının kendi orijinal kaydından ana vokalin yapay zekayla çıkarıldığı ve bağımsız bir karaoke üreticisinin şarkı sözlerini senkronize ettiği versiyon. Karaoke tutkunları bunlara \"topluluk\" parçaları der.",
       "communityHow": "Gerçek şarkı gibi — aynı enstrümanlar, aynı geri vokaller, aynı enerji.",
       "communityGood": "Yeni çıkanlar, niş şarkılar ve kaydın birebir aynısı gibi duyulmasını isteyen herkes.",
-      "commercialTitle": "Ticari parça",
-      "commercialWhat": "Profesyonel bir karaoke yapımı: bir cover grubu altyapıyı yeniden kaydeder ve bir şirket sözleri ekler.",
+      "commercialTitle": "🎸 Cover grubu kaydı",
+      "commercialWhat": "Profesyonel bir karaoke yapımı: Bir cover grubu altyapı müziğini yeniden kaydeder ve bir şirket şarkı sözlerini ekler. Karaoke tutkunları bunlara \"ticari\" parçalar der.",
       "commercialHow": "Klasik karaoke gibi — sadık bir cover, ama orijinal kayıt değil.",
       "commercialGood": "Klasikler ve bilinen hitler; söz zamanlaması genelde çok güvenilirdir.",
-      "commercialSummary": "Karşılaştırmak gerekirse, ticari parçalar karaoke için yeniden kaydedilmiş cover'lardır — kulağa karaoke gibi gelir.",
-      "communitySummary": "Karşılaştırmak gerekirse, topluluk parçaları orijinal şarkının vokalleri çıkarılmış halini kullanır — kulağa orijinal kayıt gibi gelir."
+      "commercialSummary": "Karşılaştırmak gerekirse: Cover grubu parçaları karaoke için stüdyoda yeniden kaydedilir; bildiğimiz klasik karaoke tınısına sahiptir.",
+      "communitySummary": "Karşılaştırmak gerekirse: Orijinal ses parçalarında şarkının kendi kaydı kullanılır ve vokaller çıkarılır; doğrudan orijinal albüm kaydı gibi duyulur."
     },
     "brands": {
       "CC": "En üretken topluluk yapımcılarından biri — yapay zeka vokal çıkarma ve temiz, okunabilir sözlere sahip orijinal kayıt parçaları.",

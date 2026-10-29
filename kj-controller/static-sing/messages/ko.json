@@ -84,7 +84,27 @@
     "changingHint": "아래에서 새 노래를 선택하세요. 대기 순서는 유지됩니다.",
     "keepSong": "내 노래 유지",
     "requestCta": "이 노래 신청하기 →",
+    "requestShort": "신청",
+    "chooseShort": "선택",
+    "versionCount": {
+      "one": "{count}개 버전",
+      "other": "{count}개 버전"
+    },
+    "filterLabel": "노래 필터",
+    "filterAll": "전체",
+    "sortLabel": "정렬:",
+    "sortBest": "정확도순",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ 다른 아티스트의 곡 {count}개",
+      "other": "▸ 다른 아티스트의 곡 {count}개"
+    },
+    "othersHide": "▾ 다른 아티스트의 곡 숨기기",
     "autoBest": "가장 좋은 버전이 자동으로 선택됨",
+    "pickByFilter": {
+      "community": "원곡 오디오 버전 선택됨 (설정한 필터)",
+      "commercial": "커버 밴드 버전 선택됨 (설정한 필터)"
+    },
     "versionsToggle": {
       "one": "{count}개 버전 중에서 선택 →",
       "other": "{count}개 버전 중에서 선택 →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "라이브러리",
     "sectionCloud": "클라우드 라이브러리",
     "sectionOnline": "온라인 전용 (다운로드 필요)",
-    "sectionCommunity": "커뮤니티 (AI 보컬 제거)",
+    "sectionCommunity": "원곡 오디오 (AI 보컬 제거)",
     "moreOnline": {
       "one": "▸ {count}개의 온라인 버전 더 보기 (다운로드 필요)",
       "other": "▸ {count}개의 온라인 버전 더 보기 (다운로드 필요)"
@@ -149,32 +169,32 @@
     "sourceCloud": "매우 안정적임 — 클라우드 라이브러리 제공 · {size}",
     "sourceCloudNoSize": "매우 안정적임 — 클라우드 라이브러리 제공",
     "sourceYouTube": "거의 항상 작동함 — 가끔 YouTube 다운로드에 실패할 수 있음",
-    "community": "커뮤니티",
-    "commercial": "상업용",
+    "community": "🎵 원곡",
+    "commercial": "🎸 커버 밴드",
     "classTitle": "이것은 무엇을 의미하나요?",
     "formatTitle": "기술 세부 정보",
     "brandTitle": "이 제작자에 대하여",
     "preview": "▶ 미리보기",
     "pick": "이 버전 선택하기 →",
-    "ccTitle": "ℹ️ 상업용 vs 커뮤니티",
+    "ccTitle": "ℹ️ 원곡 vs 커버 밴드",
     "ccCommercial": "전문 가라오케 트랙: 커버 밴드가 반주를 녹음하고, 화면에 가사가 나오며, 여러분이 리드 보컬을 부릅니다. 가라오케처럼 들립니다.",
     "ccCommunity": "AI로 리드 보컬을 제거한 원본 녹음입니다. 실제 노래처럼 들립니다.",
-    "ccHint": "대부분의 가수는 클래식 곡에는 상업용을, 최신 곡이나 희귀한 곡에는 커뮤니티 버전을 선택합니다.",
+    "ccHint": "보통 명곡이나 고전 곡은 커버 밴드 버전을, 최신곡이나 마니아 곡은 원곡 오디오를 많이 선택해요.",
     "gotIt": "확인",
     "explainer": {
       "whatItIs": "설명",
       "howItSounds": "소리 특징",
       "goodFor": "추천 대상",
-      "communityTitle": "커뮤니티 트랙",
-      "communityWhat": "AI로 리드 보컬을 제거하고 취미 제작자가 가라오케 가사를 추가한 노래의 원본 녹음입니다.",
+      "communityTitle": "🎵 원곡 오디오",
+      "communityWhat": "실제 발매된 원곡 음원에서 AI로 리드 보컬을 제거하고 아마추어 제작자가 노래방 가사를 입힌 트랙이에요. 노래방 마니아들은 이를 \"community\" 트랙이라고 불러요.",
       "communityHow": "실제 노래와 같습니다. 같은 악기, 같은 백보컬, 같은 에너지를 느낄 수 있습니다.",
       "communityGood": "최신 발매곡, 희귀한 노래, 그리고 음반과 똑같이 들리기를 원하는 분들에게 좋습니다.",
-      "commercialTitle": "상업용 트랙",
-      "commercialWhat": "전문 가라오케 프로덕션: 커버 밴드가 반주 트랙을 재녹음하고 회사가 가사를 추가합니다.",
+      "commercialTitle": "🎸 커버 밴드 오디오",
+      "commercialWhat": "전문 노래방 제작사에서 만든 트랙이에요. 커버 밴드가 반주를 새로 연주·녹음하고 전문 업체가 가사를 입혔어요. 노래방 마니아들은 이를 \"commercial\" 트랙이라고 불러요.",
       "commercialHow": "클래식 가라오케와 같습니다. 충실한 커버곡이지만 원본 녹음은 아닙니다.",
       "commercialGood": "클래식 및 유명한 히트곡; 가사 타이밍이 보통 매우 정확합니다.",
-      "commercialSummary": "비교하자면, 상업용 음원은 노래방용으로 다시 녹음된 커버곡이라서 전형적인 노래방 반주처럼 들려요.",
-      "communitySummary": "비교하자면, 커뮤니티 음원은 원곡에서 보컬만 제거한 거라서 실제 음반처럼 들려요."
+      "commercialSummary": "커버 밴드 트랙은 노래방용으로 새로 녹음된 음원으로, 우리가 익히 아는 노래방 반주 느낌이에요.",
+      "communitySummary": "원곡 오디오 트랙은 실제 음원에서 보컬만 쏙 뺀 버전이라 음반 그대로의 사운드로 즐길 수 있어요."
     },
     "brands": {
       "CC": "가장 활발한 커뮤니티 제작자 중 하나입니다. AI 보컬 제거 기술을 적용한 원본 녹음 트랙과 깔끔하고 읽기 쉬운 가사를 제공합니다.",

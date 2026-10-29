@@ -84,7 +84,27 @@
     "changingHint": "在下面选首新歌 — 您的排队位置不会变。",
     "keepSong": "不换了，就这首",
     "requestCta": "点这首歌 →",
+    "requestShort": "点歌",
+    "chooseShort": "选择",
+    "versionCount": {
+      "one": "{count} 个版本",
+      "other": "{count} 个版本"
+    },
+    "filterLabel": "筛选歌曲",
+    "filterAll": "全部",
+    "sortLabel": "排序：",
+    "sortBest": "最佳匹配",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ 其他歌手的 {count} 首歌曲",
+      "other": "▸ 其他歌手的 {count} 首歌曲"
+    },
+    "othersHide": "▾ 隐藏其他歌手的歌曲",
     "autoBest": "自动挑个最好的版本",
+    "pickByFilter": {
+      "community": "已按你的筛选选择原声伴奏版",
+      "commercial": "已按你的筛选选择翻唱伴奏版"
+    },
     "versionsToggle": {
       "one": "从 {count} 个版本中选择 →",
       "other": "从 {count} 个版本中选择 →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "在我们的曲库里",
     "sectionCloud": "在我们的云端曲库里",
     "sectionOnline": "仅限在线（需要下载）",
-    "sectionCommunity": "社区版（AI消音）",
+    "sectionCommunity": "原声伴奏（AI消除人声）",
     "moreOnline": {
       "one": "▸ 还有 {count} 个在线版本（需要下载）",
       "other": "▸ 还有 {count} 个在线版本（需要下载）"
@@ -149,32 +169,32 @@
     "sourceCloud": "非常可靠 — 来自我们的云端曲库 · {size}",
     "sourceCloudNoSize": "非常可靠 — 来自我们的云端曲库",
     "sourceYouTube": "几乎总是可用 — YouTube 下载偶尔会失败",
-    "community": "社区版",
-    "commercial": "商业版",
+    "community": "🎵 原声伴奏",
+    "commercial": "🎸 翻唱伴奏",
     "classTitle": "这是什么意思？",
     "formatTitle": "技术细节",
     "brandTitle": "关于这个制作方",
     "preview": "▶ 预览",
     "pick": "选这个版本 →",
-    "ccTitle": "ℹ️ 商业版 vs 社区版",
+    "ccTitle": "ℹ️ 原声伴奏 vs 翻唱伴奏",
     "ccCommercial": "专业卡拉OK伴奏：翻唱乐队录的背景音乐，屏幕上有歌词，您来当主唱。听起来就是卡拉OK味儿。",
     "ccCommunity": "原版录音，用AI去掉了主唱人声。听起来跟原曲一样。",
-    "ccHint": "大家一般唱老歌选商业版，唱新歌或小众歌选社区版。",
+    "ccHint": "多数朋友唱经典老歌时偏好翻唱伴奏，唱新歌或小众歌时偏好原声伴奏。",
     "gotIt": "知道啦",
     "explainer": {
       "whatItIs": "这是什么",
       "howItSounds": "听起来怎么样",
       "goodFor": "适合",
-      "communityTitle": "社区版伴奏",
-      "communityWhat": "歌曲的原版录音，用AI去掉了主唱人声，再由爱好者配上歌词。",
+      "communityTitle": "🎵 原声伴奏",
+      "communityWhat": "歌曲的原版录音，通过AI消除主唱人声，并由K歌爱好者制作滚动歌词。大家通常称其为“社区伴奏”。",
       "communityHow": "跟原曲一样 — 一样的乐器，一样的和声，一样的感觉。",
       "communityGood": "新歌、小众歌，或者想听起来跟原版唱片一模一样的人。",
-      "commercialTitle": "商业版伴奏",
-      "commercialWhat": "专业的卡拉OK制作：翻唱乐队重新录制背景音乐，再配上歌词。",
+      "commercialTitle": "🎸 翻唱乐队伴奏",
+      "commercialWhat": "专业制作：由翻唱乐队重录伴奏，再由专业公司制作歌词。K歌爱好者通常称其为“商业伴奏”。",
       "commercialHow": "就像经典的卡拉OK — 还原度很高的翻唱，但不是原版。",
       "commercialGood": "经典老歌和热门金曲；歌词卡点通常很准。",
-      "commercialSummary": "相比之下，商业伴奏是为卡拉OK重新录制的翻唱版本——听起来就是卡拉OK的感觉。",
-      "communitySummary": "相比之下，社区伴奏使用的是去除了人声的原版音频——听起来和原曲一模一样。"
+      "commercialSummary": "对比来看，翻唱伴奏是为卡拉OK重新录制的伴奏——听起来就是经典的卡拉OK伴奏风格。",
+      "communitySummary": "对比来看，原声伴奏使用的是歌曲本身的录音并去除了人声——听起来就跟原版唱片一样。"
     },
     "brands": {
       "CC": "最高产的社区制作方之一 — 原版录音伴奏，AI去除人声，歌词清晰易读。",

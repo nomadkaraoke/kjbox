@@ -84,7 +84,27 @@
     "changingHint": "Valitse uusi laulu alta — säilytät paikkasi jonossa.",
     "keepSong": "Pidä lauluni",
     "requestCta": "Pyydä tätä laulua →",
+    "requestShort": "Toivo",
+    "chooseShort": "Valitse",
+    "versionCount": {
+      "one": "{count} versio",
+      "other": "{count} versiota"
+    },
+    "filterLabel": "Suodata kappaleet",
+    "filterAll": "Kaikki",
+    "sortLabel": "Järjestä:",
+    "sortBest": "Paras osuma",
+    "sortAz": "A–Ö",
+    "othersShow": {
+      "one": "▸ {count} muun artistin kappale",
+      "other": "▸ {count} muiden artistien kappaletta"
+    },
+    "othersHide": "▾ Piilota muiden artistien kappaleet",
     "autoBest": "Paras versio valitaan automaattisesti",
+    "pickByFilter": {
+      "community": "Alkuperäinen ääniversio valittu (suodatuksesi mukaan)",
+      "commercial": "Coverbändiversio valittu (suodatuksesi mukaan)"
+    },
     "versionsToggle": {
       "one": "Valitse {count} versiosta →",
       "other": "Valitse {count} versiosta →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Kirjastossamme",
     "sectionCloud": "Pilvikirjastossamme",
     "sectionOnline": "Vain verkossa (vaatii latauksen)",
-    "sectionCommunity": "Yhteisö (tekoälyllä poistettu laulu)",
+    "sectionCommunity": "Alkuperäinen ääniraita (laulu poistettu tekoälyllä)",
     "moreOnline": {
       "one": "▸ {count} muu verkkoversio (vaatii latauksen)",
       "other": "▸ {count} muuta verkkoversiota (vaatii latauksen)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Erittäin luotettava — pilvikirjastostamme · {size}",
     "sourceCloudNoSize": "Erittäin luotettava — pilvikirjastostamme",
     "sourceYouTube": "Toimii melkein aina — YouTube-lataukset epäonnistuvat joskus",
-    "community": "Yhteisö",
-    "commercial": "Kaupallinen",
+    "community": "🎵 Alkuperäinen",
+    "commercial": "🎸 Coverbändi",
     "classTitle": "Mitä tämä tarkoittaa?",
     "formatTitle": "Tekniset tiedot",
     "brandTitle": "Tietoa tästä tuottajasta",
     "preview": "▶ Esikatselu",
     "pick": "Valitse tämä versio →",
-    "ccTitle": "ℹ️ Kaupallinen vs Yhteisö",
+    "ccTitle": "ℹ️ Alkuperäinen vs. Coverbändi",
     "ccCommercial": "ammattilaisten karaoketausta: cover-bändi nauhoittaa taustan, sanat ovat ruudulla, sinä laulat pääosan. Kuulostaa karaokelta.",
     "ccCommunity": "alkuperäinen äänite, josta laulu on poistettu tekoälyllä. Kuulostaa oikealta laululta.",
-    "ccHint": "Useimmat laulajat valitsevat kaupallisen klassikoille ja yhteisön uudemmille tai harvinaisemmille lauluille.",
+    "ccHint": "Useimmat laulajat valitsevat coverbändiversion klassikoille ja alkuperäisen ääniraidan uudemmille tai harvinaisemmille kappaleille.",
     "gotIt": "Selvä",
     "explainer": {
       "whatItIs": "Mikä se on",
       "howItSounds": "Miltä se kuulostaa",
       "goodFor": "Sopii",
-      "communityTitle": "Yhteisötausta",
-      "communityWhat": "Laulun alkuperäinen äänite, josta laulu on poistettu tekoälyllä ja harrastajatuottaja on lisännyt karaokesanat.",
+      "communityTitle": "🎵 Alkuperäinen ääniraita",
+      "communityWhat": "Kappaleen alkuperäinen levytys, josta päälaulu on poistettu tekoälyllä ja johon harrastajatuottaja on lisännyt karaokesanat. Karaoken ystävät kutsuvat näitä \"yhteisötaustoiksi\" (community).",
       "communityHow": "Kuin oikea laulu — samat soittimet, samat taustalaulut, sama energia.",
       "communityGood": "Uudet julkaisut, harvinaiset laulut ja kaikille, jotka haluavat sen kuulostavan täsmälleen levyltä.",
-      "commercialTitle": "Kaupallinen tausta",
-      "commercialWhat": "Ammattilaisten karaoketuotanto: cover-bändi nauhoittaa taustan uudelleen ja yritys lisää sanat.",
+      "commercialTitle": "🎸 Coverbändin ääni",
+      "commercialWhat": "Ammattimainen karaoketuotanto: coverbändi äänittää taustan uudelleen ja yritys lisää sanat. Karaoken ystävät kutsuvat näitä \"kaupallisiksi\" (commercial) taustoiksi.",
       "commercialHow": "Kuin klassinen karaoke — uskollinen cover, mutta ei alkuperäinen äänite.",
       "commercialGood": "Klassikot ja tunnetut hitit; sanojen ajoitus on yleensä erittäin luotettava.",
-      "commercialSummary": "Vertailun vuoksi: kaupalliset versiot ovat karaokea varten uudelleen äänitettyjä cover-versioita — ne kuulostavat karaokelta.",
-      "communitySummary": "Vertailun vuoksi: yhteisöversiot käyttävät alkuperäistä kappaletta ilman lauluraitaa — ne kuulostavat alkuperäiseltä levyltä."
+      "commercialSummary": "Vertailun vuoksi: coverbändiraidat on äänitetty uudelleen karaokea varten – ne kuulostavat karaokelta.",
+      "communitySummary": "Vertailun vuoksi: alkuperäisissä ääniraidoissa käytetään kappaleen omaa levytystä, josta laulu on poistettu – ne kuulostavat samalta kuin alkuperäinen levy."
     },
     "brands": {
       "CC": "Yksi tuotteliaimmista yhteisötuottajista — alkuperäisäänitteitä tekoälyllä poistetulla laululla ja selkeillä, luettavilla sanoilla.",

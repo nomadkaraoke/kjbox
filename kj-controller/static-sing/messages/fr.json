@@ -84,7 +84,27 @@
     "changingHint": "Choisis la nouvelle chanson ci-dessous — tu gardes ta place dans la file.",
     "keepSong": "Garder ma chanson",
     "requestCta": "Demander cette chanson →",
+    "requestShort": "Demander",
+    "chooseShort": "Choisir",
+    "versionCount": {
+      "one": "{count} version",
+      "other": "{count} versions"
+    },
+    "filterLabel": "Filtrer les chansons",
+    "filterAll": "Tout",
+    "sortLabel": "Trier :",
+    "sortBest": "Meilleur résultat",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} chanson d'autres artistes",
+      "other": "▸ {count} chansons d'autres artistes"
+    },
+    "othersHide": "▾ Masquer les chansons d'autres artistes",
     "autoBest": "Meilleure version choisie automatiquement",
+    "pickByFilter": {
+      "community": "Version audio originale choisie (ton filtre)",
+      "commercial": "Version cover band choisie (ton filtre)"
+    },
     "versionsToggle": {
       "one": "Choisir parmi {count} version →",
       "other": "Choisir parmi {count} versions →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Dans notre bibliothèque",
     "sectionCloud": "Dans notre bibliothèque cloud",
     "sectionOnline": "En ligne uniquement (téléchargement requis)",
-    "sectionCommunity": "Communautaire (suppression de voix par l'IA)",
+    "sectionCommunity": "Audio original (voix retirée par IA)",
     "moreOnline": {
       "one": "▸ {count} autre version en ligne (téléchargement requis)",
       "other": "▸ {count} autres versions en ligne (téléchargement requis)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Très fiable — de notre bibliothèque cloud · {size}",
     "sourceCloudNoSize": "Très fiable — de notre bibliothèque cloud",
     "sourceYouTube": "Fonctionne presque toujours — les téléchargements YouTube échouent parfois",
-    "community": "Communautaire",
-    "commercial": "Commercial",
+    "community": "🎵 Original",
+    "commercial": "🎸 Cover band",
     "classTitle": "Qu'est-ce que ça veut dire ?",
     "formatTitle": "Détails techniques",
     "brandTitle": "À propos de ce producteur",
     "preview": "▶ Aperçu",
     "pick": "Choisir cette version →",
-    "ccTitle": "ℹ️ Commercial vs Communautaire",
+    "ccTitle": "ℹ️ Audio original vs Cover band",
     "ccCommercial": "une piste karaoké professionnelle : un groupe de reprises enregistre la musique, les paroles sont à l'écran, tu chantes la voix principale. Ça sonne comme du karaoké.",
     "ccCommunity": "l'enregistrement original, avec la voix principale supprimée par l'IA. Ça sonne comme la vraie chanson.",
-    "ccHint": "La plupart des chanteurs choisissent commercial pour les classiques et communautaire pour les chansons récentes ou rares.",
+    "ccHint": "La plupart des chanteurs choisissent les versions cover band pour les classiques et l'audio original pour les morceaux récents ou plus pointus.",
     "gotIt": "Compris",
     "explainer": {
       "whatItIs": "Ce que c'est",
       "howItSounds": "Comment ça sonne",
       "goodFor": "Idéal pour",
-      "communityTitle": "Piste communautaire",
-      "communityWhat": "L'enregistrement original de la chanson, avec la voix principale supprimée par l'IA et les paroles karaoké ajoutées par un producteur amateur.",
+      "communityTitle": "🎵 Audio original",
+      "communityWhat": "L'enregistrement original de la chanson, avec la voix principale retirée par IA et les paroles ajoutées par un créateur passionné. Les fans de karaoké appellent ça des morceaux « communautaires ».",
       "communityHow": "Comme la vraie chanson — mêmes instruments, mêmes chœurs, même énergie.",
       "communityGood": "Sorties récentes, chansons rares, et tous ceux qui veulent que ça sonne exactement comme le disque.",
-      "commercialTitle": "Piste commerciale",
-      "commercialWhat": "Une production karaoké professionnelle : un groupe de reprises réenregistre la piste d'accompagnement et une entreprise ajoute les paroles.",
+      "commercialTitle": "🎸 Audio cover band",
+      "commercialWhat": "Une production karaoké professionnelle : un groupe de reprise réenregistre la musique d'accompagnement et une entreprise ajoute les paroles. Les fans de karaoké appellent ça des morceaux « commerciaux ».",
       "commercialHow": "Comme le karaoké classique — une reprise fidèle, mais pas l'enregistrement original.",
       "commercialGood": "Classiques et hits connus ; la synchronisation des paroles est généralement très fiable.",
-      "commercialSummary": "En comparaison, les versions commerciales sont des reprises réenregistrées pour le karaoké — elles sonnent comme du karaoké.",
-      "communitySummary": "En comparaison, les versions de la communauté utilisent l'audio de la chanson originale sans les voix — elles sonnent comme l'original."
+      "commercialSummary": "En comparaison, les morceaux cover band sont réenregistrés pour le karaoké — ils ont le son karaoké typique.",
+      "communitySummary": "En comparaison, les morceaux en audio original utilisent l'enregistrement original de la chanson dont on a retiré la voix — ils sonnent comme sur l'album."
     },
     "brands": {
       "CC": "L'un des producteurs communautaires les plus prolifiques — pistes d'enregistrement original avec suppression de la voix par l'IA et paroles claires et lisibles.",

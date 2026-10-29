@@ -84,7 +84,27 @@
     "changingHint": "Velg den nye sangen nedenfor — du beholder plassen din i køen.",
     "keepSong": "Behold sangen min",
     "requestCta": "Ønsk denne sangen →",
+    "requestShort": "Ønsk",
+    "chooseShort": "Velg",
+    "versionCount": {
+      "one": "{count} versjon",
+      "other": "{count} versjoner"
+    },
+    "filterLabel": "Filtrer sanger",
+    "filterAll": "Alle",
+    "sortLabel": "Sorter:",
+    "sortBest": "Beste treff",
+    "sortAz": "A–Å",
+    "othersShow": {
+      "one": "▸ {count} sang av andre artister",
+      "other": "▸ {count} sanger av andre artister"
+    },
+    "othersHide": "▾ Skjul sanger av andre artister",
     "autoBest": "Beste versjon valgt automatisk",
+    "pickByFilter": {
+      "community": "Originallyd-versjon valgt (ditt filter)",
+      "commercial": "Coverband-versjon valgt (ditt filter)"
+    },
     "versionsToggle": {
       "one": "Velg blant {count} versjon →",
       "other": "Velg blant {count} versjoner →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "I biblioteket vårt",
     "sectionCloud": "I skybiblioteket vårt",
     "sectionOnline": "Kun online (nedlasting kreves)",
-    "sectionCommunity": "Community (AI-vokalfjerning)",
+    "sectionCommunity": "Originallyd (vokal fjernet med AI)",
     "moreOnline": {
       "one": "▸ {count} annen online versjon (nedlasting kreves)",
       "other": "▸ {count} flere online versjoner (nedlasting kreves)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Veldig pålitelig — fra skybiblioteket vårt · {size}",
     "sourceCloudNoSize": "Veldig pålitelig — fra skybiblioteket vårt",
     "sourceYouTube": "Fungerer nesten alltid — YouTube-nedlastinger feiler av og til",
-    "community": "Community",
-    "commercial": "Kommersiell",
+    "community": "🎵 Original",
+    "commercial": "🎸 Coverband",
     "classTitle": "Hva betyr dette?",
     "formatTitle": "Tekniske detaljer",
     "brandTitle": "Om denne produsenten",
     "preview": "▶ Forhåndsvis",
     "pick": "Velg denne versjonen →",
-    "ccTitle": "ℹ️ Kommersiell vs Community",
+    "ccTitle": "ℹ️ Original vs. coverband",
     "ccCommercial": "et profesjonelt karaokespor: et coverband spiller inn bakgrunnsmusikken, teksten er på skjermen, du synger hovedvokalen. Høres ut som karaoke.",
     "ccCommunity": "den originale innspillingen, med hovedvokalen fjernet av AI. Høres ut som den ekte sangen.",
-    "ccHint": "De fleste sangere velger kommersiell for klassikere og community for nylige eller nisjesanger.",
+    "ccHint": "De fleste sangere velger coverband-spor for klassikere og originallyd for nyere eller mer ukjente sanger.",
     "gotIt": "Skjønner",
     "explainer": {
       "whatItIs": "Hva det er",
       "howItSounds": "Hvordan det høres ut",
       "goodFor": "Bra for",
-      "communityTitle": "Community-spor",
-      "communityWhat": "Den originale innspillingen av sangen, med hovedvokalen fjernet av AI og karaoketekst lagt til av en hobbyprodusent.",
+      "communityTitle": "🎵 Originallyd",
+      "communityWhat": "Originalinnspillingen av sangen, der hovedvokalen er fjernet med AI og karaoketekst er lagt til av en hobbyprodusent. Karaoke-fans kaller disse «community»-spor.",
       "communityHow": "Som den ekte sangen — samme instrumenter, samme bakgrunnsvokal, samme energi.",
       "communityGood": "Nylige utgivelser, nisjesanger, og alle som vil at det skal høres nøyaktig ut som platen.",
-      "commercialTitle": "Kommersielt spor",
-      "commercialWhat": "En profesjonell karaokeproduksjon: et coverband spiller inn bakgrunnssporet på nytt, og et selskap legger til teksten.",
+      "commercialTitle": "🎸 Coverband-lyd",
+      "commercialWhat": "En profesjonell karaokeproduksjon: Et coverband spiller inn kompet på nytt, og et selskap legger til teksten. Karaoke-fans kaller disse «kommersielle» spor.",
       "commercialHow": "Som klassisk karaoke — en trofast cover, men ikke den originale innspillingen.",
       "commercialGood": "Klassikere og kjente hits; tekst-timingen er vanligvis veldig pålitelig.",
-      "commercialSummary": "Til sammenligning er kommersielle spor coverversjoner som er spilt inn på nytt for karaoke — de høres ut som karaoke.",
-      "communitySummary": "Til sammenligning bruker community-spor originallyden med vokalen fjernet — de høres ut som originalen."
+      "commercialSummary": "Til sammenligning er coverband-spor spilt inn på nytt for karaoke – de høres ut som karaoke.",
+      "communitySummary": "Til sammenligning bruker originallyd-spor selve originalinnspillingen der vokalen er fjernet – de høres ut som på plata."
     },
     "brands": {
       "CC": "En av de mest produktive community-produsentene — spor fra originale innspillinger med AI-vokalfjerning og ren, lesbar tekst.",

@@ -84,7 +84,27 @@
     "changingHint": "Tria la nova cançó a sota — mantens el teu lloc a la cua.",
     "keepSong": "Mantén la meva cançó",
     "requestCta": "Demana aquesta cançó →",
+    "requestShort": "Demana",
+    "chooseShort": "Tria",
+    "versionCount": {
+      "one": "{count} versió",
+      "other": "{count} versions"
+    },
+    "filterLabel": "Filtra les cançons",
+    "filterAll": "Tots",
+    "sortLabel": "Ordena per:",
+    "sortBest": "Més rellevants",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} cançó d'altres artistes",
+      "other": "▸ {count} cançons d'altres artistes"
+    },
+    "othersHide": "▾ Amaga les cançons d'altres artistes",
     "autoBest": "La millor versió es tria automàticament",
+    "pickByFilter": {
+      "community": "S'ha triat la versió amb àudio original (pel teu filtre)",
+      "commercial": "S'ha triat la versió de banda de versions (pel teu filtre)"
+    },
     "versionsToggle": {
       "one": "Tria entre {count} versió →",
       "other": "Tria entre {count} versions →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "A la nostra biblioteca",
     "sectionCloud": "A la nostra biblioteca al núvol",
     "sectionOnline": "Només en línia (cal descarregar)",
-    "sectionCommunity": "Comunitat (eliminació de veu per IA)",
+    "sectionCommunity": "Àudio original (veu eliminada amb IA)",
     "moreOnline": {
       "one": "▸ {count} versió en línia més (cal descarregar)",
       "other": "▸ {count} versions en línia més (cal descarregar)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Molt fiable — de la nostra biblioteca al núvol · {size}",
     "sourceCloudNoSize": "Molt fiable — de la nostra biblioteca al núvol",
     "sourceYouTube": "Gairebé sempre funciona — les descàrregues de YouTube a vegades fallen",
-    "community": "Comunitat",
-    "commercial": "Comercial",
+    "community": "🎵 Original",
+    "commercial": "🎸 Banda de versions",
     "classTitle": "Què vol dir això?",
     "formatTitle": "Detalls tècnics",
     "brandTitle": "Sobre aquest productor",
     "preview": "▶ Previsualitza",
     "pick": "Tria aquesta versió →",
-    "ccTitle": "ℹ️ Comercial vs Comunitat",
+    "ccTitle": "ℹ️ Original vs. Banda de versions",
     "ccCommercial": "una pista de karaoke professional: una banda de versions grava la base, la lletra és a la pantalla, tu cantes la veu principal. Sona a karaoke.",
     "ccCommunity": "la gravació original, amb la veu principal eliminada per IA. Sona com la cançó real.",
-    "ccHint": "La majoria de cantants trien comercial per als clàssics i de la comunitat per a cançons recents o poc conegudes.",
+    "ccHint": "La majoria de cantants trien pistes de banda de versions per als clàssics i l'àudio original per a cançons recents o menys conegudes.",
     "gotIt": "Entès",
     "explainer": {
       "whatItIs": "Què és",
       "howItSounds": "Com sona",
       "goodFor": "Bona per a",
-      "communityTitle": "Pista de la comunitat",
-      "communityWhat": "La gravació original de la cançó, amb la veu principal eliminada per IA i lletres de karaoke afegides per un productor aficionat.",
+      "communityTitle": "🎵 Àudio original",
+      "communityWhat": "La gravació original de la cançó, amb la veu principal eliminada per IA i la lletra de karaoke afegida per un aficionat. Els fans del karaoke en diuen pistes «de la comunitat».",
       "communityHow": "Com la cançó real — mateixos instruments, mateixos cors, mateixa energia.",
       "communityGood": "Llançaments recents, cançons poc conegudes i qualsevol que vulgui que soni exactament com el disc.",
-      "commercialTitle": "Pista comercial",
-      "commercialWhat": "Una producció de karaoke professional: una banda de versions torna a gravar la pista base i una empresa hi afegeix la lletra.",
+      "commercialTitle": "🎸 Àudio de banda de versions",
+      "commercialWhat": "Una producció professional de karaoke: una banda de versions torna a gravar la base instrumental i una empresa hi afeix la lletra. Els aficionats al karaoke en diuen pistes «comercials».",
       "commercialHow": "Com el karaoke clàssic — una versió fidel, però no la gravació original.",
       "commercialGood": "Clàssics i èxits coneguts; la sincronització de la lletra sol ser molt fiable.",
-      "commercialSummary": "Per comparar, les pistes comercials són versions gravades de nou per a karaoke — sonen a karaoke.",
-      "communitySummary": "Per comparar, les pistes de la comunitat utilitzen l'àudio de la cançó original sense la veu — sonen com el disc."
+      "commercialSummary": "Per comparar, les pistes de banda de versions es tornen a gravar per al karaoke: sonen com a karaoke de tota la vida.",
+      "communitySummary": "Per comparar, les pistes d'àudio original fan servir la gravació mateixa de la cançó traient-ne la veu: sonen tal com sonen al disc."
     },
     "brands": {
       "CC": "Un dels productors de la comunitat més prolífics — pistes de gravació original amb eliminació de veu per IA i lletres netes i llegibles.",

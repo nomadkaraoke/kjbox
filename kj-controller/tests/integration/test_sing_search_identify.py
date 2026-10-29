@@ -148,3 +148,11 @@ def test_truncation_marker_is_bounded(tmp_path):
     sl.log("choice", data={"k" * 10000: 1})
     ev = sl.events()[0]["data"]
     assert ev["truncated"] is True and len(json.dumps(ev)) < 500
+
+
+def test_filter_toggle_events_are_logged(client, token, wired):
+    r = client.post(f"/sing/search/event?t={token}", json={
+        "sid": "f", "action": "filter_toggle", "data": {"filter": "audio", "value": "community", "total": 83, "shown": 41}})
+    assert r.status_code == 200
+    assert wired.search_log.events()[0]["data"] == {
+        "action": "filter_toggle", "filter": "audio", "value": "community", "total": 83, "shown": 41}

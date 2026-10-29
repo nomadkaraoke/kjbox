@@ -84,7 +84,27 @@
     "changingHint": "Piliin ang bagong kanta sa ibaba — mananatili ka sa pwesto mo sa pila.",
     "keepSong": "Panatilihin ang kanta ko",
     "requestCta": "I-request ang kantang ito →",
+    "requestShort": "I-request",
+    "chooseShort": "Pumili",
+    "versionCount": {
+      "one": "{count} bersyon",
+      "other": "{count} na bersyon"
+    },
+    "filterLabel": "I-filter ang mga kanta",
+    "filterAll": "Lahat",
+    "sortLabel": "Ayusin ayon sa:",
+    "sortBest": "Pinakatugma",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} kanta ng ibang artist",
+      "other": "▸ {count} na kanta ng ibang artist"
+    },
+    "othersHide": "▾ Itago ang mga kanta ng ibang artist",
     "autoBest": "Kusang pinili ang pinakamagandang version",
+    "pickByFilter": {
+      "community": "Original audio version ang napili (iyong filter)",
+      "commercial": "Cover band version ang napili (iyong filter)"
+    },
     "versionsToggle": {
       "one": "Pumili mula sa {count} version →",
       "other": "Pumili mula sa {count} na version →"
@@ -149,32 +169,32 @@
     "sourceCloud": "Talagang maaasahan — mula sa aming cloud library · {size}",
     "sourceCloudNoSize": "Talagang maaasahan — mula sa aming cloud library",
     "sourceYouTube": "Halos palaging gumagana — minsan ay pumapalya ang pag-download sa YouTube",
-    "community": "Community",
-    "commercial": "Commercial",
+    "community": "🎵 Original",
+    "commercial": "🎸 Cover band",
     "classTitle": "Ano'ng ibig sabihin nito?",
     "formatTitle": "Technical details",
     "brandTitle": "Tungkol sa producer na ito",
     "preview": "▶ I-preview",
     "pick": "Piliin ang version na ito →",
-    "ccTitle": "ℹ️ Commercial vs Community",
+    "ccTitle": "ℹ️ Original vs Cover band",
     "ccCommercial": "isang professional karaoke track: isang cover band ang nag-record ng backing, nasa screen ang lyrics, ikaw ang kakanta ng lead. Tunog karaoke.",
     "ccCommunity": "ang orihinal na recording, na inalis ang lead vocal gamit ang AI. Tunog totoong kanta.",
-    "ccHint": "Karamihan sa mga kumakanta ay pumipili ng commercial para sa mga classic at community para sa mga bago o niche na kanta.",
+    "ccHint": "Karamihan sa mga singer ay pumipili ng cover band tracks para sa mga classic, at original audio naman para sa mga bago o niche na kanta.",
     "gotIt": "Okay",
     "explainer": {
       "whatItIs": "Ano ito",
       "howItSounds": "Paano ito tumunog",
       "goodFor": "Maganda para sa",
-      "communityTitle": "Community track",
-      "communityWhat": "Ang orihinal na recording ng kanta, na inalis ang lead vocal gamit ang AI at dinagdagan ng karaoke lyrics ng isang hobbyist producer.",
+      "communityTitle": "🎵 Original audio",
+      "communityWhat": "Ang mismong orihinal na recording ng kanta kung saan tinanggal ang lead vocal gamit ang AI at nilagyan ng karaoke lyrics ng isang hobbyist producer. Tinatawag itong mga \"community\" track ng mga mahilig mag-karaoke.",
       "communityHow": "Tulad ng totoong kanta — parehong instrumento, parehong backing vocals, parehong energy.",
       "communityGood": "Mga bagong release, niche na kanta, at sinumang gusto na tunog eksakto sa record.",
-      "commercialTitle": "Commercial track",
-      "commercialWhat": "Isang professional karaoke production: isang cover band ang nag-re-record ng backing track at isang kumpanya ang nagdadagdag ng lyrics.",
+      "commercialTitle": "🎸 Cover band audio",
+      "commercialWhat": "Isang propesyonal na produksyon sa karaoke: muling ini-record ng isang cover band ang backing track at nilagyan ng lyrics ng isang kumpanya. Tinatawag itong mga \"commercial\" track ng mga mahilig mag-karaoke.",
       "commercialHow": "Tulad ng classic karaoke — isang tapat na cover, pero hindi ang orihinal na recording.",
       "commercialGood": "Mga classic at sikat na hits; madalas maaasahan ang lyric timing.",
-      "commercialSummary": "Para makumpara, ang mga commercial track ay mga cover na ni-record ulit para sa karaoke — tunog karaoke talaga sila.",
-      "communitySummary": "Para makumpara, ginagamit ng mga community track ang orihinal na audio ng kanta na tinanggal ang boses — kasing-tunog sila ng orihinal na record."
+      "commercialSummary": "Bilang paghahambing, ang mga cover band track ay muling ini-record para sa karaoke — tunog karaoke talaga ang mga ito.",
+      "communitySummary": "Bilang paghahambing, ginagamit ng mga original audio track ang mismong recording ng kanta kung saan tinanggal ang boses — tunog orihinal na kanta talaga ang mga ito."
     },
     "brands": {
       "CC": "Isa sa pinaka-prolific na community producers — original-recording tracks na may AI vocal removal at malinis, madaling basahin na lyrics.",

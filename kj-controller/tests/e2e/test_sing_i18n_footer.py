@@ -132,7 +132,7 @@ class TestSearchDecisionLayer:
         best = row.locator(".sing-version-compact")
         expect(best).to_have_count(1)
         expect(best.locator(".sing-version-best")).to_have_text("Best")
-        expect(best.locator(".sing-pill-community")).to_have_text("Community")
+        expect(best.locator(".sing-pill-community")).to_have_text("🎵 Original")
         expect(best.locator('[data-testid="version-preview"]')).to_be_visible()
         # Opening the full list replaces the summary row (no duplicate "Best").
         row.locator(".sing-versions-toggle").click()
@@ -212,10 +212,10 @@ class TestSearchDecisionLayer:
                                  "youtube_url": "https://youtu.be/x"}}],
         }])
         row = page.locator(".result-row").first
-        expect(row.locator(".btn-primary-cta")).to_have_text("Request this song →")
+        expect(row.locator(".btn-primary-cta")).to_have_text("Request")
         compact = row.locator(".sing-version-compact")
         expect(compact).to_be_visible()
-        expect(compact.locator(".sing-pill-community")).to_have_text("Community")
+        expect(compact.locator(".sing-pill-community")).to_have_text("🎵 Original")
         expect(compact.locator(".sing-pill-format")).to_have_text("YouTube")
         expect(compact.locator('[data-testid="version-preview"]')).to_be_visible()
         expect(compact.locator(".sing-version-pick")).to_have_count(0)
@@ -237,7 +237,7 @@ class TestSearchDecisionLayer:
             ],
         }])
         row = page.locator(".result-row").first
-        expect(row.locator(".btn-primary-cta")).to_have_text("Request this song →")
+        expect(row.locator(".btn-primary-cta")).to_have_text("Request")
         expect(row.locator(".sing-auto-hint")).to_have_text("Best version picked automatically")
         expect(row.locator(".sing-versions-toggle")).to_have_text("Choose from 2 versions →")
 

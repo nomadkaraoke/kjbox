@@ -1504,6 +1504,65 @@ function _humanFileSize(bytes) {
   return `${(mb / 1024).toFixed(1)} GB`;
 }
 
+// --- Search-result filters ----------------------------------------------------
+// Same class rule as the version row's Community/Commercial pill.
+function _versionClass(version) {
+  const kn = version.kn || {};
+  return version.priority_class
+    || (version.source === "kn" ? (kn.is_community ? "community" : "commercial") : "unknown");
+}
+// Who made a version, when we know a real brand name (a raw disc id is not one).
+function _brandName(version) {
+  const kn = version.kn || {};
+  return version.priority_display || kn.brand_name || kn.brand_code || "";
+}
+function _hasClass(group, cls) {
+  return (group.versions || []).some((v) => _versionClass(v) === cls);
+}
+const _artistKey = (s) => String(s || "").toLowerCase().normalize("NFKD")
+  .replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+// Every artist a song credits, as {key → name}: the whole credit plus each
+// featured/joint artist, so "Quavo & Lana Del Rey", "Lana Del Rey and X" and
+// "Lana Del Rey ft. X" all count as Lana Del Rey; so does "X (feat. Lana Del Rey)".
+// Other parenthesised tags ("(Wbgv)") are dropped.
+function _artistKeys(artist) {
+  const base = String(artist || "")
+    .replace(/[([]\s*(ft\.?|feat\.?|featuring)\s+([^)\]]*)[)\]]/gi, " feat. $2")   // keep "(feat. X)"
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+  const parts = base.split(/\s+(?:ft\.?|feat\.?|featuring|and)\s+|\s*[&,;/+]\s*/i);
+  const out = new Map();
+  for (const name of [base, ...parts]) {
+    const key = _artistKey(name);
+    if (key && !out.has(key)) out.set(key, name.trim());
+  }
+  return out;
+}
+// The artist the singer searched for ({key, name, count}): the artist credited
+// on the most songs, when their name is in the query ("lana del rey", not
+// "video games") and some songs are by other artists — otherwise grouping
+// would change nothing. Ties go to the longer credit, so "Simon & Garfunkel"
+// beats "Simon".
+function _searchedArtist(songs, query) {
+  const q = ` ${_artistKey(query)} `;
+  const tally = new Map();
+  for (const g of songs) {
+    for (const [key, name] of _artistKeys(g.artist)) {
+      if (!q.includes(` ${key} `)) continue;
+      const e = tally.get(key) || { key, count: 0, names: new Map() };
+      e.count++;
+      e.names.set(name, (e.names.get(name) || 0) + 1);
+      tally.set(key, e);
+    }
+  }
+  let best = null;
+  for (const e of tally.values()) {
+    if (!best || e.count > best.count || (e.count === best.count && e.key.length > best.key.length)) best = e;
+  }
+  if (!best || best.count < 2 || best.count >= songs.length) return null;
+  const name = [...best.names.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return { key: best.key, name, count: best.count };
+}
+
 function _versionSection(version) {
   if (version.source === "local") return "library";
   const kn = version.kn || {};
@@ -2018,6 +2077,21 @@ function renderSearch() {
   // triggered by search keystrokes but resets on back/forward navigation.
   const expandedSongs = new Set();
   let ccExplainerDismissed = _ccExplainerSeen();
+  // Compact results: each song is a two-line row (title, artist + tags, ▶ and
+  // Request); tapping it opens the version detail. Rows the singer opened or
+  // closed by hand, keyed by group key — otherwise a short list (a specific
+  // search) starts open and a long one (browsing an artist) starts closed.
+  const rowOpen = new Map();
+  const AUTO_OPEN_MAX = 2;
+  // Browsing a long list: one audio-type choice (all | community = Original |
+  // commercial = Cover band) and a sort. Both are the singer's taste, so they
+  // survive a new query; the "other artists" group's open state does not.
+  const filters = { audio: "all", sort: "best" };
+  // The audio filter the rows actually follow: only while its pills are on
+  // screen, so a short list never silently requests a filtered version.
+  let audioShown = "all";
+  let othersOpen = false;
+  let filtersQuery = "";
 
   // Anti-mis-tap: a freshly-(re)rendered results list is inert for a moment, so
   // a tap aimed at the previous layout can't activate a row that just appeared
@@ -2530,13 +2604,12 @@ function renderSearch() {
     const kn = version.kn || {};
     const local = version.local || {};
     const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
-    const cls = version.priority_class
-      || (version.source === "kn" ? (kn.is_community ? "community" : "commercial") : "unknown");
+    const cls = _versionClass(version);
     const fmt = _versionFormat(version);
 
     // Who made it — full display name when we know the brand; a raw disc id is
     // NOT a brand, so label it as a library file instead of pretending.
-    const knownName = version.priority_display || kn.brand_name || kn.brand_code || "";
+    const knownName = _brandName(version);
     const brandLabel = knownName
       || (local.disc_id ? t("versions.libraryFile", { id: local.disc_id }) : t("versions.unknownBrand"));
 
@@ -2816,6 +2889,151 @@ function renderSearch() {
     );
   }
 
+  // Filter chips appear once there's a list worth narrowing.
+  const FILTER_MIN = 6;
+  function applyFilters(songs) {
+    let out = songs;
+    if (filters.audio !== "all") out = out.filter((g) => _hasClass(g, filters.audio));
+    if (filters.sort === "az") {
+      out = [...out].sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
+    }
+    return out;
+  }
+
+  // Single-choice pills (All / 🎵 Original / 🎸 Cover band) with a quieter
+  // sort select under them — one row, nothing to combine.
+  function renderFilterBar(songs) {
+    const log = (filter, value, shown) =>
+      logChoice("filter_toggle", { filter, value, total: songs.length, shown });
+    const pills = el("div", { class: "sing-filter-chips", role: "radiogroup", "aria-label": t("search.filterLabel") });
+    const pill = (value, label, count) => {
+      const on = filters.audio === value;
+      pills.appendChild(el("button", {
+        class: "sing-filter-chip" + (on ? " on" : ""), role: "radio", "aria-checked": on ? "true" : "false",
+        "data-testid": `filter-${value}`,
+        onclick: (e) => {
+          e.stopPropagation();
+          if (!armed() || on) return;
+          filters.audio = value;
+          log("audio", value, count);
+          update();
+        },
+      }, label, el("span", { class: "sing-filter-count" }, String(count))));
+    };
+    pill("all", t("search.filterAll"), songs.length);
+    for (const cls of ["community", "commercial"]) {
+      const n = songs.filter((g) => _hasClass(g, cls)).length;
+      // A pill that would show nothing, or the same as All, is just noise —
+      // unless it's the current choice (so the singer can see and leave it).
+      if (filters.audio === cls || (n > 0 && n < songs.length)) pill(cls, t(`versions.${cls}`), n);
+    }
+    const sort = el("select", {
+      class: "sing-sort-select", "data-testid": "sort-select", "aria-label": t("search.sortLabel"),
+      onchange: (e) => { filters.sort = e.target.value; log("sort", filters.sort, songs.length); update(); },
+    },
+      el("option", { value: "best" }, t("search.sortBest")),
+      el("option", { value: "az" }, t("search.sortAz")));
+    sort.value = filters.sort;
+    return el("div", { class: "sing-filter-bar", "data-testid": "filter-bar" }, pills,
+      el("label", { class: "sing-sort" }, t("search.sortLabel"), sort));
+  }
+
+  // One song: title, artist (+ version count), and a facts line (Original /
+  // Cover band, brand), with Request and ▶ Preview of that version stacked on the
+  // right. Tapping the text opens the decision detail — the version's
+  // format/reliability and the full versions list.
+  function renderSongRow(group, open) {
+    const isSingle = group.version_count === 1;
+    const isExpanded = expandedSongs.has(group.key);
+    const best = (group.versions || [])[0] || null;
+    // With an audio filter on, the singer has said which kind they want: the
+    // row previews, shows and requests the best version of that kind even when
+    // the KJ's overall best is the other kind.
+    const featured = (audioShown !== "all" && (group.versions || []).find((v) => _versionClass(v) === audioShown)) || best;
+    // Bound to that version (not kj_pick), so approval can't swap in the other kind.
+    const ownPick = audioShown !== "all" && !!featured && _versionClass(featured) === audioShown;
+    const toggleOpen = (e) => {
+      e.stopPropagation();
+      if (!armed()) return;
+      rowOpen.set(group.key, !open);
+      update();
+    };
+
+    // One primary action for every song — Request. Multi-version groups
+    // auto-pick the best version (kj_pick); single-version groups bind their
+    // one concrete source. Simple mode has no kj_pick, so a multi-version song
+    // can only be chosen from its versions list.
+    let cta;
+    if (isSingle || !state.simpleMode) {
+      cta = el("button", {
+        class: "btn-primary-cta",
+        "data-testid": "request-song",
+        onclick: (e) => {
+          e.stopPropagation();
+          if (!armed()) return;
+          if (ownPick) pickSpecificVersion(group, featured);
+          else if (isSingle) pickSingleVersion(group);
+          else pickKjChoice(group);
+        },
+      }, t("search.requestShort"));
+    } else {
+      cta = el("button", { class: "sing-song-choose", "aria-expanded": open ? "true" : "false", onclick: toggleOpen },
+        t("search.chooseShort"));
+    }
+
+    // What Request gets you: Original (community) or Cover band (commercial)
+    // audio, who made it, and how many versions there are to choose from.
+    const cls = featured ? _versionClass(featured) : "unknown";
+    const brand = featured ? _brandName(featured) : "";
+    const facts = el("span", { class: "sing-song-facts" },
+      cls === "community" || cls === "commercial"
+        ? el("span", { class: `sing-song-type sing-song-type-${cls}`, "data-testid": "song-audio-type" },
+            t(`versions.${cls}`))
+        : null,
+      brand ? el("span", { class: "sing-song-brand" }, brand) : null,
+    );
+    const head = el("div", { class: "sing-song-head" },
+      el("button", {
+        class: "sing-song-info", "data-testid": "song-row-toggle",
+        "aria-expanded": open ? "true" : "false",
+        onclick: toggleOpen,
+      },
+        el("span", { class: "r-title" }, group.title || ""),
+        el("span", { class: "r-sub" }, group.artist || "",
+          isSingle ? null : el("span", { class: "sing-song-count" }, tn("search.versionCount", group.version_count))),
+        facts.childNodes.length ? facts : null,
+      ),
+      el("div", { class: "sing-song-actions" },
+        cta,
+        best ? el("button", {
+          class: "sing-song-preview", "data-testid": "song-preview",
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; openVersionPreview(group, featured); },
+        }, t("versions.preview")) : null,
+      ),
+    );
+
+    const children = [head];
+    if (open && best) {
+      if (isSingle) {
+        children.push(renderVersionRow(group, best, false, { compact: true }));
+      } else if (state.simpleMode) {
+        children.push(renderVersionsExpander(group));
+      } else {
+        children.push(el("div", { class: "sing-auto-hint" }, t(ownPick ? `search.pickByFilter.${audioShown}` : "search.autoBest")));
+        if (!isExpanded) children.push(renderVersionRow(group, featured, featured === best, { compact: true }));
+        children.push(el("button", {
+          class: "sing-versions-toggle",
+          "aria-expanded": isExpanded ? "true" : "false",
+          onclick: (e) => { e.stopPropagation(); if (!armed()) return; toggleExpanded(group.key); },
+        }, isExpanded ? t("search.hideVersions") : tn("search.versionsToggle", group.version_count)));
+        if (isExpanded) children.push(renderVersionsExpander(group));
+      }
+    }
+    return el("div", {
+      class: "result-row grouped" + (open ? " open" : "") + (isExpanded ? " expanded" : ""),
+    }, ...children);
+  }
+
   function renderResults() {
     const container = el("div", { class: "results" });
     armAt = Date.now() + armMs();   // freshly-built rows are inert briefly (anti-mis-tap)
@@ -2852,65 +3070,53 @@ function renderSearch() {
       if (!showAllSimilar) shownSongs = songs.slice(0, SIMILAR_CAP);
     }
 
-    for (const group of shownSongs) {
-      const isSingle = group.version_count === 1;
-      const isExpanded = expandedSongs.has(group.key);
-
-      // One primary action for every song — "Request this song". Multi-version
-      // groups auto-pick the best version (kj_pick) and say so underneath;
-      // single-version groups bind their one concrete source directly.
-      const onCtaClick = isSingle
-        ? () => pickSingleVersion(group)
-        : () => pickKjChoice(group);
-
-      const children = [
-        el("div", { class: "r-title" }, group.title || ""),
-        el("div", { class: "r-sub" }, group.artist || ""),
-      ];
-      if (group.in_library) {
-        children.push(el("span", { class: "badge good" }, t("search.inLibrary")));
+    const q = (state.query || "").trim();
+    if (q !== filtersQuery) { filtersQuery = q; othersOpen = false; rowOpen.clear(); }
+    // Browsing a long list: audio-type pills + sort over the rows, and for an
+    // artist search, songs by other artists tucked into a group at the end.
+    let others = [];
+    audioShown = "all";
+    if (!missing && songs.length >= FILTER_MIN) {
+      // A kept-over choice with no matches in this search falls back to All
+      // (its pill then hides), rather than leaving an empty list.
+      if (filters.audio !== "all" && !songs.some((g) => _hasClass(g, filters.audio))) filters.audio = "all";
+      audioShown = filters.audio;
+      container.appendChild(renderFilterBar(songs));
+      shownSongs = applyFilters(songs);
+      const artist = _searchedArtist(songs, q);
+      if (artist) {
+        const byArtist = (g) => _artistKeys(g.artist).has(artist.key);
+        others = shownSongs.filter((g) => !byArtist(g));
+        shownSongs = shownSongs.filter(byArtist);
+        // Nothing by the artist matches the filter: show the matches, not a closed group.
+        if (!shownSongs.length) { shownSongs = others; others = []; }
       }
-      if (isSingle || !state.simpleMode) {
-        children.push(el("button", {
-          class: "btn-primary-cta",
-          "data-testid": "request-song",
-          onclick: (e) => { e.stopPropagation(); if (!armed()) return; onCtaClick(); },
-        }, t("search.requestCta")));
-      }
-
-      if (isSingle) {
-        // Same decision layer as multi-version songs (preview, pills, brand),
-        // minus the redundant "Pick this version" button.
-        children.push(renderVersionRow(group, group.versions[0], false, { compact: true }));
-      } else if (state.simpleMode) {
-        // In simple mode, the expander is always open (no kj_pick CTA to
-        // tuck behind) — the singer's only path is picking a specific version.
-        children.push(renderVersionsExpander(group));
-      } else {
-        children.push(el("div", { class: "sing-auto-hint" }, t("search.autoBest")));
-        // Collapsed: show the version the auto-pick would choose (backend
-        // sorts best-first) — ▶ Preview, Community/Commercial + format pills,
-        // who made it, how reliably it plays — without opening the list.
-        if (!isExpanded && group.versions && group.versions[0]) {
-          children.push(renderVersionRow(group, group.versions[0], true, { compact: true }));
-        }
-        const toggleLabel = isExpanded
-          ? t("search.hideVersions")
-          : tn("search.versionsToggle", group.version_count);
-        children.push(el("button", {
-          class: "sing-versions-toggle",
-          "aria-expanded": isExpanded ? "true" : "false",
-          onclick: (e) => { e.stopPropagation(); if (!armed()) return; toggleExpanded(group.key); },
-        }, toggleLabel));
-        if (isExpanded) children.push(renderVersionsExpander(group));
-      }
-
-      container.appendChild(el("div", {
-        class: "result-row grouped" + (isExpanded ? " expanded" : ""),
-      }, ...children));
     }
 
-    if (shownSongs.length < songs.length) {
+    // A specific search (one or two songs) opens straight onto the versions; a
+    // longer list stays compact until the singer taps a song.
+    const autoOpen = songs.length <= AUTO_OPEN_MAX;
+    const addRow = (group) => {
+      const open = rowOpen.has(group.key) ? rowOpen.get(group.key) : autoOpen;
+      container.appendChild(renderSongRow(group, open));
+    };
+    shownSongs.forEach(addRow);
+    if (others.length) {
+      container.appendChild(el("button", {
+        class: "sing-versions-toggle sing-others-toggle", "data-testid": "others-toggle",
+        "aria-expanded": othersOpen ? "true" : "false",
+        onclick: (e) => {
+          e.stopPropagation();
+          if (!armed()) return;
+          othersOpen = !othersOpen;
+          if (othersOpen) logChoice("filter_toggle", { filter: "others_open", value: "open", total: songs.length, shown: others.length });
+          update();
+        },
+      }, othersOpen ? t("search.othersHide") : tn("search.othersShow", others.length)));
+      if (othersOpen) others.forEach(addRow);
+    }
+
+    if (missing && shownSongs.length < songs.length) {
       container.appendChild(el("button", {
         class: "sing-versions-toggle sing-similar-more", "data-testid": "similar-more",
         onclick: (e) => { e.stopPropagation(); if (!armed()) return; showAllSimilar = true; update(); },

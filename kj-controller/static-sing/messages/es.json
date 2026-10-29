@@ -84,7 +84,27 @@
     "changingHint": "Elige la nueva canción abajo — mantienes tu lugar en la fila.",
     "keepSong": "Mantener mi canción",
     "requestCta": "Pedir esta canción →",
+    "requestShort": "Pedir",
+    "chooseShort": "Elegir",
+    "versionCount": {
+      "one": "{count} versión",
+      "other": "{count} versiones"
+    },
+    "filterLabel": "Filtrar canciones",
+    "filterAll": "Todos",
+    "sortLabel": "Ordenar:",
+    "sortBest": "Mejor coincidencia",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} canción de otros artistas",
+      "other": "▸ {count} canciones de otros artistas"
+    },
+    "othersHide": "▾ Ocultar canciones de otros artistas",
     "autoBest": "Mejor versión elegida automáticamente",
+    "pickByFilter": {
+      "community": "Versión con audio original elegida (tu filtro)",
+      "commercial": "Versión de banda tributo elegida (tu filtro)"
+    },
     "versionsToggle": {
       "one": "Elige entre {count} versión →",
       "other": "Elige entre {count} versiones →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "En nuestra biblioteca",
     "sectionCloud": "En nuestra biblioteca en la nube",
     "sectionOnline": "Solo en línea (requiere descarga)",
-    "sectionCommunity": "Comunidad (eliminación de voz por IA)",
+    "sectionCommunity": "Audio original (voz eliminada con IA)",
     "moreOnline": {
       "one": "▸ {count} versión en línea más (requiere descarga)",
       "other": "▸ {count} versiones en línea más (requiere descarga)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Muy confiable — de nuestra biblioteca en la nube · {size}",
     "sourceCloudNoSize": "Muy confiable — de nuestra biblioteca en la nube",
     "sourceYouTube": "Casi siempre funciona — las descargas de YouTube a veces fallan",
-    "community": "Comunidad",
-    "commercial": "Comercial",
+    "community": "🎵 Original",
+    "commercial": "🎸 Banda tributo",
     "classTitle": "¿Qué significa esto?",
     "formatTitle": "Detalles técnicos",
     "brandTitle": "Sobre este productor",
     "preview": "▶ Vista previa",
     "pick": "Elegir esta versión →",
-    "ccTitle": "ℹ️ Comercial vs Comunidad",
+    "ccTitle": "ℹ️ Original vs. Banda tributo",
     "ccCommercial": "una pista de karaoke profesional: una banda de covers graba el fondo, la letra está en pantalla, tú cantas la voz principal. Suena a karaoke.",
     "ccCommunity": "la grabación original, con la voz principal eliminada por IA. Suena como la canción real.",
-    "ccHint": "La mayoría de los cantantes eligen comercial para clásicos y de la comunidad para canciones recientes o de nicho.",
+    "ccHint": "La mayoría de los cantantes eligen pistas de banda tributo para los clásicos y audio original para canciones recientes o menos conocidas.",
     "gotIt": "Entendido",
     "explainer": {
       "whatItIs": "Qué es",
       "howItSounds": "Cómo suena",
       "goodFor": "Bueno para",
-      "communityTitle": "Pista de la comunidad",
-      "communityWhat": "La grabación original de la canción, con la voz principal eliminada por IA y letras de karaoke añadidas por un productor aficionado.",
+      "communityTitle": "🎵 Audio original",
+      "communityWhat": "La grabación original de la canción, con la voz principal eliminada mediante IA y la letra de karaoke añadida por un creador independiente. Los aficionados al karaoke las llaman pistas \"comunitarias\".",
       "communityHow": "Como la canción real — mismos instrumentos, mismos coros, misma energía.",
       "communityGood": "Lanzamientos recientes, canciones de nicho y cualquiera que quiera que suene exactamente como el disco.",
-      "commercialTitle": "Pista comercial",
-      "commercialWhat": "Una producción de karaoke profesional: una banda de covers regraba la pista de fondo y una empresa añade la letra.",
+      "commercialTitle": "🎸 Audio de banda tributo",
+      "commercialWhat": "Una producción profesional de karaoke: una banda tributo regraba la pista instrumental y una empresa añade la letra. Los aficionados al karaoke las llaman pistas \"comerciales\".",
       "commercialHow": "Como el karaoke clásico — un cover fiel, pero no la grabación original.",
       "commercialGood": "Clásicos y éxitos conocidos; la sincronización de las letras suele ser muy confiable.",
-      "commercialSummary": "Para comparar, las pistas comerciales son versiones regrabadas para karaoke — suenan a karaoke.",
-      "communitySummary": "Para comparar, las pistas de la comunidad usan el audio de la canción original sin las voces — suenan como el disco."
+      "commercialSummary": "En comparación, las pistas de banda tributo se vuelven a grabar para karaoke: suenan al karaoke de siempre.",
+      "communitySummary": "En comparación, las pistas con audio original usan la propia grabación de la canción sin la voz: suenan igual que el disco."
     },
     "brands": {
       "CC": "Uno de los productores de la comunidad más prolíficos — pistas de grabación original con eliminación de voz por IA y letras limpias y legibles.",

@@ -84,7 +84,27 @@
     "changingHint": "Välj den nya låten nedan — du behåller din plats i kön.",
     "keepSong": "Behåll min låt",
     "requestCta": "Önska den här låten →",
+    "requestShort": "Önska",
+    "chooseShort": "Välj",
+    "versionCount": {
+      "one": "{count} version",
+      "other": "{count} versioner"
+    },
+    "filterLabel": "Filtrera låtar",
+    "filterAll": "Alla",
+    "sortLabel": "Sortera:",
+    "sortBest": "Bästa träff",
+    "sortAz": "A–Ö",
+    "othersShow": {
+      "one": "▸ {count} låt av andra artister",
+      "other": "▸ {count} låtar av andra artister"
+    },
+    "othersHide": "▾ Dölj låtar av andra artister",
     "autoBest": "Bästa versionen väljs automatiskt",
+    "pickByFilter": {
+      "community": "Originalversion vald (ditt filter)",
+      "commercial": "Coverband-version vald (ditt filter)"
+    },
     "versionsToggle": {
       "one": "Välj bland {count} version →",
       "other": "Välj bland {count} versioner →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "I vårt bibliotek",
     "sectionCloud": "I vårt molnbibliotek",
     "sectionOnline": "Endast online (nedladdning krävs)",
-    "sectionCommunity": "Community (AI-borttagen sång)",
+    "sectionCommunity": "Originalljud (borttagen sång via AI)",
     "moreOnline": {
       "one": "▸ {count} till online-version (nedladdning krävs)",
       "other": "▸ {count} till online-versioner (nedladdning krävs)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Mycket pålitligt — från vårt molnbibliotek · {size}",
     "sourceCloudNoSize": "Mycket pålitligt — från vårt molnbibliotek",
     "sourceYouTube": "Fungerar nästan alltid — YouTube-nedladdningar misslyckas ibland",
-    "community": "Community",
-    "commercial": "Kommersiell",
+    "community": "🎵 Original",
+    "commercial": "🎸 Coverband",
     "classTitle": "Vad betyder detta?",
     "formatTitle": "Tekniska detaljer",
     "brandTitle": "Om den här producenten",
     "preview": "▶ Förhandsgranska",
     "pick": "Välj den här versionen →",
-    "ccTitle": "ℹ️ Kommersiell vs Community",
+    "ccTitle": "ℹ️ Original vs Coverband",
     "ccCommercial": "ett professionellt karaokespår: ett coverband spelar in musiken, texten är på skärmen, du sjunger. Låter som karaoke.",
     "ccCommunity": "originalinspelningen, där sången tagits bort med AI. Låter som den riktiga låten.",
-    "ccHint": "De flesta sångare väljer kommersiellt för klassiker och community för nya eller smala låtar.",
+    "ccHint": "De flesta sångare väljer coverband-spår för klassiker och originalljud för nyare låtar eller nischade låtar.",
     "gotIt": "Fattar",
     "explainer": {
       "whatItIs": "Vad det är",
       "howItSounds": "Hur det låter",
       "goodFor": "Bra för",
-      "communityTitle": "Community-spår",
-      "communityWhat": "Originalinspelningen av låten, där sången tagits bort med AI och karaoketext lagts till av en hobbyproducent.",
+      "communityTitle": "🎵 Originalljud",
+      "communityWhat": "Låtens originalinspelning, där sången har tagits bort med hjälp av AI och karaoketexten har lagts till av en hobbyproducent. Karaokefantaster kallar dessa för \"community\"-spår.",
       "communityHow": "Som den riktiga låten — samma instrument, samma körsång, samma energi.",
       "communityGood": "Nya släpp, smala låtar och för alla som vill att det ska låta exakt som skivan.",
-      "commercialTitle": "Kommersiellt spår",
-      "commercialWhat": "En professionell karaokeproduktion: ett coverband spelar in musiken på nytt och ett företag lägger till texten.",
+      "commercialTitle": "🎸 Coverband-ljud",
+      "commercialWhat": "En professionell karaokeproduktion: ett coverband spelar in kompet på nytt och ett företag lägger till texten. Karaokefantaster kallar dessa för \"kommersiella\" spår.",
       "commercialHow": "Som klassisk karaoke — en trogen cover, men inte originalinspelningen.",
       "commercialGood": "Klassiker och välkända hits; texttajmingen är oftast väldigt pålitlig.",
-      "commercialSummary": "Som jämförelse är kommersiella spår covers som spelats in på nytt för karaoke — de låter som karaoke.",
-      "communitySummary": "Som jämförelse använder community-spår originallåtens ljud där sången har tagits bort — de låter som originalet."
+      "commercialSummary": "Som jämförelse är coverband-spår nyinspelade för karaoke – de låter som karaoke.",
+      "communitySummary": "Som jämförelse använder originalspår själva originalinspelningen där sången har tagits bort – de låter som på skivan."
     },
     "brands": {
       "CC": "En av de mest produktiva community-producenterna — spår från originalinspelningar med AI-borttagen sång och ren, läsbar text.",

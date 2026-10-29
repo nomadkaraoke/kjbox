@@ -84,7 +84,27 @@
     "changingHint": "Chọn bài hát mới bên dưới — bạn vẫn giữ nguyên vị trí trong danh sách chờ.",
     "keepSong": "Giữ bài của tôi",
     "requestCta": "Chọn bài này →",
+    "requestShort": "Yêu cầu",
+    "chooseShort": "Chọn",
+    "versionCount": {
+      "one": "{count} phiên bản",
+      "other": "{count} phiên bản"
+    },
+    "filterLabel": "Lọc bài hát",
+    "filterAll": "Tất cả",
+    "sortLabel": "Sắp xếp:",
+    "sortBest": "Phù hợp nhất",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} bài hát của nghệ sĩ khác",
+      "other": "▸ {count} bài hát của nghệ sĩ khác"
+    },
+    "othersHide": "▾ Ẩn bài hát của nghệ sĩ khác",
     "autoBest": "Phiên bản tốt nhất được chọn tự động",
+    "pickByFilter": {
+      "community": "Đã chọn bản âm thanh gốc (theo bộ lọc của bạn)",
+      "commercial": "Đã chọn bản ban nhạc cover (theo bộ lọc của bạn)"
+    },
     "versionsToggle": {
       "one": "Chọn từ {count} phiên bản →",
       "other": "Chọn từ {count} phiên bản →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "Trong thư viện của chúng tôi",
     "sectionCloud": "Trong thư viện đám mây của chúng tôi",
     "sectionOnline": "Chỉ trực tuyến (cần tải xuống)",
-    "sectionCommunity": "Cộng đồng (Tách giọng AI)",
+    "sectionCommunity": "Âm thanh gốc (AI tách giọng hát)",
     "moreOnline": {
       "one": "▸ Thêm {count} phiên bản trực tuyến (cần tải xuống)",
       "other": "▸ Thêm {count} phiên bản trực tuyến (cần tải xuống)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Rất đáng tin cậy — từ thư viện đám mây của chúng tôi · {size}",
     "sourceCloudNoSize": "Rất đáng tin cậy — từ thư viện đám mây của chúng tôi",
     "sourceYouTube": "Hầu như luôn hoạt động — đôi khi tải xuống từ YouTube bị lỗi",
-    "community": "Cộng đồng",
-    "commercial": "Thương mại",
+    "community": "🎵 Bản gốc",
+    "commercial": "🎸 Ban nhạc cover",
     "classTitle": "Điều này có nghĩa là gì?",
     "formatTitle": "Chi tiết kỹ thuật",
     "brandTitle": "Về nhà sản xuất này",
     "preview": "▶ Nghe thử",
     "pick": "Chọn phiên bản này →",
-    "ccTitle": "ℹ️ Thương mại vs Cộng đồng",
+    "ccTitle": "ℹ️ Bản gốc vs Bản ban nhạc cover",
     "ccCommercial": "một bài karaoke chuyên nghiệp: một ban nhạc cover thu âm phần nhạc nền, lời bài hát hiện trên màn hình, bạn hát giọng chính. Nghe giống như karaoke.",
     "ccCommunity": "bản thu gốc, với giọng hát chính được AI tách bỏ. Nghe giống như bài hát thật.",
-    "ccHint": "Hầu hết người hát chọn bản thương mại cho các bài kinh điển và bản cộng đồng cho các bài mới hoặc bài hiếm.",
+    "ccHint": "Hầu hết người hát chọn bản ban nhạc cover cho bài kinh điển và bản âm thanh gốc cho bài mới hoặc kén người nghe.",
     "gotIt": "Đã hiểu",
     "explainer": {
       "whatItIs": "Nó là gì",
       "howItSounds": "Nghe như thế nào",
       "goodFor": "Phù hợp cho",
-      "communityTitle": "Bài hát cộng đồng",
-      "communityWhat": "Bản thu gốc của bài hát, với giọng hát chính được AI tách bỏ và lời bài hát karaoke được thêm bởi một nhà sản xuất nghiệp dư.",
+      "communityTitle": "🎵 Âm thanh gốc",
+      "communityWhat": "Bản thu gốc của bài hát, được AI tách bỏ giọng hát chính và có lời karaoke do cộng đồng tự làm. Dân mê karaoke thường gọi đây là các bản \"cộng đồng\".",
       "communityHow": "Giống như bài hát thật — cùng nhạc cụ, cùng giọng bè, cùng năng lượng.",
       "communityGood": "Các bài mới phát hành, bài hiếm, và bất kỳ ai muốn nghe giống hệt như bản thu âm.",
-      "commercialTitle": "Bài hát thương mại",
-      "commercialWhat": "Một sản phẩm karaoke chuyên nghiệp: một ban nhạc cover thu âm lại nhạc nền và một công ty thêm lời bài hát.",
+      "commercialTitle": "🎸 Âm thanh ban nhạc cover",
+      "commercialWhat": "Sản phẩm karaoke chuyên nghiệp: ban nhạc cover thu âm lại nhạc nền và một công ty làm lời bài hát. Dân mê karaoke thường gọi đây là các bản \"thương mại\".",
       "commercialHow": "Giống như karaoke cổ điển — một bản cover trung thực, nhưng không phải bản thu gốc.",
       "commercialGood": "Các bài kinh điển và hit nổi tiếng; thời gian chạy chữ thường rất chuẩn xác.",
-      "commercialSummary": "Để so sánh, các bản nhạc thương mại là những bản cover được thu âm lại cho karaoke — chúng nghe giống nhạc karaoke.",
-      "communitySummary": "Để so sánh, các bản nhạc cộng đồng sử dụng âm thanh của bài hát gốc đã được tách lời — chúng nghe giống như bản gốc."
+      "commercialSummary": "Để so sánh, nhạc của ban nhạc cover được thu âm lại cho karaoke — nghe đúng chất karaoke truyền thống.",
+      "communitySummary": "Để so sánh, bản âm thanh gốc dùng chính bản thu chuẩn của bài hát và tách lời — nghe y hệt như bản gốc."
     },
     "brands": {
       "CC": "Một trong những nhà sản xuất cộng đồng năng suất nhất — các bài hát từ bản thu gốc với công nghệ tách giọng AI và lời bài hát rõ ràng, dễ đọc.",

@@ -84,7 +84,27 @@
     "changingHint": "Vyber si novú pieseň nižšie — tvoje miesto v poradí ti zostane.",
     "keepSong": "Ponechať moju pieseň",
     "requestCta": "Vypýtať si túto pieseň →",
+    "requestShort": "Objednať",
+    "chooseShort": "Vybrať",
+    "versionCount": {
+      "one": "{count} verzia",
+      "other": "{count} verzií"
+    },
+    "filterLabel": "Filtrovať piesne",
+    "filterAll": "Všetko",
+    "sortLabel": "Zoradiť:",
+    "sortBest": "Najlepšia zhoda",
+    "sortAz": "A–Z",
+    "othersShow": {
+      "one": "▸ {count} pieseň od iných interpretov",
+      "other": "▸ {count} piesní od iných interpretov"
+    },
+    "othersHide": "▾ Skryť piesne od iných interpretov",
     "autoBest": "Najlepšia verzia vybraná automaticky",
+    "pickByFilter": {
+      "community": "Vybratá verzia s originálnym zvukom (tvoj filter)",
+      "commercial": "Vybratá verzia od cover kapely (tvoj filter)"
+    },
     "versionsToggle": {
       "one": "Vyber si z {count} verzie →",
       "other": "Vyber si z {count} verzií →"
@@ -135,7 +155,7 @@
     "sectionLibrary": "V našej knižnici",
     "sectionCloud": "V našej cloudovej knižnici",
     "sectionOnline": "Iba online (potrebné stiahnutie)",
-    "sectionCommunity": "Komunitné (AI odstránenie vokálov)",
+    "sectionCommunity": "Originálny zvuk (spev odstránený pomocou AI)",
     "moreOnline": {
       "one": "▸ {count} ďalšia online verzia (potrebné stiahnutie)",
       "other": "▸ {count} ďalších online verzií (potrebné stiahnutie)"
@@ -149,32 +169,32 @@
     "sourceCloud": "Veľmi spoľahlivé — z našej cloudovej knižnice · {size}",
     "sourceCloudNoSize": "Veľmi spoľahlivé — z našej cloudovej knižnice",
     "sourceYouTube": "Skoro vždy funguje — sťahovanie z YouTube občas zlyhá",
-    "community": "Komunitné",
-    "commercial": "Komerčné",
+    "community": "🎵 Originál",
+    "commercial": "🎸 Cover kapela",
     "classTitle": "Čo to znamená?",
     "formatTitle": "Technické podrobnosti",
     "brandTitle": "O tomto producentovi",
     "preview": "▶ Ukážka",
     "pick": "Vybrať túto verziu →",
-    "ccTitle": "ℹ️ Komerčné vs Komunitné",
+    "ccTitle": "ℹ️ Originál vs. cover kapela",
     "ccCommercial": "profesionálna karaoke stopa: cover kapela nahrá hudbu, text je na obrazovke, ty spievaš hlavný vokál. Znie to ako karaoke.",
     "ccCommunity": "originálna nahrávka s hlavným vokálom odstráneným pomocou AI. Znie to ako skutočná pieseň.",
-    "ccHint": "Väčšina spevákov si vyberá komerčné pre klasiky a komunitné pre novšie alebo špecifické piesne.",
+    "ccHint": "Väčšina spevákov si pri klasikách vyberá verzie od cover kapely a pri novších alebo menej známych piesňach originálny zvuk.",
     "gotIt": "Rozumiem",
     "explainer": {
       "whatItIs": "Čo to je",
       "howItSounds": "Ako to znie",
       "goodFor": "Dobré pre",
-      "communityTitle": "Komunitná stopa",
-      "communityWhat": "Originálna nahrávka piesne s hlavným vokálom odstráneným pomocou AI a karaoke textom pridaným amatérskym producentom.",
+      "communityTitle": "🎵 Originálny zvuk",
+      "communityWhat": "Pôvodná nahrávka piesne s hlavným vokálom odstráneným pomocou AI a karaoke textom doplneným nadšencom. Karaoke fanúšikovia ich nazývajú „komunitné“ skladby.",
       "communityHow": "Ako skutočná pieseň — rovnaké nástroje, rovnaké sprievodné vokály, rovnaká energia.",
       "communityGood": "Nedávne novinky, špecifické piesne a pre každého, kto chce, aby to znelo presne ako nahrávka.",
-      "commercialTitle": "Komerčná stopa",
-      "commercialWhat": "Profesionálna karaoke produkcia: cover kapela znovu nahrá hudobný podklad a spoločnosť pridá text.",
+      "commercialTitle": "🎸 Zvuk cover kapely",
+      "commercialWhat": "Profesionálna karaoke produkcia: cover kapela nanovo nahrá hudobný podklad a spoločnosť pridá text. Karaoke fanúšikovia ich nazývajú „komerčné“ skladby.",
       "commercialHow": "Ako klasické karaoke — verný cover, ale nie originálna nahrávka.",
       "commercialGood": "Klasiky a známe hity; časovanie textu je zvyčajne veľmi spoľahlivé.",
-      "commercialSummary": "Na porovnanie, komerčné skladby sú prespievané verzie nahrané pre karaoke — znejú ako karaoke.",
-      "communitySummary": "Na porovnanie, komunitné skladby používajú zvuk pôvodnej piesne s odstránenými vokálmi — znejú ako originál."
+      "commercialSummary": "Na porovnanie: skladby od cover kapiel sú nanovo nahrané pre karaoke – znejú ako typické karaoke.",
+      "communitySummary": "Na porovnanie: skladby s originálnym zvukom využívajú pôvodnú nahrávku piesne s odstráneným spevom – znejú presne ako z albumu."
     },
     "brands": {
       "CC": "Jeden z najproduktívnejších komunitných producentov — stopy z originálnych nahrávok s AI odstránením vokálov a čistým, čitateľným textom.",
