@@ -125,6 +125,7 @@ The mobile app's API (`kj-controller/sing_api_v1.py`, contract `kj-controller/do
 - **Never store or log gen tokens** (cache by `sha256(token)` only; ActionRecorder redacts `Authorization`).
 - **Every v1 route goes in the OpenAPI contract with strict tests** (closed error enum, `api_version` on every response). The published contract stays open to additive fields (no `additionalProperties: false`); the test harness `tests/integration/v1_contract.py` validates strictly by adding `unevaluatedProperties: false` to every object schema, so any undocumented field fails the tests.
 - **App device ids are HMACs** of the verified email under the box secret (`app_identity.py`); never derive them from client input.
+- **The history-claim routes (`/history/suggestions`, `/history/claim`) skip the event code** (`@app_auth(require_night=False)`, R29): gen bearer only, no open night, no `night_id`, no device link. Every other v1 route keeps the full night scope. App responses are built from an allowlist (`history_claims._song_view`); never return the Night Log entry itself.
 - History outbox -> decide is inert unless `decide_api_url`/`decide_kjbox_secret` are set (see docs/MINIPC-SETUP.md 3.4.1). Local E2E stack: `kj-controller/scripts/local-stack.sh` (port 8040; see docs/TESTING.md).
 
 ## HDMI Troubleshooting
