@@ -2053,6 +2053,19 @@ class SingStore:
         ).fetchall()
         return [r["device_id"] for r in rows]
 
+    def devices_for_email_any_night(self, gen_email):
+        """Every device ``singer_accounts`` ever linked to ``gen_email`` (any
+        night, app or claimed web devices), compared case-insensitively."""
+        email = (gen_email or "").strip().lower()
+        if not email:
+            return []
+        rows = self._get_conn().execute(
+            "SELECT DISTINCT device_id FROM singer_accounts "
+            "WHERE lower(gen_email)=? ORDER BY device_id",
+            (email,),
+        ).fetchall()
+        return [r["device_id"] for r in rows]
+
     def night_accounts(self, night_started_at):
         """{gen_email: [device_id, ...]} for every account linked tonight."""
         out = {}
@@ -2173,18 +2186,33 @@ class SingStore:
         """Distinct singer names on requests from ``device_ids`` since ``since``
         (the night marker), leaving out "song for a friend" requests and
         cancelled/rejected ones: the names those devices sing under."""
-        device_ids = [d for d in device_ids if d]
-        if not device_ids or not since:
+        if not since:
+            return []
+        return self._request_names(device_ids, since=since)
+
+    def request_names_any_night(self, device_ids):
+        """``account_request_names`` across every night, also leaving out the
+        reorder/tip meta-requests: every name those devices sang under on this
+        box (history claims, R35)."""
+        return self._request_names(device_ids, since=None, songs_only=True)
+
+    def _request_names(self, device_ids, since=None, songs_only=False):
+        device_ids = [d for d in (device_ids or []) if d]
+        if not device_ids:
             return []
         marks = ",".join("?" * len(device_ids))
-        rows = self._get_conn().execute(
-            "SELECT DISTINCT r.singer_name FROM sing_requests r "
-            "LEFT JOIN app_friend_requests f ON f.request_id = r.id "
-            f"WHERE r.device_id IN ({marks}) AND r.created_at >= ? "
-            "AND r.singer_name != '' AND f.request_id IS NULL "
-            "AND r.status NOT IN ('cancelled', 'rejected')",
-            (*device_ids, since),
-        ).fetchall()
+        sql = ("SELECT DISTINCT r.singer_name FROM sing_requests r "
+               "LEFT JOIN app_friend_requests f ON f.request_id = r.id "
+               f"WHERE r.device_id IN ({marks}) "
+               "AND r.singer_name != '' AND f.request_id IS NULL "
+               "AND r.status NOT IN ('cancelled', 'rejected')")
+        params = list(device_ids)
+        if since is not None:
+            sql += " AND r.created_at >= ?"
+            params.append(since)
+        if songs_only:
+            sql += " AND r.source_type NOT IN ('reorder', 'tip')"
+        rows = self._get_conn().execute(sql, params).fetchall()
         return [r[0] for r in rows]
 
     def account_requests(self, device_ids, since, token):
