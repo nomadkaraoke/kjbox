@@ -296,3 +296,17 @@ def test_live_attribution_fills_remaining_duet_slots(env):
     env.outbox().scan()
     emails = {env.payload(r["history_id"])["gen_email"] for r in env.outbox_rows()}
     assert emails == {WREN, JUNO}
+
+
+def test_not_mine_on_own_claim_is_a_no_op(env):
+    # Rejections never undo your own claims: "not mine" on a song you hold
+    # keeps the claim and stores no rejection.
+    _done(env, 5001, "Wren B")
+    _done(env, 5002, "Wren B", hhmm="21:30")
+    nid = env.night_id()
+    env.claim(nid, mine=[5001])
+    got = env.claim(nid, not_mine=[5001, 5002])
+    assert got == {"saved": 0, "already_saved": 0, "taken": [], "rejected": 1}
+    assert env.ss.claims_for_nights([NIGHT]) == {(NIGHT, 5001): [WREN]}
+    assert env.ss.rejections_for(SingStore.email_hash(WREN)) == {(NIGHT, 5002)}
+    assert [r["op"] for r in env.outbox_rows()] == ["put"]

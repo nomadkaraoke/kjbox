@@ -361,7 +361,7 @@ def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine,
     that night that matches the account (or one it already holds), else
     ``ClaimError("invalid")`` and nothing is written; an unknown night is
     ``ClaimError("not_found")``. Returns ``{saved, already_saved, taken,
-    rejected}``. Claims are first-come per singer slot (``try_claim``) and go
+    rejected}``. A ``not_mine`` id the account already holds is a no-op. Claims are first-come per singer slot (``try_claim``) and go
     to decide through the outbox under the night ``claim:<date>``, which
     tonight's scan never compares or retracts."""
     me = (email or "").strip().lower()
@@ -399,9 +399,13 @@ def claim(night_log, store, outbox, cfg, names, email, night_id, mine, not_mine,
         payload = claim_payload(entry, night, night_id, me, hid, venue, box_id)
         store.outbox_enqueue(hid, "put", payload, night_started_at="claim:" + night, now=now)
         queued = True
-    if not_mine:
-        store.add_rejections(store.email_hash(me), night, not_mine)
+    # Rejections never undo the account's own claims: "not mine" on a song it
+    # holds is a no-op (the claim stays, no rejection is stored or counted).
+    # The host undo (POST /history/claims/undo) is how a wrong claim goes away.
+    rejections = [eid for eid in not_mine if songs[eid]["status"] != "mine"]
+    if rejections:
+        store.add_rejections(store.email_hash(me), night, rejections)
     if queued and outbox is not None:
         outbox.notify_rotation_changed()
     return {"saved": saved, "already_saved": already, "taken": taken,
-            "rejected": len(not_mine)}
+            "rejected": len(rejections)}
