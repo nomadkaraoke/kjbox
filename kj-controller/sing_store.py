@@ -423,6 +423,26 @@ class SingStore:
             );
             CREATE INDEX IF NOT EXISTS idx_history_outbox_due
                 ON history_outbox (state, next_attempt_at);
+
+            -- Past-night songs a singer claimed from the app (Phase 4c).
+            -- First claimer wins per entry and per singer slot (R31).
+            CREATE TABLE IF NOT EXISTS history_claims (
+                night       TEXT NOT NULL,      -- Night Log night (YYYY-MM-DD, noon rollover)
+                entry_id    INTEGER NOT NULL,   -- exact or inferred rotation entry id
+                gen_email   TEXT NOT NULL,
+                history_id  TEXT NOT NULL,
+                member      TEXT NOT NULL,      -- the matched member's display name (duets)
+                claimed_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                PRIMARY KEY (night, entry_id, gen_email)
+            );
+            -- Songs a singer said were not theirs, keyed by email hash only.
+            CREATE TABLE IF NOT EXISTS history_rejections (
+                email_hash  TEXT NOT NULL,
+                night       TEXT NOT NULL,
+                entry_id    INTEGER NOT NULL,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                PRIMARY KEY (email_hash, night, entry_id)
+            );
             """
         )
         conn.commit()
@@ -2358,6 +2378,119 @@ class SingStore:
         return {r["history_id"] for r in rows}
 
     # ------------------------------------------------------------------
+    # History claims (past-night songs a singer says were theirs)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _norm_email(email):
+        return (email or "").strip().lower()
+
+    def claims_for_nights(self, nights):
+        """``{(night, entry_id): [gen_email, ...]}`` for every claim on ``nights``."""
+        nights = [n for n in (nights or []) if n]
+        if not nights:
+            return {}
+        marks = ",".join("?" * len(nights))
+        out = {}
+        for r in self._get_conn().execute(
+                "SELECT night, entry_id, gen_email FROM history_claims "
+                f"WHERE night IN ({marks}) ORDER BY claimed_at, gen_email", nights):
+            out.setdefault((r["night"], r["entry_id"]), []).append(r["gen_email"])
+        return out
+
+    def rejections_for(self, email_hash):
+        """``{(night, entry_id)}`` the account (by email hash) said weren't theirs."""
+        if not email_hash:
+            return set()
+        return {(r["night"], r["entry_id"]) for r in self._get_conn().execute(
+            "SELECT night, entry_id FROM history_rejections WHERE email_hash=?",
+            (email_hash.lower(),))}
+
+    def add_rejections(self, email_hash, night, entry_ids):
+        ids = [int(e) for e in (entry_ids or []) if e is not None]
+        if not email_hash or not night or not ids:
+            return
+        conn = self._get_conn()
+        conn.executemany(
+            "INSERT OR IGNORE INTO history_rejections (email_hash, night, entry_id) "
+            "VALUES (?, ?, ?)",
+            [(email_hash.lower(), night, e) for e in ids])
+        conn.commit()
+
+    @staticmethod
+    def _outbox_holders(conn, entry_ids):
+        ids = sorted({str(int(e)) for e in (entry_ids or []) if e is not None})
+        if not ids:
+            return {}
+        marks = ",".join("?" * len(ids))
+        out = {}
+        for r in conn.execute(
+                "SELECT json_extract(payload_json, '$.entry_id') AS eid, "
+                "       json_extract(payload_json, '$.gen_email') AS email "
+                "FROM history_outbox WHERE op='put' AND state IN ('pending','sent') "
+                f"AND CAST(json_extract(payload_json, '$.entry_id') AS TEXT) IN ({marks})",
+                ids):
+            if not r["email"]:
+                continue
+            out.setdefault(int(r["eid"]), set()).add(SingStore._norm_email(r["email"]))
+        return out
+
+    def outbox_holders(self, entry_ids):
+        """``{entry_id: {gen_email}}`` from live-night outbox puts (pending or
+        sent). Entry ids are monotonic since 2026-06-04 and the outbox began
+        2026-10-22, so the entry id alone identifies the entry."""
+        return self._outbox_holders(self._get_conn(), entry_ids)
+
+    def try_claim(self, night, entry_id, email, history_id, member, capacity):
+        """Claim ``(night, entry_id)`` for ``email`` in one ``BEGIN IMMEDIATE``
+        transaction: ``"already_mine"`` when this email already holds it (a
+        claim or a live outbox record), ``"taken"`` when ``max(1, capacity)``
+        accounts hold it, else ``"claimed"``."""
+        email = self._norm_email(email)
+        entry_id = int(entry_id)
+        capacity = max(1, int(capacity or 0))
+        conn = self._get_conn()
+        if conn.in_transaction:
+            conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            holders = {self._norm_email(r[0]) for r in conn.execute(
+                "SELECT gen_email FROM history_claims WHERE night=? AND entry_id=?",
+                (night, entry_id))}
+            holders |= self._outbox_holders(conn, [entry_id]).get(entry_id, set())
+            if email in holders:
+                result = "already_mine"
+            elif len(holders) >= capacity:
+                result = "taken"
+            else:
+                conn.execute(
+                    "INSERT INTO history_claims "
+                    "  (night, entry_id, gen_email, history_id, member) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (night, entry_id, email, history_id, member or ""))
+                result = "claimed"
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return result
+
+    def delete_claim(self, night, entry_id, email=None):
+        """Delete the claims on ``(night, entry_id)`` (only ``email``'s when
+        given) and return the deleted rows (host undo)."""
+        conn = self._get_conn()
+        sql = "FROM history_claims WHERE night=? AND entry_id=?"
+        params = [night, int(entry_id)]
+        if email is not None:
+            sql += " AND gen_email=?"
+            params.append(self._norm_email(email))
+        rows = [dict(r) for r in conn.execute(f"SELECT * {sql}", params)]
+        if rows:
+            conn.execute(f"DELETE {sql}", params)
+            conn.commit()
+        return rows
+
+    # ------------------------------------------------------------------
     # Account deletion (gen account removed -> erase this person's links)
     # ------------------------------------------------------------------
 
@@ -2373,8 +2506,9 @@ class SingStore:
         Removes the device links (``singer_accounts``, ``sing_gen_accounts``),
         those devices' push subscriptions, aliases and request phone numbers,
         the app's friend-request markers, pending/failed ``history_outbox``
-        rows for the email, and the photo/song media consent rows keyed on the
-        names those devices sang under. ``photo_consent_events`` is an
+        rows for the email (unsent past-night claims included), the account's
+        ``history_claims`` and ``history_rejections``, and the photo/song media
+        consent rows keyed on the names those devices sang under. ``photo_consent_events`` is an
         append-only log, so its rows stay with the link (``request_id``) and
         Instagram handle cleared. Returns counts per kind (all zero when
         nothing matched).
@@ -2384,7 +2518,8 @@ class SingStore:
             "singer_accounts", "sing_gen_accounts", "push_subscriptions",
             "phones_cleared", "aliases", "app_friend_requests",
             "singer_photo_consent", "song_media_consent",
-            "photo_consent_events_unlinked", "history_outbox")}
+            "photo_consent_events_unlinked", "history_outbox",
+            "history_claims", "history_rejections")}
         if not want:
             return counts
         conn = self._get_conn()
@@ -2422,7 +2557,13 @@ class SingStore:
                 continue
             if email and matches(email):
                 outbox_ids.append(r["history_id"])
-        if not devices and not outbox_ids and not a_rows and not gen_dev:
+        claim_keys = [(r["night"], r["entry_id"], r["gen_email"]) for r in conn.execute(
+            "SELECT night, entry_id, gen_email FROM history_claims") if matches(r["gen_email"])]
+        has_rejections = conn.execute(
+            "SELECT 1 FROM history_rejections WHERE email_hash=? LIMIT 1", (want,)
+        ).fetchone() is not None
+        if (not devices and not outbox_ids and not a_rows and not gen_dev
+                and not claim_keys and not has_rejections):
             return counts
 
         def marks(items):
@@ -2484,6 +2625,12 @@ class SingStore:
                     (d, n))
             for d in gen_dev:
                 run("sing_gen_accounts", "DELETE FROM sing_gen_accounts WHERE device_id=?", (d,))
+            for night, entry_id, email in claim_keys:
+                run("history_claims",
+                    "DELETE FROM history_claims WHERE night=? AND entry_id=? AND gen_email=?",
+                    (night, entry_id, email))
+            run("history_rejections",
+                "DELETE FROM history_rejections WHERE email_hash=?", (want,))
             if outbox_ids:
                 run("history_outbox",
                     f"DELETE FROM history_outbox WHERE history_id IN ({marks(outbox_ids)})",

@@ -42,7 +42,8 @@ _STATE_TABLES = (
     "rotation_entries", "rotation_archive", "rotation_history", "gen_quick_versions",
     "sing_requests", "sing_push_subscriptions", "singer_aliases", "singer_photo_consent",
     "sing_gen_accounts", "song_media_consent", "photo_consent_events", "singer_accounts",
-    "app_idempotency", "app_friend_requests", "history_outbox", "sms_log", "sms_opt_outs",
+    "app_idempotency", "app_friend_requests", "history_outbox", "history_claims",
+    "history_rejections", "sms_log", "sms_opt_outs",
 )
 
 
