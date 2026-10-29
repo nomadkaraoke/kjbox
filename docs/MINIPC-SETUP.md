@@ -472,6 +472,24 @@ Songs sung by singers who linked their Nomad Karaoke account are pushed to decid
 
 Get the secret with `gcloud secrets versions access latest --secret=decide-kjbox-secret` (needs Andrew's `gcloud auth login`) and paste it on the box only; never commit it or write it into docs. `box_id` scopes night and history ids, so keep it stable. Restart `kj-controller` after editing (or wait for the next auto-deploy). Check delivery in the log for `history_outbox` lines.
 
+#### 3.4.2 App links (Android assetlinks)
+
+`/.well-known/assetlinks.json` on `sing.nomadkaraoke.com` and `kjbox.cc` lets the Nomad Karaoke Android app open night
+links. It lists the SHA-256 signing-certificate fingerprints in `config.json`; with none it serves `[]`. NomadPC has
+three (set 2026-10-29): the debug keystore (local dev builds), the EAS upload key (sideloaded release builds) and
+Google Play's app signing key (Play installs). They're public values; the source is the Play Console (App integrity
+→ App signing) and `eas credentials`.
+
+```json
+"app_android_sha256_fingerprints": [
+  "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C",
+  "76:F4:86:63:51:49:04:0D:78:CE:7A:55:18:C3:59:86:64:E2:93:79:6B:A2:94:9B:79:BC:ED:F7:DE:FE:7C:EC",
+  "F2:57:4E:69:11:F1:A8:34:F9:F9:D7:DE:C8:77:86:F1:63:D7:9C:7A:23:27:A4:D9:47:70:DE:4B:6A:57:16:63"
+]
+```
+
+Restart `kj-controller` after editing. Cloudflare caches the file for up to an hour.
+
 ### 3.5 Create Data Directories
 
 ```bash
