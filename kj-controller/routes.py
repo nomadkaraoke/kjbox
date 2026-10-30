@@ -6535,9 +6535,11 @@ def _attempt_sing_fallback(app, item):
         item["status"] = "queued"
         item["error"] = None
     try:
+        # Keep the versions[] snapshot: a later cross-source swap needs it.
+        req_row = app.sing_store.get_request(item["request_id"]) or {}
         app.sing_store.update_request_source(
             item["request_id"], cand.get("source_type", "youtube"),
-            cand["url"], cand.get("source_meta"))
+            cand["url"], _preserve_versions_meta(req_row, cand.get("source_meta")))
     except Exception:
         app.logger.exception("Sing fallback: update_request_source failed")
     log_message(
@@ -6595,11 +6597,22 @@ def _attempt_cross_source_fallback(app, item):
 
     Returns a file path (an on-box copy: the worker completes the item with
     it), ``_REQUEUED`` (the item now downloads the Divebar version), or
-    ``None`` (no other source — tried once per item).
+    ``None`` (no other source — tried once per item). Fails closed: it runs
+    on the download worker thread, and an exception there would stop every
+    later download.
     """
     if item.get("cross_source_tried"):
         return None
     item["cross_source_tried"] = True
+    try:
+        with app.app_context():   # _resolve_divebar_spec reads current_app
+            return _cross_source_swap(app, item)
+    except Exception:
+        app.logger.exception("Cross-source fallback failed")
+        return None
+
+
+def _cross_source_swap(app, item):
     choice = _non_youtube_choice(app, item)
     if choice is None:
         return None
