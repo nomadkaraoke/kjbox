@@ -334,23 +334,6 @@ input:focus {
   border-color: rgba(255, 77, 207, 0.45);
   background: rgba(255, 77, 207, 0.08);
 }
-.sing-version-secondary { color: var(--nk-text-dim); font-size: 0.8rem; }
-/* Availability tier dot: green = on the box (certain, even offline),
-   teal = our cloud mirror (very reliable), amber = YouTube (download can fail). */
-.sing-avail { display: flex; gap: 0.4rem; align-items: baseline; flex-basis: 100%; }
-.sing-version-card:has(.sing-avail) { flex-wrap: wrap; row-gap: 0.3rem; }
-.sing-avail::before {
-  content: "";
-  flex: none;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  transform: translateY(-0.05rem);
-  background: var(--nk-text-dim);
-}
-.sing-avail-sure::before { background: var(--nk-good); }
-.sing-avail-high::before { background: #4fc3d9; }
-.sing-avail-likely::before { background: var(--nk-warn); }
 .sing-version-actions {
   display: flex;
   flex-direction: column;
@@ -1316,8 +1299,9 @@ button.status-tile:active { transform: scale(0.99); }
 .songs-list { margin: 10px 0; }
 .song-card {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   margin: 8px 0;
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.04);
@@ -1336,6 +1320,15 @@ button.status-tile:active { transform: scale(0.99); }
   align-items: stretch;
   flex-shrink: 0;
 }
+/* Three or more actions: a column of them made the card ~5 buttons tall, so
+   they become one wrapping row under the song text instead. */
+.song-card:has(> .song-card-actions > :nth-child(3)) .song-card-actions {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 6px;
+}
+.song-card:has(> .song-card-actions > :nth-child(3)) .song-card-action { padding: 0.3rem 0.4rem; }
 .song-card-action {
   background: none;
   border: 1px solid var(--nk-border);
@@ -1517,7 +1510,6 @@ button.status-tile:active { transform: scale(0.99); }
 .sing-brand-host { color: var(--nk-text-dim); text-transform: none; letter-spacing: 0; }
 
 /* --- Results: an open song row's risk note + format ----------------------- */
-.result-row.grouped .sing-song-risk { font-size: 0.78rem; margin-top: 0.35rem; color: var(--nk-text-dim); }
 .sing-song-format { letter-spacing: 0.02em; }
 /* An open row has room to wrap, so the format never gets cut off. */
 .result-row.grouped.open .sing-song-facts { white-space: normal; }
@@ -1932,9 +1924,9 @@ body:has(#sing-tabs:not([hidden])) .sing-make-bar {
 .save-songs-slot .btn.link[disabled] { opacity: 0.5; cursor: default; }
 .save-songs-explainer, .save-songs-status { margin: 0.35rem 0 0; }
 .save-songs-main { margin: 0.25rem 0 0; font-size: 0.85rem; }
-.save-songs-line { display: flex; align-items: center; gap: 0.4rem; margin: 0; }
+.save-songs-line { margin: 0; line-height: 1.6; }
 .save-songs-info {
-  background: none; border: 0; color: var(--nk-text-dim); font-size: 1rem; line-height: 1;
+  margin-left: 0.4rem; background: none; border: 0; color: var(--nk-text-dim); font-size: 1rem; line-height: 1;
   padding: 0.3rem; cursor: pointer;
 }
 .save-songs-info[aria-expanded="true"] { color: var(--nk-accent); }

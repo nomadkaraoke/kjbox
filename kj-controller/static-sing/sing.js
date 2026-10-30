@@ -1492,15 +1492,6 @@ function _markCcExplainerSeen() {
   catch (e) { /* private browsing — reshows are acceptable */ }
 }
 
-function _humanFileSize(bytes) {
-  if (!bytes || bytes < 0) return "";
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(0)} MB`;
-  return `${(mb / 1024).toFixed(1)} GB`;
-}
-
 // --- Search-result filters ----------------------------------------------------
 // Same class rule as the version row's Community/Commercial pill.
 function _versionClass(version) {
@@ -2593,12 +2584,10 @@ function renderSearch() {
   }
 
   // One version's decision row: who made it (tappable), Community/Commercial +
-  // format pills (tappable), where it plays from, ▶ Preview, Pick. Lives in the
+  // format pills (tappable), ▶ Preview, Pick. Lives in the
   // "Choose from N versions" list only; the song row itself carries the best one.
   function renderVersionRow(group, version, isBest) {
-    const kn = version.kn || {};
     const local = version.local || {};
-    const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
     const cls = _versionClass(version);
     const fmt = _versionFormat(version);
 
@@ -2607,24 +2596,6 @@ function renderSearch() {
     const knownName = _brandName(version);
     const brandLabel = knownName
       || (local.disc_id ? t("versions.libraryFile", { id: local.disc_id }) : t("versions.unknownBrand"));
-
-    // How sure we are it'll play — the thing a singer choosing between
-    // versions actually needs (not "where the file lives"). Three honest
-    // tiers, each with a coloured dot: on the box (certain, works offline) →
-    // our cloud mirror (very reliable) → YouTube (a download that
-    // occasionally fails).
-    let sourceLine, avail;
-    if (version.source === "local") {
-      sourceLine = t("versions.sourceLocal");
-      avail = "sure";
-    } else if (hasDivebar) {
-      const size = _humanFileSize(kn.divebar.file_size);
-      sourceLine = size ? t("versions.sourceCloud", { size }) : t("versions.sourceCloudNoSize");
-      avail = "high";
-    } else {
-      sourceLine = t("versions.sourceYouTube");
-      avail = "likely";
-    }
 
     const pills = el("div", { class: "sing-version-pills" });
     if (cls === "community" || cls === "commercial") {
@@ -2670,10 +2641,6 @@ function renderSearch() {
         pills,
       ),
       actions,
-      // Full card width under brand + buttons — the reliability note is the
-      // deciding detail, so it shouldn't wrap into a narrow column.
-      el("div", { class: `sing-version-secondary sing-avail sing-avail-${avail}`,
-        "data-testid": "version-availability" }, sourceLine),
     );
     return card;
   }
@@ -3013,13 +2980,6 @@ function renderSearch() {
 
     const children = [head];
     if (open && best) {
-      // Only a version that might not play earns a line: "definitely
-      // available" is the default and needs no saying.
-      const fkn = featured.kn || {};
-      if (featured.source !== "local" && !(fkn.divebar && fkn.divebar.file_id)) {
-        children.push(el("div", { class: "sing-avail sing-avail-likely sing-song-risk", "data-testid": "song-risk" },
-          t("versions.sourceYouTube")));
-      }
       if (isSingle) {
         // Nothing more to choose: the row above is the whole decision.
       } else if (state.simpleMode) {
@@ -3973,7 +3933,7 @@ function _renderSongCard(item, ctx = {}) {
   }
   // Self-service actions — only for a request this device owns (has the
   // edit_token for) and that is still editable (pending or in the queue).
-  // Compact, right-aligned so the card stays two lines tall.
+  // Compact buttons; with 3+ they wrap into a row under the song (sing.css).
   const editToken = readEditToken(TOKEN, req.id);
   const cancellable = editToken && (req.status === "pending" || req.status === "approved");
   if (cancellable) {
@@ -4356,6 +4316,34 @@ async function saveSongsLink() {
   paintSaveSongs();
 }
 
+function _saveSongsSwitchButton(a) {
+  return el("button", {
+    class: "btn link", "data-testid": "save-songs-switch",
+    disabled: a.busy ? "disabled" : null, onclick: saveSongsSwitch,
+  }, t("saveSongs.switchEmail"));
+}
+
+// "Use a different email": sign this phone out of the gen account (which also
+// stops saving to it; songs already saved stay there) and ask for an email.
+async function saveSongsSwitch() {
+  const a = state.account;
+  if (a.busy) return;
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    await _saveSongsPost("make/sign-out", {});
+  } catch (e) {
+    Object.assign(a, { busy: false, err: _saveSongsErr(e) });
+    return paintSaveSongs();
+  }
+  forgetMakeEmail();
+  if (state.make) state.make.email = "";
+  state.account = { ..._freshAccount(), loaded: true, ready: true, stage: "email" };
+  paintSaveSongs();
+  const input = document.querySelector('[data-testid="save-songs-email"]');
+  if (input) { input.scrollIntoView({ block: "center" }); input.focus(); }
+}
+
 async function saveSongsStop() {
   const a = state.account;
   if (a.busy) return;
@@ -4467,7 +4455,7 @@ function saveSongsSlot(variant = "main") {
       el("button", {
         class: "btn link", "data-testid": "save-songs-stop",
         disabled: a.busy ? "disabled" : null, onclick: saveSongsStop,
-      }, t("saveSongs.stop"))));
+      }, t("saveSongs.stop")), " · ", _saveSongsSwitchButton(a)));
   } else {
     const showForm = variant === "main" && !a.email && a.stage !== "idle";
     // The explainer stays folded behind ⓘ on My songs; the make-it offer and
@@ -4480,7 +4468,11 @@ function saveSongsSlot(variant = "main") {
         el("button", {
           class: "btn link save-songs-link", "data-testid": "save-songs-link",
           disabled: a.busy ? "disabled" : null, onclick: saveSongsLink,
-        }, t("saveSongs.linkShort")),
+        // Signed in already (make-it, or an earlier save): name the account
+        // before linking, and let the singer pick another one.
+        }, a.email ? t("saveSongs.linkTo", { email: a.email }) : t("saveSongs.linkShort")),
+        a.email ? " · " : null,
+        a.email ? _saveSongsSwitchButton(a) : null,
         folded ? el("button", {
           class: "save-songs-info", "data-testid": "save-songs-info",
           "aria-label": t("saveSongs.whatIsThis"), "aria-expanded": a.explainerOpen ? "true" : "false",
