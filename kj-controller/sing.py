@@ -780,16 +780,17 @@ def search():
     # the results so the empty-state triage can show/hide card 2 without a
     # second round-trip. Cheap: one SQLite read already hot in the connection.
     store = current_app.sing_store
+    songs = _offerable(data["songs"])
     response = {
-        "songs": _offerable(data["songs"]),
+        "songs": songs,
         "make_requests_enabled": _make_enabled(store),
         "simple_mode": store.is_simple_mode(),
     }
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
     _search_log("search", query, {
-        "songs": len(data["songs"]),
-        "top": [f'{s.get("artist", "")} — {s.get("title", "")}' for s in data["songs"][:3]],
+        "songs": len(songs),
+        "top": [f'{s.get("artist", "")} — {s.get("title", "")}' for s in songs[:3]],
         "kn_timeout": bool(data.get("karaoke_nerds_timeout")),
     })
     return jsonify(response)
