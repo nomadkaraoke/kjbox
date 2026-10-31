@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Uložiť dnešné piesne do účtu",
     "linkTo": "Uložiť dnešné pesničky do {email}",
-    "switchEmail": "Použiť iný e-mail",
+    "logOut": "Odhlásiť sa",
     "whatIsThis": "Čo je to?",
     "explainer": "Piesne, ktoré dnes zaspievaš, uložíme do tvojho účtu Nomad Karaoke, aby ti aplikácia mohla zobraziť históriu a odporúčať ďalšie skladby.",
     "saving": "Ukladám dnešné piesne do účtu {email}",

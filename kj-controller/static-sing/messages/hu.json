@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "A ma esti dalok mentése egy fiókba",
     "linkTo": "A ma esti dalok mentése ide: {email}",
-    "switchEmail": "Másik e-mail-cím használata",
+    "logOut": "Kijelentkezés",
     "whatIsThis": "Mi ez?",
     "explainer": "Elmentjük a ma este énekelt dalaidat a Nomad Karaoke fiókodba, így az app mutatni tudja az előzményeidet, és dalokat is ajánlhat neked.",
     "saving": "Ma esti dalok mentése ide: {email}",

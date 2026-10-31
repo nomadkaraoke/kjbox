@@ -98,6 +98,72 @@ const APPLE_LOGO_SVG = '<svg class="mk-apple-logo" viewBox="0 0 814 1000" aria-h
   + '66-25 28-48 73-48 118 0 7 1 14 2 16 3 1 8 1 12 1 39 0 89-27 117-63z"/></svg>';
 const onApplePlatform = () => /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || "");
 
+// --- Google / Apple sign-in buttons ------------------------------------------
+// Shared by the make screen and "Save tonight's songs" (sing.js). `social` is
+// /make/account's {google, apple} client ids; `holder` keeps Google's button
+// node (an iframe) across re-renders so it isn't rebuilt on every render.
+// onToken(provider, idToken) signs in; onError() reports a failed popup.
+
+async function signInWithApple(clientId, onToken, onError) {
+  try {
+    const stub = window.__SING_SOCIAL_STUB;
+    if (stub) return onToken("apple", stub.apple);
+    await loadScript(APPLE_SRC);
+    window.AppleID.auth.init({
+      clientId, scope: "email", usePopup: true,
+      redirectURI: `${window.location.origin}/`,
+    });
+    const r = await window.AppleID.auth.signIn();
+    await onToken("apple", r?.authorization?.id_token);
+  } catch (e) {
+    // Closing the popup is not an error worth shouting about.
+    if (e && e.error === "popup_closed_by_user") return;
+    onError();
+  }
+}
+
+function googleButton({ el, social, holder, onToken, testPrefix }) {
+  if (holder.googleNode) return holder.googleNode;
+  const node = el("div", { class: "mk-google", "data-testid": `${testPrefix}-google` });
+  holder.googleNode = node;
+  const stub = window.__SING_SOCIAL_STUB;
+  if (stub) {
+    node.appendChild(el("button", { class: "btn mk-social mk-social-google", type: "button",
+      onclick: () => onToken("google", stub.google) }, t("make.continueGoogle")));
+    return node;
+  }
+  loadScript(GSI_SRC).then(() => {
+    const gid = window.google && window.google.accounts && window.google.accounts.id;
+    if (!gid) throw new Error("gsi");
+    gid.initialize({ client_id: social.google, ux_mode: "popup",
+                     callback: (resp) => onToken("google", resp && resp.credential) });
+    gid.renderButton(node, { type: "standard", theme: "filled_black", size: "large", shape: "pill",
+                             text: "continue_with", logo_alignment: "center", locale: getLocale(),
+                             width: Math.min(400, node.clientWidth || 320) });
+  }).catch(() => { node.hidden = true; });   // blocked / offline: email still works
+  return node;
+}
+
+function appleButton({ el, social, onToken, onError, testPrefix }) {
+  const btn = el("button", { class: "btn mk-social mk-social-apple", type: "button",
+    "data-testid": `${testPrefix}-apple`,
+    onclick: () => signInWithApple(social.apple, onToken, onError) });
+  // Apple's logo as inline SVG (the  glyph only exists in Apple's own fonts).
+  btn.innerHTML = APPLE_LOGO_SVG;
+  btn.appendChild(document.createTextNode(` ${t("make.continueApple")}`));
+  return btn;
+}
+
+export function socialButtons({ el, social, holder, onToken, onError, testPrefix = "make" }) {
+  if (!socialHostOk() || !social) return null;
+  const opts = { el, social, holder, onToken, onError, testPrefix };
+  const google = social.google ? googleButton(opts) : null;
+  const apple = social.apple ? appleButton(opts) : null;
+  if (!google && !apple) return null;
+  if (apple && !window.__SING_SOCIAL_STUB) loadScript(APPLE_SRC).catch(() => {});   // so the tap opens the popup at once
+  return el("div", { class: "mk-socials" }, ...(onApplePlatform() ? [apple, google] : [google, apple]));
+}
+
 // --- Wizard ------------------------------------------------------------------
 
 export function createMakeFlow(deps) {
@@ -222,25 +288,6 @@ export function createMakeFlow(deps) {
       Object.assign(s, { busy: false, err: e?.data?.error === "social_failed" ? t("make.socialFailed") : errText(e) });
     }
     rerender();
-  }
-
-  async function signInWithApple() {
-    const s = m();
-    try {
-      const stub = window.__SING_SOCIAL_STUB;
-      if (stub) return socialSignIn("apple", stub.apple);
-      await loadScript(APPLE_SRC);
-      window.AppleID.auth.init({
-        clientId: s.social.apple, scope: "email", usePopup: true,
-        redirectURI: `${window.location.origin}/`,
-      });
-      const r = await window.AppleID.auth.signIn();
-      await socialSignIn("apple", r?.authorization?.id_token);
-    } catch (e) {
-      // Closing the popup is not an error worth shouting about.
-      if (e && e.error === "popup_closed_by_user") return;
-      s.err = t("make.socialFailed"); rerender();
-    }
   }
 
   // What gets sent: the picked result (or YouTube link) as a make selection.
@@ -718,40 +765,6 @@ export function createMakeFlow(deps) {
     return out;
   }
 
-  // Google renders its own button (an iframe) into a node we keep across
-  // re-renders, so it isn't rebuilt on every keystroke-driven render.
-  function googleButton() {
-    const s = m();
-    if (s.googleNode) return s.googleNode;
-    const node = el("div", { class: "mk-google", "data-testid": "make-google" });
-    s.googleNode = node;
-    const stub = window.__SING_SOCIAL_STUB;
-    if (stub) {
-      node.appendChild(el("button", { class: "btn mk-social mk-social-google", type: "button",
-        onclick: () => socialSignIn("google", stub.google) }, t("make.continueGoogle")));
-      return node;
-    }
-    loadScript(GSI_SRC).then(() => {
-      const gid = window.google && window.google.accounts && window.google.accounts.id;
-      if (!gid) throw new Error("gsi");
-      gid.initialize({ client_id: s.social.google, ux_mode: "popup",
-                       callback: (resp) => socialSignIn("google", resp && resp.credential) });
-      gid.renderButton(node, { type: "standard", theme: "filled_black", size: "large", shape: "pill",
-                               text: "continue_with", logo_alignment: "center", locale: getLocale(),
-                               width: Math.min(400, node.clientWidth || 320) });
-    }).catch(() => { node.hidden = true; });   // blocked / offline: email still works
-    return node;
-  }
-
-  function appleButton() {
-    const btn = el("button", { class: "btn mk-social mk-social-apple", type: "button", "data-testid": "make-apple",
-      onclick: signInWithApple });
-    // Apple's logo as inline SVG (the  glyph only exists in Apple's own fonts).
-    btn.innerHTML = APPLE_LOGO_SVG;
-    btn.appendChild(document.createTextNode(` ${t("make.continueApple")}`));
-    return btn;
-  }
-
   function renderSignIn() {
     const s = m();
     if (s.stage === "audio" && s.email) {
@@ -761,12 +774,12 @@ export function createMakeFlow(deps) {
     }
     if (s.stage === "loading") return [el("p", { class: "hint" }, t("make.loading"))];
     const out = [el("p", { class: "sing-empty-desc" }, t("make.sendToDesc"))];
-    const social = socialHostOk();
-    const google = social && s.social.google ? googleButton() : null;
-    const apple = social && s.social.apple ? appleButton() : null;
-    if (google || apple) {
-      if (apple && !window.__SING_SOCIAL_STUB) loadScript(APPLE_SRC).catch(() => {});   // so the tap opens the popup at once
-      out.push(el("div", { class: "mk-socials" }, ...(onApplePlatform() ? [apple, google] : [google, apple])));
+    const socials = socialButtons({
+      el, social: s.social, holder: s, onToken: socialSignIn,
+      onError: () => { s.err = t("make.socialFailed"); rerender(); },
+    });
+    if (socials) {
+      out.push(socials);
       out.push(el("div", { class: "mk-or" }, el("span", {}, t("make.orEmail"))));
     }
     if (s.stage === "code") {

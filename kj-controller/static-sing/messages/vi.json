@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Lưu các bài hát tối nay vào tài khoản",
     "linkTo": "Lưu các bài hát tối nay vào {email}",
-    "switchEmail": "Dùng email khác",
+    "logOut": "Đăng xuất",
     "whatIsThis": "Đây là gì?",
     "explainer": "Tụi mình sẽ lưu những bài bạn hát tối nay vào tài khoản Nomad Karaoke để ứng dụng có thể hiển thị lịch sử và gợi ý bài hát cho bạn.",
     "saving": "Đang lưu các bài hát tối nay vào {email}",

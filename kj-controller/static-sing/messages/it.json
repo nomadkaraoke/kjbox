@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Salva le canzoni di stasera in un account",
     "linkTo": "Salva le canzoni di stasera su {email}",
-    "switchEmail": "Usa un'altra email",
+    "logOut": "Esci",
     "whatIsThis": "Che cos'è?",
     "explainer": "Salveremo le canzoni che canti stasera nel tuo account Nomad Karaoke, così l'app potrà mostrarti la cronologia e consigliarti nuovi brani.",
     "saving": "Salvataggio delle canzoni di stasera su {email} in corso...",

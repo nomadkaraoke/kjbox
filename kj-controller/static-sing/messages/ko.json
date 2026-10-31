@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "오늘 밤 부른 곡을 계정에 저장",
     "linkTo": "오늘 밤 노래를 {email}에 저장",
-    "switchEmail": "다른 이메일 사용",
+    "logOut": "로그아웃",
     "whatIsThis": "이게 뭔가요?",
     "explainer": "오늘 부른 곡들을 Nomad Karaoke 계정에 저장해 드려요. 지난 노래 기록을 확인하고 어울리는 곡도 추천받을 수 있어요.",
     "saving": "오늘 부른 곡을 {email} 계정에 저장하는 중...",

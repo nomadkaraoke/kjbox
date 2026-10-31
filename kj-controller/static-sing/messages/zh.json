@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "把今晚的歌曲保存到账户",
     "linkTo": "将今晚的歌曲保存到 {email}",
-    "switchEmail": "使用其他邮箱",
+    "logOut": "退出登录",
     "whatIsThis": "这是什么？",
     "explainer": "我们会将你今晚演唱的歌曲保存到你的 Nomad Karaoke 账户，方便你查看历史记录和获取推荐歌曲。",
     "saving": "正在保存今晚的歌曲到 {email}",

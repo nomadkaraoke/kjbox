@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Zapisz dzisiejsze piosenki na koncie",
     "linkTo": "Zapisz dzisiejsze piosenki na {email}",
-    "switchEmail": "Użyj innego e-maila",
+    "logOut": "Wyloguj się",
     "whatIsThis": "Co to jest?",
     "explainer": "Zapiszemy piosenki, które dziś zaśpiewasz, na Twoim koncie Nomad Karaoke, żeby aplikacja mogła pokazywać Twoją historię i polecać piosenki.",
     "saving": "Zapisywanie dzisiejszych piosenek na koncie {email}",

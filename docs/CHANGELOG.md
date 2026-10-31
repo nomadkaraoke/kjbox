@@ -20,9 +20,11 @@ Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](a
 - **My songs cards:** with 3+ buttons they sit in a row under the song instead of a 5-high column on the
   right, so each card is about 140px tall instead of 340px.
 - **Save tonight's songs:** when the phone is already signed in, the line names the account ("Save tonight's
-  songs to x@y.com") and both it and "Saving … · Stop saving" offer "Use a different email" (signs this phone
-  out of that gen account, then asks for an email). Previously a phone signed in by an earlier make-it saved
-  to that account with no way to change it. 2 new strings, hand-translated into all 32 locales (Gemini key
+  songs to x@y.com") and offers **Log out** (also beside "Stop saving" once saving). Log out signs this phone
+  out of that gen account and shows the normal sign-in: Continue with Apple / Google (the make screen's
+  buttons, now shared via `make.js` `socialButtons`) or an email code; signing in saves straight away.
+  Previously a phone signed in by an earlier make-it saved to that account with no way to change it, and the
+  save sign-in had no Google/Apple. 2 new strings, hand-translated into all 32 locales (Gemini key
   unavailable; the next `translate.py` run may polish them); the 4 reliability strings were removed.
 
 ## 2026-10-29 - Singer search: open-row facts wrap between items (v0.145.1)

@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Tallenna illan kappaleet tilille",
     "linkTo": "Tallenna illan kappaleet tilille {email}",
-    "switchEmail": "Käytä toista sähköpostia",
+    "logOut": "Kirjaudu ulos",
     "whatIsThis": "Mikä tämä on?",
     "explainer": "Tallennamme tänä iltana laulamasi kappaleet Nomad Karaoke -tilillesi, jotta sovellus voi näyttää historiasi ja suositella kappaleita.",
     "saving": "Tallennetaan tämän illan kappaleita tilille {email}",

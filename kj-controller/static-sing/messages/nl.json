@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Sla de nummers van vanavond op in een account",
     "linkTo": "De nummers van vanavond opslaan bij {email}",
-    "switchEmail": "Ander e-mailadres gebruiken",
+    "logOut": "Uitloggen",
     "whatIsThis": "Wat is dit?",
     "explainer": "We slaan de nummers die je vanavond zingt op in je Nomad Karaoke-account, zodat de app je geschiedenis kan tonen en nummers kan aanbevelen.",
     "saving": "Nummers van vanavond worden opgeslagen op {email}",

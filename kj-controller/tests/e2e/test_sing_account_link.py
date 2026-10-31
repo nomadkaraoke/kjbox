@@ -41,8 +41,9 @@ def _song(rid, title, performed=False):
 
 def _fake_account(page, email=None, linked=False):
     """Fake kjbox's account + claim routes. Returns the recorded calls."""
-    acct = {"ready": True, "email": email, "linked": linked}
-    calls = {"send": [], "verify": [], "link": [], "unlink": [], "signout": []}
+    acct = {"ready": True, "email": email, "linked": linked,
+            "google_client_id": "g-client", "apple_client_id": "a-client"}
+    calls = {"send": [], "verify": [], "link": [], "unlink": [], "signout": [], "social": []}
 
     def send(route):
         calls["send"].append(json.loads(route.request.post_data))
@@ -75,6 +76,13 @@ def _fake_account(page, email=None, linked=False):
         acct.update(email=None, linked=False)
         _json(route, {"status": "ok"})
     page.route("**/sing/make/sign-out*", signout)
+
+    def social(route):
+        body = json.loads(route.request.post_data)
+        calls["social"].append(body)
+        acct["email"] = "new@example.com"
+        _json(route, {"email": "new@example.com"})
+    page.route("**/sing/make/social*", social)
     return calls
 
 
@@ -162,24 +170,39 @@ class TestSaveTonightsSongs:
         main = page.locator('[data-testid="save-songs-main"]')
         expect(main.locator('[data-testid="save-songs-link"]')).to_have_text(
             f"Save tonight's songs to {EMAIL}")
-        expect(main.locator('[data-testid="save-songs-switch"]')).to_have_text("Use a different email")
+        expect(main.locator('[data-testid="save-songs-logout"]')).to_have_text("Log out")
 
-    def test_use_a_different_email_signs_out_and_asks_for_one(self, page, live_server, live_token):
+    def test_log_out_signs_out_and_offers_sign_in(self, page, live_server, live_token):
         calls = _fake_account(page, email=EMAIL)
         _open_your_songs(page, live_server, live_token)
         page.evaluate("localStorage.setItem('nk_make_email', 'old@example.com')")
         main = page.locator('[data-testid="save-songs-main"]')
-        main.locator('[data-testid="save-songs-switch"]').click()
+        main.locator('[data-testid="save-songs-logout"]').click()
         expect(main.locator('[data-testid="save-songs-email"]')).to_be_visible()
         assert len(calls["signout"]) == 1 and calls["link"] == []
         assert page.evaluate("localStorage.getItem('nk_make_email')") is None
+
+    def test_log_out_then_google_saves_to_the_new_account(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
+        calls = _fake_account(page, email=EMAIL, linked=True)
+        _open_your_songs(page, live_server, live_token)
+        main = page.locator('[data-testid="save-songs-main"]')
+        main.locator('[data-testid="save-songs-logout"]').click()
+        expect(main.locator('[data-testid="save-songs-apple"]')).to_be_visible()
+        main.locator('[data-testid="save-songs-google"] button').click()
+        expect(main.locator('[data-testid="save-songs-status"]')).to_contain_text(
+            "Saving tonight's songs to new@example.com")
+        assert calls["social"][0]["provider"] == "google"
+        assert calls["social"][0]["id_token"] == "g-tok"
+        assert calls["social"][0]["purpose"] == "save"
+        assert len(calls["link"]) == 1
 
     def test_linked_account_can_be_switched(self, page, live_server, live_token):
         calls = _fake_account(page, email=EMAIL, linked=True)
         _open_your_songs(page, live_server, live_token)
         main = page.locator('[data-testid="save-songs-main"]')
         expect(main.locator('[data-testid="save-songs-status"]')).to_contain_text(EMAIL)
-        main.locator('[data-testid="save-songs-switch"]').click()
+        main.locator('[data-testid="save-songs-logout"]').click()
         expect(main.locator('[data-testid="save-songs-email"]')).to_be_visible()
         expect(main.locator('[data-testid="save-songs-status"]')).to_have_count(0)
         assert len(calls["signout"]) == 1

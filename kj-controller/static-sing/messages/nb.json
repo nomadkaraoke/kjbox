@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Lagre kveldens sanger på en konto",
     "linkTo": "Lagre kveldens sanger på {email}",
-    "switchEmail": "Bruk en annen e-post",
+    "logOut": "Logg ut",
     "whatIsThis": "Hva er dette?",
     "explainer": "Vi lagrer sangene du synger i kveld på Nomad Karaoke-kontoen din, slik at appen kan vise historikken din og anbefale sanger.",
     "saving": "Lagrer kveldens sanger til {email}",

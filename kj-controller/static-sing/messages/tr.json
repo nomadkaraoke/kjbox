@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Bu geceki şarkıları bir hesaba kaydet",
     "linkTo": "Bu geceki şarkıları {email} hesabına kaydet",
-    "switchEmail": "Başka bir e-posta kullan",
+    "logOut": "Çıkış yap",
     "whatIsThis": "Bu nedir?",
     "explainer": "Bu gece söylediğin şarkıları Nomad Karaoke hesabına kaydedeceğiz; böylece uygulama geçmişini gösterebilir ve sana şarkı önerebilir.",
     "saving": "Bu gecenin şarkıları {email} hesabına kaydediliyor",

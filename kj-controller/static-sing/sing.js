@@ -8,7 +8,7 @@
 import {
   initI18n, t, tn, getLocale, setLocale, LOCALES, localeName, applyStaticStrings,
 } from "./i18n.js";
-import { createMakeFlow, forgetMakeEmail } from "./make.js";
+import { createMakeFlow, forgetMakeEmail, socialButtons } from "./make.js";
 
 // Blueprint mount point. On the public host (sing.nomadkaraoke.com) the singer
 // UI lives at `/` via a WSGI rewrite; on the admin host it's under `/sing/`.
@@ -284,7 +284,8 @@ const state = {
 
 function _freshAccount() {
   return { loaded: false, ready: false, email: null, linked: false, busy: false,
-           err: "", stage: "idle", emailInput: "", code: "", offer: false };
+           err: "", stage: "idle", emailInput: "", code: "", offer: false,
+           social: { google: "", apple: "" } };
 }
 
 const MAX_PARTNERS = 3;
@@ -666,6 +667,7 @@ const makeFlow = createMakeFlow({
   onAccount: (acct) => {
     Object.assign(state.account, {
       loaded: true, ready: true, email: acct.email || null, linked: !!acct.linked,
+      social: { google: acct.google_client_id || "", apple: acct.apple_client_id || "" },
     });
   },
   onSignedIn: (email) => {
@@ -673,7 +675,9 @@ const makeFlow = createMakeFlow({
       loaded: true, ready: true, email, linked: false, offer: true, err: "", stage: "idle",
     });
   },
-  onSignedOut: () => { state.account = { ..._freshAccount(), loaded: true, ready: true }; },
+  onSignedOut: () => {
+    state.account = { ..._freshAccount(), loaded: true, ready: true, social: state.account.social };
+  },
 });
 
 // Asked on the make screen itself: photo consent
@@ -4262,6 +4266,7 @@ async function loadSaveSongs() {
     const d = await fetchJson(`${BASE}/make/account?device_id=${encodeURIComponent(DEVICE_ID)}`);
     Object.assign(state.account, {
       loaded: true, ready: !!d.ready, email: d.email || null, linked: !!d.linked,
+      social: { google: d.google_client_id || "", apple: d.apple_client_id || "" },
     });
   } catch {
     return;   // offline / old server: keep whatever we showed
@@ -4316,16 +4321,17 @@ async function saveSongsLink() {
   paintSaveSongs();
 }
 
-function _saveSongsSwitchButton(a) {
+function _saveSongsLogOutButton(a) {
   return el("button", {
-    class: "btn link", "data-testid": "save-songs-switch",
-    disabled: a.busy ? "disabled" : null, onclick: saveSongsSwitch,
-  }, t("saveSongs.switchEmail"));
+    class: "btn link", "data-testid": "save-songs-logout",
+    disabled: a.busy ? "disabled" : null, onclick: saveSongsLogOut,
+  }, t("saveSongs.logOut"));
 }
 
-// "Use a different email": sign this phone out of the gen account (which also
-// stops saving to it; songs already saved stay there) and ask for an email.
-async function saveSongsSwitch() {
+// "Log out": sign this phone out of the gen account (which also stops saving
+// to it; songs already saved stay there), then offer the normal sign-in
+// (Google / Apple / email code) so another account can be used.
+async function saveSongsLogOut() {
   const a = state.account;
   if (a.busy) return;
   Object.assign(a, { busy: true, err: "" });
@@ -4338,10 +4344,28 @@ async function saveSongsSwitch() {
   }
   forgetMakeEmail();
   if (state.make) state.make.email = "";
-  state.account = { ..._freshAccount(), loaded: true, ready: true, stage: "email" };
+  state.account = { ..._freshAccount(), loaded: true, ready: true, stage: "email", social: a.social };
   paintSaveSongs();
-  const input = document.querySelector('[data-testid="save-songs-email"]');
-  if (input) { input.scrollIntoView({ block: "center" }); input.focus(); }
+  document.querySelector('[data-testid="save-songs-main"]')?.scrollIntoView({ block: "center" });
+}
+
+// Google / Apple sign-in from the save-songs form, then save (the singer
+// tapped "Save tonight's songs" to get here).
+async function saveSongsSocial(provider, idToken) {
+  const a = state.account;
+  if (!idToken || a.busy) return;
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    const d = await _saveSongsPost("make/social", { provider, id_token: idToken, purpose: "save" });
+    Object.assign(a, { busy: false, email: d.email, stage: "idle" });
+    if (state.make) state.make.email = d.email;
+  } catch (e) {
+    Object.assign(a, { busy: false,
+      err: e?.data?.error === "social_failed" ? t("make.socialFailed") : _saveSongsErr(e) });
+    return paintSaveSongs();
+  }
+  await saveSongsLink();
 }
 
 async function saveSongsStop() {
@@ -4416,7 +4440,13 @@ function _saveSongsForm(a) {
           onclick: () => { Object.assign(a, { stage: "email", err: "" }); paintSaveSongs(); },
         }, t("make.differentEmail"))));
   }
+  const socials = socialButtons({
+    el, social: a.social, holder: a, onToken: saveSongsSocial, testPrefix: "save-songs",
+    onError: () => { a.err = t("make.socialFailed"); paintSaveSongs(); },
+  });
   return el("div", { class: "save-songs-form" },
+    socials,
+    socials ? el("div", { class: "mk-or" }, el("span", {}, t("make.orEmail"))) : null,
     el("label", { class: "sing-empty-label" }, t("make.emailLabel"),
       el("input", {
         type: "email", class: "sing-empty-input", autocomplete: "email", inputmode: "email",
@@ -4455,7 +4485,7 @@ function saveSongsSlot(variant = "main") {
       el("button", {
         class: "btn link", "data-testid": "save-songs-stop",
         disabled: a.busy ? "disabled" : null, onclick: saveSongsStop,
-      }, t("saveSongs.stop")), " · ", _saveSongsSwitchButton(a)));
+      }, t("saveSongs.stop")), " · ", _saveSongsLogOutButton(a)));
   } else {
     const showForm = variant === "main" && !a.email && a.stage !== "idle";
     // The explainer stays folded behind ⓘ on My songs; the make-it offer and
@@ -4472,7 +4502,7 @@ function saveSongsSlot(variant = "main") {
         // before linking, and let the singer pick another one.
         }, a.email ? t("saveSongs.linkTo", { email: a.email }) : t("saveSongs.linkShort")),
         a.email ? " · " : null,
-        a.email ? _saveSongsSwitchButton(a) : null,
+        a.email ? _saveSongsLogOutButton(a) : null,
         folded ? el("button", {
           class: "save-songs-info", "data-testid": "save-songs-info",
           "aria-label": t("saveSongs.whatIsThis"), "aria-expanded": a.explainerOpen ? "true" : "false",

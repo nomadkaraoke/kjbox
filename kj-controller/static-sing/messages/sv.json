@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Spara kvällens låtar på ett konto",
     "linkTo": "Spara kvällens låtar till {email}",
-    "switchEmail": "Använd en annan e-postadress",
+    "logOut": "Logga ut",
     "whatIsThis": "Vad är det här?",
     "explainer": "Vi sparar låtarna du sjunger ikväll på ditt Nomad Karaoke-konto, så att appen kan visa din historik och rekommendera låtar.",
     "saving": "Sparar kvällens låtar till {email}",

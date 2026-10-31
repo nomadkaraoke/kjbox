@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Salvează melodiile din seara asta într-un cont",
     "linkTo": "Salvează melodiile din seara asta în {email}",
-    "switchEmail": "Folosește alt e-mail",
+    "logOut": "Deconectează-te",
     "whatIsThis": "Ce este asta?",
     "explainer": "Vom salva melodiile pe care le cânți în această seară în contul tău Nomad Karaoke, astfel încât aplicația să-ți poată arăta istoricul și să-ți recomande melodii.",
     "saving": "Se salvează melodiile din această seară în contul {email}",

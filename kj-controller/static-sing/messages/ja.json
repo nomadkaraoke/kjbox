@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "今夜の曲をアカウントに保存",
     "linkTo": "今夜の曲を {email} に保存",
-    "switchEmail": "別のメールアドレスを使う",
+    "logOut": "ログアウト",
     "whatIsThis": "これは何？",
     "explainer": "今夜歌った曲をNomad Karaokeアカウントに保存します。履歴の確認やおすすめの曲のチェックができるようになります。",
     "saving": "今夜歌った曲を{email}に保存中",

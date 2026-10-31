@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Simpan lagu malam ini ke akaun",
     "linkTo": "Simpan lagu malam ini ke {email}",
-    "switchEmail": "Guna e-mel lain",
+    "logOut": "Log keluar",
     "whatIsThis": "Apakah ini?",
     "explainer": "Kami akan simpan lagu yang anda nyanyikan malam ini ke akaun Nomad Karaoke anda, supaya aplikasi ini dapat memaparkan sejarah nyanyian dan mencadangkan lagu untuk anda.",
     "saving": "Menyimpan lagu malam ini ke {email}",

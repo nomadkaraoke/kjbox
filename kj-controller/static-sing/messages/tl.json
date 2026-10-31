@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "I-save ang mga kanta ngayong gabi sa isang account",
     "linkTo": "I-save ang mga kanta ngayong gabi sa {email}",
-    "switchEmail": "Gumamit ng ibang email",
+    "logOut": "Mag-log out",
     "whatIsThis": "Ano ito?",
     "explainer": "Ise-save namin ang mga kantang kakantahin mo ngayong gabi sa iyong Nomad Karaoke account, para maipakita ng app ang history mo at makapag-rekomenda ng mga kanta.",
     "saving": "Sine-save ang mga kanta ngayong gabi sa {email}",

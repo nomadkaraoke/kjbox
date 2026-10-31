@@ -653,7 +653,7 @@
   "saveSongs": {
     "linkShort": "Spremi večerašnje pjesme na račun",
     "linkTo": "Spremi večerašnje pjesme na {email}",
-    "switchEmail": "Koristi drugu e-adresu",
+    "logOut": "Odjava",
     "whatIsThis": "Što je ovo?",
     "explainer": "Spremit ćemo pjesme koje večeras pjevaš na tvoj Nomad Karaoke račun kako bi ti aplikacija mogla prikazati povijest pjevanja i preporučiti pjesme.",
     "saving": "Spremanje večerašnjih pjesama na {email}",
