@@ -213,3 +213,20 @@ def test_fold_keeps_different_songs_apart(tmp_path):
         ("Rihanna", "Breaking Dishes", 55, 0),
     ])
     assert len(rows) == 6
+
+
+def test_self_titled_song_does_not_beat_the_title_search(tmp_path):
+    # Live 2026-10-30: "love story" picked an obscure self-titled "Love Story — Love
+    # Story" over Taylor Swift — the typed words were credited as artist AND title.
+    _build_rows(tmp_path, [
+        ("Love Story", "Love Story", "", 1),
+        ("Taylor Swift", "Love Story", 75, 1),
+        ("BONES", "Bones", 40, 0),
+        ("Radiohead", "Bones", 70, 1),
+    ])
+    ident = SongIdentifier(str(tmp_path / "song_id.db"))
+    for q, want in [("love story", "Taylor Swift"), ("bones", "Radiohead")]:
+        r = ident.identify(q)
+        assert r["best"]["artist"] == want, (q, r["candidates"])
+    # Typing the name twice still means the self-titled song.
+    assert ident.identify("bones bones")["best"]["artist"] == "BONES"

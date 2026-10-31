@@ -388,8 +388,17 @@ class SongIdentifier:
         # Catches mangled titles word-matching misses ("max picu" ≈ "machu picchu").
         artist_hit = {i for i in used if i < len(a_toks)}
         leftover = " ".join(w for w in words if not any(
-            _word_sim(w, a_toks[i]) >= 0.5 for i in artist_hit)) or qnorm
+            _word_sim(w, a_toks[i]) >= 0.5 for i in artist_hit))
+        self_titled = not leftover
+        if self_titled:
+            # Every typed word went to the artist, so the title is matched by those
+            # same words: a self-titled song ("Love Story — Love Story"). Don't credit
+            # them twice — "love story" is a title search, and popularity picks the
+            # artist (live 2026-10-30: an obscure self-titled entry beat Taylor Swift).
+            leftover, artist_cov = qnorm, 0.0
         title_sim = max(fuzz.ratio(leftover, nt), fuzz.ratio(leftover.replace(" ", ""), nt.replace(" ", ""))) / 100
+        if self_titled:
+            title_cov = max(title_cov, title_sim)
         if title_cov == 0 and title_sim < 0.6:
             return 0.0, {}
         if title_sim >= 0.6 and artist_cov > 0:

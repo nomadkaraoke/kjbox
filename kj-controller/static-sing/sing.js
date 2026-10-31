@@ -376,6 +376,20 @@ function _credits(artist) {
   return new Set(String(artist || "").toLowerCase().split(/\s*(?:,|&|\+|\/|\bfeaturing\b|\bfeat\.?|\bft\.?|\band\b|\bwith\b)\s*/)
     .map(_songKey).filter(Boolean));
 }
+// The singer typed a row's exact title, with or without its artist ("love story",
+// "love story taylor swift"): that song is right there, so a "Not seeing your
+// song?" bar is noise (live 2026-10-30: shown over 24 versions of Love Story).
+function typedNamesRow(songs, query) {
+  const q = _songKey(query);
+  if (!q) return false;
+  return songs.some((g) => {
+    const t = _songKey(g.title);
+    if (!t) return false;
+    if (q === t) return true;
+    for (const a of _credits(g.artist)) if (q === a + t || q === t + a) return true;
+    return false;
+  });
+}
 function sameSong(a, b) {
   if (!a || !b || _songKey(a.title) !== _songKey(b.title)) return false;
   const ca = _credits(a.artist);
@@ -2258,7 +2272,7 @@ function renderSearch() {
                                   of: (prev && (prev.alternatives || prev.candidates) || []).length });
     correction = {
       source: prev && prev.source, typed: (prev && prev.typed) || state.query, kind: "content", picked: true,
-      userTouched: true,
+      userTouched: true, karaoke: alt.karaoke,
       corrected: { artist: alt.artist, title: alt.title },
       candidates: ((prev && (prev.alternatives || prev.candidates)) || []).filter((c) => !sameSong(c, alt)),
       songs: [], split: null, active: true, inResults: (results.songs || []).some((g) => sameSong(g, alt)),
@@ -3098,7 +3112,8 @@ function renderSearch() {
       // bar pinned within thumb reach. A confident identification needs none —
       // the song is in the rows, or the top card already offers make-it.
       const c = correction;
-      const settled = missing || (c && c.corrected && c.active && (rowsHaveSong(c) || c.karaoke !== true));
+      const settled = missing || typedNamesRow(songs, state.query)
+        || (c && c.corrected && c.active && (rowsHaveSong(c) || c.karaoke !== true));
       if (!settled && !state.showMakeForm) {
         logOfferShown("sticky_bar");
         container.classList.add("has-make-bar");
