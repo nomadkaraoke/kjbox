@@ -389,13 +389,15 @@ class SongIdentifier:
         artist_hit = {i for i in used if i < len(a_toks)}
         leftover = " ".join(w for w in words if not any(
             _word_sim(w, a_toks[i]) >= 0.5 for i in artist_hit))
-        self_titled = not leftover
+        # Every typed word went to the artist, so the title is matched by those same
+        # words: a self-titled song ("Love Story — Love Story"). Don't credit them
+        # twice — "love story" is a title search, and popularity picks the artist
+        # (live 2026-10-30: an obscure self-titled entry beat Taylor Swift). Typing
+        # the name twice ("bones bones") names both, so it keeps the artist credit.
+        self_titled = not leftover and len(words) <= len(artist_hit)
         if self_titled:
-            # Every typed word went to the artist, so the title is matched by those
-            # same words: a self-titled song ("Love Story — Love Story"). Don't credit
-            # them twice — "love story" is a title search, and popularity picks the
-            # artist (live 2026-10-30: an obscure self-titled entry beat Taylor Swift).
-            leftover, artist_cov = qnorm, 0.0
+            artist_cov = 0.0
+        leftover = leftover or qnorm
         title_sim = max(fuzz.ratio(leftover, nt), fuzz.ratio(leftover.replace(" ", ""), nt.replace(" ", ""))) / 100
         if self_titled:
             title_cov = max(title_cov, title_sim)
