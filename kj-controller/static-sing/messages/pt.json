@@ -652,8 +652,8 @@
   },
   "saveSongs": {
     "linkShort": "Salvar as músicas desta noite numa conta",
-    "linkTo": "Guardar as músicas desta noite em {email}",
-    "logOut": "Terminar sessão",
+    "linkTo": "Salvar as músicas desta noite em {email}",
+    "logOut": "Sair",
     "whatIsThis": "O que é isto?",
     "explainer": "Vamos salvar as músicas que você cantar hoje na sua conta do Nomad Karaoke, para que o aplicativo possa mostrar seu histórico e recomendar músicas.",
     "saving": "Salvando as músicas de hoje em {email}",
