@@ -8,7 +8,7 @@
 import {
   initI18n, t, tn, getLocale, setLocale, LOCALES, localeName, applyStaticStrings,
 } from "./i18n.js";
-import { createMakeFlow, forgetMakeEmail } from "./make.js";
+import { createMakeFlow, forgetMakeEmail, socialButtons } from "./make.js";
 
 // Blueprint mount point. On the public host (sing.nomadkaraoke.com) the singer
 // UI lives at `/` via a WSGI rewrite; on the admin host it's under `/sing/`.
@@ -284,7 +284,8 @@ const state = {
 
 function _freshAccount() {
   return { loaded: false, ready: false, email: null, linked: false, busy: false,
-           err: "", stage: "idle", emailInput: "", code: "", offer: false };
+           err: "", stage: "idle", emailInput: "", code: "", offer: false,
+           social: { google: "", apple: "" } };
 }
 
 const MAX_PARTNERS = 3;
@@ -666,6 +667,7 @@ const makeFlow = createMakeFlow({
   onAccount: (acct) => {
     Object.assign(state.account, {
       loaded: true, ready: true, email: acct.email || null, linked: !!acct.linked,
+      social: { google: acct.google_client_id || "", apple: acct.apple_client_id || "" },
     });
   },
   onSignedIn: (email) => {
@@ -673,7 +675,9 @@ const makeFlow = createMakeFlow({
       loaded: true, ready: true, email, linked: false, offer: true, err: "", stage: "idle",
     });
   },
-  onSignedOut: () => { state.account = { ..._freshAccount(), loaded: true, ready: true }; },
+  onSignedOut: () => {
+    state.account = { ..._freshAccount(), loaded: true, ready: true, social: state.account.social };
+  },
 });
 
 // Asked on the make screen itself: photo consent
@@ -1490,15 +1494,6 @@ function _ccExplainerSeen() {
 function _markCcExplainerSeen() {
   try { localStorage.setItem(RULES_CC_SEEN_KEY, "1"); }
   catch (e) { /* private browsing — reshows are acceptable */ }
-}
-
-function _humanFileSize(bytes) {
-  if (!bytes || bytes < 0) return "";
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(0)} MB`;
-  return `${(mb / 1024).toFixed(1)} GB`;
 }
 
 // --- Search-result filters ----------------------------------------------------
@@ -2593,12 +2588,10 @@ function renderSearch() {
   }
 
   // One version's decision row: who made it (tappable), Community/Commercial +
-  // format pills (tappable), where it plays from, ▶ Preview, Pick. Lives in the
+  // format pills (tappable), ▶ Preview, Pick. Lives in the
   // "Choose from N versions" list only; the song row itself carries the best one.
   function renderVersionRow(group, version, isBest) {
-    const kn = version.kn || {};
     const local = version.local || {};
-    const hasDivebar = !!(kn.divebar && kn.divebar.file_id);
     const cls = _versionClass(version);
     const fmt = _versionFormat(version);
 
@@ -2607,24 +2600,6 @@ function renderSearch() {
     const knownName = _brandName(version);
     const brandLabel = knownName
       || (local.disc_id ? t("versions.libraryFile", { id: local.disc_id }) : t("versions.unknownBrand"));
-
-    // How sure we are it'll play — the thing a singer choosing between
-    // versions actually needs (not "where the file lives"). Three honest
-    // tiers, each with a coloured dot: on the box (certain, works offline) →
-    // our cloud mirror (very reliable) → YouTube (a download that
-    // occasionally fails).
-    let sourceLine, avail;
-    if (version.source === "local") {
-      sourceLine = t("versions.sourceLocal");
-      avail = "sure";
-    } else if (hasDivebar) {
-      const size = _humanFileSize(kn.divebar.file_size);
-      sourceLine = size ? t("versions.sourceCloud", { size }) : t("versions.sourceCloudNoSize");
-      avail = "high";
-    } else {
-      sourceLine = t("versions.sourceYouTube");
-      avail = "likely";
-    }
 
     const pills = el("div", { class: "sing-version-pills" });
     if (cls === "community" || cls === "commercial") {
@@ -2670,10 +2645,6 @@ function renderSearch() {
         pills,
       ),
       actions,
-      // Full card width under brand + buttons — the reliability note is the
-      // deciding detail, so it shouldn't wrap into a narrow column.
-      el("div", { class: `sing-version-secondary sing-avail sing-avail-${avail}`,
-        "data-testid": "version-availability" }, sourceLine),
     );
     return card;
   }
@@ -3013,13 +2984,6 @@ function renderSearch() {
 
     const children = [head];
     if (open && best) {
-      // Only a version that might not play earns a line: "definitely
-      // available" is the default and needs no saying.
-      const fkn = featured.kn || {};
-      if (featured.source !== "local" && !(fkn.divebar && fkn.divebar.file_id)) {
-        children.push(el("div", { class: "sing-avail sing-avail-likely sing-song-risk", "data-testid": "song-risk" },
-          t("versions.sourceYouTube")));
-      }
       if (isSingle) {
         // Nothing more to choose: the row above is the whole decision.
       } else if (state.simpleMode) {
@@ -3973,7 +3937,7 @@ function _renderSongCard(item, ctx = {}) {
   }
   // Self-service actions — only for a request this device owns (has the
   // edit_token for) and that is still editable (pending or in the queue).
-  // Compact, right-aligned so the card stays two lines tall.
+  // Compact buttons; with 3+ they wrap into a row under the song (sing.css).
   const editToken = readEditToken(TOKEN, req.id);
   const cancellable = editToken && (req.status === "pending" || req.status === "approved");
   if (cancellable) {
@@ -4302,6 +4266,7 @@ async function loadSaveSongs() {
     const d = await fetchJson(`${BASE}/make/account?device_id=${encodeURIComponent(DEVICE_ID)}`);
     Object.assign(state.account, {
       loaded: true, ready: !!d.ready, email: d.email || null, linked: !!d.linked,
+      social: { google: d.google_client_id || "", apple: d.apple_client_id || "" },
     });
   } catch {
     return;   // offline / old server: keep whatever we showed
@@ -4354,6 +4319,53 @@ async function saveSongsLink() {
       signedOut ? { email: null, stage: "email" } : {});
   }
   paintSaveSongs();
+}
+
+function _saveSongsLogOutButton(a) {
+  return el("button", {
+    class: "btn link", "data-testid": "save-songs-logout",
+    disabled: a.busy ? "disabled" : null, onclick: saveSongsLogOut,
+  }, t("saveSongs.logOut"));
+}
+
+// "Log out": sign this phone out of the gen account (which also stops saving
+// to it; songs already saved stay there), then offer the normal sign-in
+// (Google / Apple / email code) so another account can be used.
+async function saveSongsLogOut() {
+  const a = state.account;
+  if (a.busy) return;
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    await _saveSongsPost("make/sign-out", {});
+  } catch (e) {
+    Object.assign(a, { busy: false, err: _saveSongsErr(e) });
+    return paintSaveSongs();
+  }
+  forgetMakeEmail();
+  if (state.make) state.make.email = "";
+  state.account = { ..._freshAccount(), loaded: true, ready: true, stage: "email", social: a.social };
+  paintSaveSongs();
+  document.querySelector('[data-testid="save-songs-main"]')?.scrollIntoView({ block: "center" });
+}
+
+// Google / Apple sign-in from the save-songs form, then save (the singer
+// tapped "Save tonight's songs" to get here).
+async function saveSongsSocial(provider, idToken) {
+  const a = state.account;
+  if (!idToken || a.busy) return;
+  Object.assign(a, { busy: true, err: "" });
+  paintSaveSongs();
+  try {
+    const d = await _saveSongsPost("make/social", { provider, id_token: idToken, purpose: "save" });
+    Object.assign(a, { busy: false, email: d.email, stage: "idle" });
+    if (state.make) state.make.email = d.email;
+  } catch (e) {
+    Object.assign(a, { busy: false,
+      err: e?.data?.error === "social_failed" ? t("make.socialFailed") : _saveSongsErr(e) });
+    return paintSaveSongs();
+  }
+  await saveSongsLink();
 }
 
 async function saveSongsStop() {
@@ -4428,7 +4440,13 @@ function _saveSongsForm(a) {
           onclick: () => { Object.assign(a, { stage: "email", err: "" }); paintSaveSongs(); },
         }, t("make.differentEmail"))));
   }
+  const socials = socialButtons({
+    el, social: a.social, holder: a, onToken: saveSongsSocial, testPrefix: "save-songs",
+    onError: () => { a.err = t("make.socialFailed"); paintSaveSongs(); },
+  });
   return el("div", { class: "save-songs-form" },
+    socials,
+    socials ? el("div", { class: "mk-or" }, el("span", {}, t("make.orEmail"))) : null,
     el("label", { class: "sing-empty-label" }, t("make.emailLabel"),
       el("input", {
         type: "email", class: "sing-empty-input", autocomplete: "email", inputmode: "email",
@@ -4467,7 +4485,7 @@ function saveSongsSlot(variant = "main") {
       el("button", {
         class: "btn link", "data-testid": "save-songs-stop",
         disabled: a.busy ? "disabled" : null, onclick: saveSongsStop,
-      }, t("saveSongs.stop"))));
+      }, t("saveSongs.stop")), " · ", _saveSongsLogOutButton(a)));
   } else {
     const showForm = variant === "main" && !a.email && a.stage !== "idle";
     // The explainer stays folded behind ⓘ on My songs; the make-it offer and
@@ -4480,7 +4498,11 @@ function saveSongsSlot(variant = "main") {
         el("button", {
           class: "btn link save-songs-link", "data-testid": "save-songs-link",
           disabled: a.busy ? "disabled" : null, onclick: saveSongsLink,
-        }, t("saveSongs.linkShort")),
+        // Signed in already (make-it, or an earlier save): name the account
+        // before linking, and let the singer pick another one.
+        }, a.email ? t("saveSongs.linkTo", { email: a.email }) : t("saveSongs.linkShort")),
+        a.email ? " · " : null,
+        a.email ? _saveSongsLogOutButton(a) : null,
         folded ? el("button", {
           class: "save-songs-info", "data-testid": "save-songs-info",
           "aria-label": t("saveSongs.whatIsThis"), "aria-expanded": a.explainerOpen ? "true" : "false",

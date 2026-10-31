@@ -134,7 +134,8 @@ class TestSearchDecisionLayer:
         expect(row.locator(".sing-version-card")).to_have_count(0)
         expect(row.locator('[data-testid="song-audio-type"]')).to_have_text("🎵 Original")
         expect(row.locator('[data-testid="song-format"]')).to_have_text("YouTube")
-        expect(row.locator('[data-testid="song-risk"]')).to_contain_text("YouTube downloads occasionally fail")
+        # YouTube is assumed to work: no "occasionally fails" warning.
+        expect(row.locator('[data-testid="song-risk"]')).to_have_count(0)
         expect(row.locator('[data-testid="song-preview"]')).to_be_visible()
         # The full list still has the per-version detail, Best badge included.
         row.locator(".sing-versions-toggle").click()
@@ -217,7 +218,7 @@ class TestSearchDecisionLayer:
         expect(row.locator(".btn-primary-cta")).to_have_text("Request")
         expect(row.locator('[data-testid="song-audio-type"]')).to_have_text("🎵 Original")
         expect(row.locator('[data-testid="song-format"]')).to_have_text("YouTube")
-        expect(row.locator('[data-testid="song-risk"]')).to_be_visible()
+        expect(row.locator('[data-testid="song-risk"]')).to_have_count(0)
         expect(row.locator('[data-testid="song-preview"]')).to_be_visible()
         expect(row.locator(".sing-version-card")).to_have_count(0)
         # No versions toggle for a single version.
@@ -240,7 +241,6 @@ class TestSearchDecisionLayer:
         row = page.locator(".result-row").first
         expect(row.locator(".btn-primary-cta")).to_have_text("Request")
         expect(row.locator('[data-testid="song-format"]')).to_have_text("MP4")
-        # On the box: definitely available, so no reliability line at all.
         expect(row.locator('[data-testid="song-risk"]')).to_have_count(0)
         expect(row.locator(".sing-versions-toggle")).to_have_text("Choose from 2 versions →")
 

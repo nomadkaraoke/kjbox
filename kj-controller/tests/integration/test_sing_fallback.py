@@ -208,3 +208,177 @@ def test_incident_reproduction_approve_then_autofallback(flask_app, mocker):
     assert items[0]["url"] == "https://youtu.be/GOOD"
     updated = app.sing_store.get_request(req["id"])
     assert updated["source_ref"] == "https://youtu.be/GOOD"
+
+
+# --- YouTube breaker + cross-source fallback ------------------------------
+
+def _local_and_yt_versions(local_path):
+    return [
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/ONLY", "brand_code": "KV"}},
+        {"source": "local", "local": {"path": local_path}},
+    ]
+
+
+def test_transient_failure_trips_breaker_and_swaps_to_local(flask_app, mocker, tmp_path):
+    """yt-dlp failing after retries → breaker opens, singer gets the on-box version."""
+    app = flask_app
+    local = tmp_path / "say-my-name.mp4"
+    local.write_bytes(b"x")
+    req = _make_request(app, "https://youtu.be/ONLY", _local_and_yt_versions(str(local)))
+    calls = []
+
+    def fake_dl(url):
+        calls.append(url)
+        app.media._last_error = "ERROR: Sign in to confirm you're not a bot"
+        return (None, None)
+
+    mocker.patch.object(app.media, "download_video", side_effect=fake_dl)
+    item = _queue_item(req, [{"url": "https://youtu.be/ONLY", "source_type": "youtube",
+                              "source_meta": None}], "https://youtu.be/ONLY")
+    app.download_queue["items"] = [item]
+    _download_worker(app)
+
+    assert len(calls) == sing_resolve.MAX_TRANSIENT_RETRIES + 1  # tried + retried
+    assert app.youtube_breaker.is_open()
+    assert app.youtube_breaker.status()["probe_url"] == "https://youtu.be/ONLY"
+    assert item["status"] == "completed"
+    assert item["file_path"] == str(local)
+    updated = app.sing_store.get_request(req["id"])
+    assert updated["source_type"] == "local"
+    assert updated["source_ref"] == str(local)
+
+
+def test_unavailable_video_does_not_trip_breaker(flask_app, mocker):
+    """A private video is that video's problem, not yt-dlp's."""
+    app = flask_app
+    req = _make_request(app, "https://youtu.be/DEAD")
+
+    def fake_dl(url):
+        app.media._last_error = "ERROR: [youtube] x: Private video"
+        return (None, None)
+
+    mocker.patch.object(app.media, "download_video", side_effect=fake_dl)
+    item = _queue_item(req, [{"url": "https://youtu.be/DEAD", "source_type": "youtube",
+                              "source_meta": None}], "https://youtu.be/DEAD")
+    app.download_queue["items"] = [item]
+    _download_worker(app)
+
+    assert item["status"] == "error"
+    assert not app.youtube_breaker.is_open()
+
+
+def test_open_breaker_skips_youtube_and_downloads_divebar(flask_app, mocker):
+    """While YouTube is down a pick with a Divebar version never touches yt-dlp."""
+    app = flask_app
+    app.youtube_breaker.trip("broken", "https://youtu.be/OLD")
+    versions = [
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/ONLY", "brand_code": "KV"}},
+        {"source": "kn", "kn": {"brand_code": "CC", "divebar": {"file_id": "F9"}}},
+    ]
+    req = _make_request(app, "https://youtu.be/ONLY", versions)
+    yt = mocker.patch.object(app.media, "download_video")
+    mocker.patch.object(routes, "_resolve_divebar_spec", return_value=({
+        "pair": False, "url": "https://drive/F9", "title": "cc.zip", "source": "divebar",
+        "source_detail": None, "divebar_file_id": "F9", "brand_code": "CC",
+        "song_artist": "Beetlejuice", "song_title": "Say My Name"}, None))
+    dl = mocker.patch.object(app.media, "download_from_url",
+                             return_value=("/videos/cc.zip", "cc.zip"))
+    item = _queue_item(req, [{"url": "https://youtu.be/ONLY", "source_type": "youtube",
+                              "source_meta": None}], "https://youtu.be/ONLY")
+    app.download_queue["items"] = [item]
+    _download_worker(app)
+
+    yt.assert_not_called()
+    dl.assert_called_once()
+    assert item["status"] == "completed"
+    assert item["source"] == "divebar"
+    assert app.sing_store.get_request(req["id"])["source_type"] == "divebar"
+
+
+def test_youtube_success_closes_breaker(flask_app, mocker):
+    app = flask_app
+    app.youtube_breaker.trip("broken", "https://youtu.be/OLD")
+    req = _make_request(app, "https://youtu.be/GOOD")  # no other source → still tried
+    mocker.patch.object(app.media, "download_video", return_value=("/videos/g.mp4", "G"))
+    item = _queue_item(req, [{"url": "https://youtu.be/GOOD", "source_type": "youtube",
+                              "source_meta": None}], "https://youtu.be/GOOD")
+    app.download_queue["items"] = [item]
+    _download_worker(app)
+
+    assert item["status"] == "completed"
+    assert not app.youtube_breaker.is_open()
+
+
+def test_kj_pick_prefers_non_youtube_while_breaker_open(flask_app, tmp_path):
+    app = flask_app
+    local = tmp_path / "a.mp4"
+    local.write_bytes(b"x")
+    versions = [
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/BEST", "brand_code": "CC",
+                                "is_community": True}},
+        {"source": "local", "local": {"path": str(local)}},
+    ]
+    req = app.sing_store.create_request(
+        singer_name="T", phone="", song_artist="A", song_title="B",
+        source_type="kj_pick", source_ref=None, source_meta={"versions": versions})
+
+    bound = routes.resolve_kj_pick_best(app, req, app.kj_config)
+    assert bound["source_type"] == "youtube"  # breaker closed → best-ranked wins
+
+    app.youtube_breaker.trip("broken", "https://youtu.be/X")
+    req2 = app.sing_store.create_request(
+        singer_name="T2", phone="", song_artist="A", song_title="B",
+        source_type="kj_pick", source_ref=None, source_meta={"versions": versions})
+    bound2 = routes.resolve_kj_pick_best(app, req2, app.kj_config)
+    assert bound2["source_type"] == "local"
+
+
+def test_cross_source_error_never_stops_the_worker(flask_app, mocker):
+    """A crash while swapping sources fails closed; later downloads still run."""
+    app = flask_app
+    app.youtube_breaker.trip("broken", "https://youtu.be/OLD")
+    versions = [
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/ONLY", "brand_code": "KV"}},
+        {"source": "kn", "kn": {"brand_code": "CC", "divebar": {"file_id": "F9"}}},
+    ]
+    req = _make_request(app, "https://youtu.be/ONLY", versions)
+    mocker.patch.object(routes, "_resolve_divebar_spec", side_effect=RuntimeError("boom"))
+    mocker.patch.object(app.media, "download_video", return_value=("/videos/y.mp4", "Y"))
+    item = _queue_item(req, [{"url": "https://youtu.be/ONLY", "source_type": "youtube",
+                              "source_meta": None}], "https://youtu.be/ONLY")
+    later = {"id": "dl2", "url": "https://youtu.be/NEXT", "title": "Next", "source": "youtube",
+             "status": "queued", "error": None, "rotation_entry_id": None}
+    app.download_queue["items"] = [item, later]
+    _download_worker(app)
+
+    assert item["status"] == "completed"   # fell back to trying YouTube itself
+    assert later["status"] == "completed"
+    assert app.download_queue["worker_running"] is False
+
+
+def test_advance_keeps_versions_snapshot_for_a_later_swap(flask_app, mocker, tmp_path):
+    """Unavailable → advance → transient trip still finds the local version."""
+    app = flask_app
+    local = tmp_path / "a.mp4"
+    local.write_bytes(b"x")
+    versions = [
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/DEAD", "brand_code": "KV"}},
+        {"source": "kn", "kn": {"youtube_url": "https://youtu.be/FLAKY", "brand_code": "KV"}},
+        {"source": "local", "local": {"path": str(local)}},
+    ]
+    req = _make_request(app, "https://youtu.be/DEAD", versions)
+
+    def fake_dl(url):
+        app.media._last_error = ("ERROR: [youtube] x: Private video" if "DEAD" in url
+                                 else "Sign in to confirm you're not a bot")
+        return (None, None)
+
+    mocker.patch.object(app.media, "download_video", side_effect=fake_dl)
+    item = _queue_item(req, routes._build_sing_fallback_candidates(
+        app.sing_store.get_request(req["id"]), "https://youtu.be/DEAD", None, app.kj_config),
+        "https://youtu.be/DEAD")
+    app.download_queue["items"] = [item]
+    _download_worker(app)
+
+    assert app.youtube_breaker.is_open()
+    assert item["status"] == "completed" and item["file_path"] == str(local)

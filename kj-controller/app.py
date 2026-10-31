@@ -285,6 +285,17 @@ def _install_external_media_monitor(flask_app, cfg, start):
             pass
 
 
+def _install_youtube_breaker(flask_app, cfg, start):
+    """Attach the YouTube breaker (hides YouTube versions from singers while
+    yt-dlp is failing; probes every 30 min). ``start`` gates the probe thread."""
+    from youtube_breaker import YouTubeBreaker
+    breaker = YouTubeBreaker(flask_app.sing_store, cfg)
+    flask_app.youtube_breaker = breaker
+    if start:
+        breaker.start(flask_app.media)
+    return breaker
+
+
 def _sync_event_url_overlays(flask_app):
     """Point follow-event-url QR overlays (and the `{url}` text placeholder) at
     the current event URL on boot, so a URL-scheme change (e.g. the kjbox.cc
@@ -517,6 +528,7 @@ def create_app(config=None):
     # 'New Rotation' starts the kj-night-capture sidecar (night_capture_launcher.py).
     flask_app.night_capture_enabled = cfg.get('night_capture_enabled', (config is None))
     _install_external_media_monitor(flask_app, cfg, start=(config is None))
+    _install_youtube_breaker(flask_app, cfg, start=False)
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)
@@ -764,6 +776,7 @@ def start_app():  # pragma: no cover
     # 'New Rotation' starts the kj-night-capture sidecar (night_capture_launcher.py).
     flask_app.night_capture_enabled = cfg.get('night_capture_enabled', True)
     _install_external_media_monitor(flask_app, cfg, start=True)
+    _install_youtube_breaker(flask_app, cfg, start=True)
 
     flask_app.register_blueprint(routes_bp)
     flask_app.register_blueprint(sing_bp)

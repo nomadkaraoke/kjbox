@@ -2,6 +2,31 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-29 - YouTube breaker, compact song cards, switch save-songs account (v0.146.0)
+
+**Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues).
+
+- **No reliability copy for singers.** The version list no longer says "Definitely available — works even
+  offline" / "Very reliable — from our cloud library" / "Almost always works — YouTube downloads occasionally
+  fail", and the open song row lost its amber YouTube line (Andrew: "no need to confuse or worry singers").
+- **YouTube breaker** (`youtube_breaker.py`): when a singer's YouTube download still fails after its retries
+  with a yt-dlp/network/bot-check error, YouTube-only versions disappear from singer search for the rest of
+  the night, `kj_pick` binds to local/Divebar versions, and that singer's request swaps to the best local or
+  Divebar version of the same song (they get the existing "we found another version" push). A probe re-tries
+  a real download every 30 min and turns YouTube back on once it works; any successful YouTube download also
+  does. A private/deleted video never trips it. The KJ's YouTube settings show the state, with "Retry now".
+- **Cross-source fallback:** a request whose YouTube candidates are all gone now also falls back to a local or
+  Divebar version instead of ending in ❌ (the v1 follow-up from the July fallback work).
+- **My songs cards:** with 3+ buttons they sit in a row under the song instead of a 5-high column on the
+  right, so each card is about 140px tall instead of 340px.
+- **Save tonight's songs:** when the phone is already signed in, the line names the account ("Save tonight's
+  songs to x@y.com") and offers **Log out** (also beside "Stop saving" once saving). Log out signs this phone
+  out of that gen account and shows the normal sign-in: Continue with Apple / Google (the make screen's
+  buttons, now shared via `make.js` `socialButtons`) or an email code; signing in saves straight away.
+  Previously a phone signed in by an earlier make-it saved to that account with no way to change it, and the
+  save sign-in had no Google/Apple. 2 new strings, hand-translated into all 32 locales (Gemini key
+  unavailable; the next `translate.py` run may polish them); the 4 reliability strings were removed.
+
 ## 2026-10-29 - Singer search: open-row facts wrap between items (v0.145.1)
 
 - Seen on prod after v0.145.0: "🎵 Original · CC Karaoke · CDG+MP3" wrapped inside "CC Karaoke". Each fact now

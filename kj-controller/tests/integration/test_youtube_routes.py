@@ -134,3 +134,24 @@ def test_youtube_status_reflects_cookies(flask_test_client, flask_app):
     data = json.loads(resp.data)
     assert data['cookies_present'] is True
     assert data['cookies_valid'] is True
+
+
+def test_youtube_status_reports_breaker(flask_test_client, flask_app):
+    """The KJ's YouTube panel sees when singers have stopped being offered YouTube."""
+    data = flask_test_client.get('/youtube/status').get_json()
+    assert data['breaker']['open'] is False
+    flask_app.youtube_breaker.trip('bot check', 'https://youtu.be/x')
+    data = flask_test_client.get('/youtube/status').get_json()
+    assert data['breaker']['open'] is True
+    assert data['breaker']['reason'] == 'bot check'
+    assert 'next_probe_at' in data['breaker']
+
+
+def test_breaker_probe_now(flask_test_client, flask_app, mocker):
+    """KJ "Retry now" runs the probe immediately and closes on success."""
+    assert flask_test_client.post('/youtube/breaker/probe').get_json() == {'ok': True, 'open': False}
+    flask_app.youtube_breaker.trip('bot check', 'https://youtu.be/x')
+    dl = mocker.patch.object(flask_app.media, 'download_video', return_value=(None, None))
+    assert flask_test_client.post('/youtube/breaker/probe').get_json() == {'ok': False, 'open': True}
+    dl.return_value = ('/v/x.mp4', 'X')
+    assert flask_test_client.post('/youtube/breaker/probe').get_json() == {'ok': True, 'open': False}

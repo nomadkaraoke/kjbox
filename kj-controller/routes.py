@@ -28,6 +28,7 @@ from text_normalize import normalize as _normalize_text, tokens as _tokens, grou
     result_group_key as _result_group_key
 import version_priority
 import sing_resolve
+import youtube_breaker
 import youtube_health
 import youtube_search
 from external_media_monitor import ExternalMediaMonitor
@@ -872,6 +873,40 @@ def _resolve_divebar_spec(file_id, artist, title, brand_code, fmt, cfg):
     }, None
 
 
+def _run_queue_download(app, item):
+    """Fetch one download-queue item → ``(file_path, title)``; ``(None, None)`` on failure."""
+    try:
+        if item.get('source') == 'divebar':
+            # Canonical community identity: db-<brand>-<fileid>. song_artist/
+            # song_title carry the real song fields (item['title'] is the zip
+            # filename, not the song title).
+            fid = item.get('divebar_file_id')
+            brand = item.get('brand_code') or ''
+            ref = f"{brand or 'DB'}-{fid}" if fid else None
+            song_artist = item.get('song_artist')
+            song_title = item.get('song_title')
+            if item.get('pair'):
+                # Loose CDG: fetch the .cdg + its sibling .mp3 and package
+                # them into a single playable cdg+mp3 zip.
+                file_path, title = app.media.download_cdg_pair(
+                    item['cdg_url'], item['mp3_url'],
+                    filename=item.get('title'),
+                    source="community", source_ref=ref,
+                    artist=song_artist, title=song_title)
+            else:
+                file_path, title = app.media.download_from_url(
+                    item['url'], filename=item.get('title'),
+                    source="community", source_ref=ref,
+                    artist=song_artist, title=song_title)
+        else:
+            file_path, title = app.media.download_video(item['url'])
+            if file_path and _youtube_breaker(app) is not None:
+                _youtube_breaker(app).record_success()
+        return file_path, title
+    except Exception:
+        return None, None
+
+
 def _download_worker(app):
     """Process queued downloads sequentially until queue is drained."""
     while True:
@@ -886,41 +921,33 @@ def _download_worker(app):
             next_item['status'] = 'downloading'
         _sync_rotation_download(app, next_item)
 
-        try:
-            if next_item.get('source') == 'divebar':
-                # Canonical community identity: db-<brand>-<fileid>. song_artist/
-                # song_title carry the real song fields (item['title'] is the zip
-                # filename, not the song title).
-                fid = next_item.get('divebar_file_id')
-                brand = next_item.get('brand_code') or ''
-                ref = f"{brand or 'DB'}-{fid}" if fid else None
-                song_artist = next_item.get('song_artist')
-                song_title = next_item.get('song_title')
-                if next_item.get('pair'):
-                    # Loose CDG: fetch the .cdg + its sibling .mp3 and package
-                    # them into a single playable cdg+mp3 zip.
-                    file_path, title = app.media.download_cdg_pair(
-                        next_item['cdg_url'], next_item['mp3_url'],
-                        filename=next_item.get('title'),
-                        source="community", source_ref=ref,
-                        artist=song_artist, title=song_title)
-                else:
-                    file_path, title = app.media.download_from_url(
-                        next_item['url'], filename=next_item.get('title'),
-                        source="community", source_ref=ref,
-                        artist=song_artist, title=song_title)
-            else:
-                file_path, title = app.media.download_video(next_item['url'])
-        except Exception:
-            file_path, title = None, None
+        # YouTube is down tonight (breaker open) → don't spend a slow, doomed
+        # yt-dlp attempt on a singer's pick that has a local/Divebar version.
+        cross = None
+        if (next_item.get('source') != 'divebar' and next_item.get('request_id')
+                and _youtube_breaker_open(app)):
+            cross = _attempt_cross_source_fallback(app, next_item)
+            if cross == _REQUEUED:
+                continue
+
+        if cross:
+            file_path, title = cross, next_item.get('title')
+        else:
+            file_path, title = _run_queue_download(app, next_item)
 
         # Sing-request fallback: a failed download for a singer's pick should
         # auto-advance to the next candidate version (or retry on a transient
         # blip) rather than dead-ending at a red ❌ the KJ must fix by hand.
-        if (not file_path and next_item.get('request_id')
-                and next_item.get('candidates')):
-            if _attempt_sing_fallback(app, next_item):
+        if not file_path and next_item.get('request_id'):
+            if next_item.get('candidates') and _attempt_sing_fallback(app, next_item):
                 continue  # re-queued (retry or next candidate); worker re-picks it
+            # Out of YouTube options (or YouTube is down) → swap to the best
+            # local / Divebar version of the same song.
+            cross = _attempt_cross_source_fallback(app, next_item)
+            if cross == _REQUEUED:
+                continue
+            if cross:
+                file_path, title = cross, next_item.get('title')
 
         with app._download_lock:
             if file_path:
@@ -945,7 +972,8 @@ def _download_worker(app):
                 except Exception:
                     pass  # Best-effort; entry can be linked manually
             # Fell back to an alternate version → tell the singer which one landed.
-            if next_item.get('request_id') and next_item.get('candidate_index'):
+            if next_item.get('request_id') and (next_item.get('candidate_index')
+                                                or next_item.get('cross_source')):
                 _notify_sing_outcome(app, next_item, 'resolved_alt')
         else:
             _sync_rotation_download(app, next_item)  # status='error' → entry 'failed'
@@ -2411,10 +2439,23 @@ def yt_search():
 
 @routes_bp.route('/youtube/status', methods=['GET'])
 def youtube_status():
-    """Returns YouTube download engine health: yt-dlp, EJS, Deno, cookies."""
+    """Returns YouTube download engine health: yt-dlp, EJS, Deno, cookies, breaker."""
     cfg = current_app.kj_config
     status = youtube_health.get_youtube_status(cfg)
+    breaker = _youtube_breaker(current_app)
+    if breaker is not None:
+        status["breaker"] = breaker.status()
     return jsonify(status)
+
+
+@routes_bp.route('/youtube/breaker/probe', methods=['POST'])
+def youtube_breaker_probe():
+    """KJ "Retry now": try the breaker's probe download immediately."""
+    breaker = _youtube_breaker(current_app)
+    if breaker is None or not breaker.is_open():
+        return jsonify({"ok": True, "open": False})
+    ok = breaker.probe(current_app.media)
+    return jsonify({"ok": ok, "open": breaker.is_open()})
 
 
 @routes_bp.route('/youtube/cookies', methods=['POST'])
@@ -6303,6 +6344,10 @@ def resolve_kj_pick_best(app, req, cfg):
     ranked = _ranked_version_indices(versions, cfg)
     if not ranked:
         raise ValueError("kj_pick snapshot has no versions to auto-pick")
+    if _youtube_breaker_open(app):
+        # YouTube is down tonight: any local/Divebar version beats the best
+        # YouTube one (stable sort keeps rank order within each group).
+        ranked.sort(key=lambda i: youtube_breaker.is_youtube_only(versions[i]))
     last_err = None
     for idx in ranked:
         try:
@@ -6465,7 +6510,15 @@ def _attempt_sing_fallback(app, item):
                 f"{attempts + 1}/{sing_resolve.MAX_TRANSIENT_RETRIES} — {reason}",
                 app.kj_config)
             return True
-        # retries exhausted → fall through and advance to the next candidate
+        # Still failing after its retries: yt-dlp itself is in trouble, not
+        # this one video → stop offering YouTube to singers for now, and swap
+        # this pick to a local/Divebar version when there is one.
+        breaker = _youtube_breaker(app)
+        if breaker is not None:
+            breaker.trip(reason, item.get("url"))
+            if _non_youtube_choice(app, item) is not None:
+                return False  # worker does the cross-source swap
+        # no other source → fall through and advance to the next candidate
 
     tried = list(range(idx + 1))
     nxt = sing_resolve.next_candidate_index(len(candidates), tried)
@@ -6482,15 +6535,120 @@ def _attempt_sing_fallback(app, item):
         item["status"] = "queued"
         item["error"] = None
     try:
+        # Keep the versions[] snapshot: a later cross-source swap needs it.
+        req_row = app.sing_store.get_request(item["request_id"]) or {}
         app.sing_store.update_request_source(
             item["request_id"], cand.get("source_type", "youtube"),
-            cand["url"], cand.get("source_meta"))
+            cand["url"], _preserve_versions_meta(req_row, cand.get("source_meta")))
     except Exception:
         app.logger.exception("Sing fallback: update_request_source failed")
     log_message(
         f"Sing fallback: candidate {idx} unavailable, advancing to candidate "
         f"{nxt} for request {item.get('request_id')} — {reason}", app.kj_config)
     return True
+
+
+_REQUEUED = "requeued"
+
+
+def _youtube_breaker(app):
+    return getattr(app, "youtube_breaker", None)
+
+
+def _youtube_breaker_open(app):
+    breaker = _youtube_breaker(app)
+    return breaker is not None and breaker.is_open()
+
+
+def _non_youtube_choice(app, item_or_req):
+    """Best local/Divebar version in a sing request's ``versions[]`` snapshot.
+
+    Accepts a queue item (looks its request up) or a request row. Returns
+    ``(req, source_type, source_ref, source_meta)`` or ``None``.
+    """
+    req = item_or_req
+    if "request_id" in item_or_req:
+        try:
+            req = app.sing_store.get_request(item_or_req["request_id"])
+        except Exception:
+            req = None
+    if not req:
+        return None
+    try:
+        meta_raw = req.get("source_meta")
+        meta = meta_raw if isinstance(meta_raw, dict) else json.loads(meta_raw or "{}")
+    except (TypeError, ValueError):
+        return None
+    versions = meta.get("versions") or []
+    for idx in _ranked_version_indices(versions, app.kj_config):
+        try:
+            src_type, src_ref, src_meta = _pick_version_from_kj_pick(req, idx)
+        except ValueError:
+            continue
+        if src_type == "local" and src_ref and os.path.exists(src_ref):
+            return req, src_type, src_ref, src_meta
+        if src_type == "divebar" and src_ref:
+            return req, src_type, src_ref, src_meta
+    return None
+
+
+def _attempt_cross_source_fallback(app, item):
+    """Swap a sing request whose YouTube pick can't be fetched to local/Divebar.
+
+    Returns a file path (an on-box copy: the worker completes the item with
+    it), ``_REQUEUED`` (the item now downloads the Divebar version), or
+    ``None`` (no other source — tried once per item). Fails closed: it runs
+    on the download worker thread, and an exception there would stop every
+    later download.
+    """
+    if item.get("cross_source_tried"):
+        return None
+    item["cross_source_tried"] = True
+    try:
+        with app.app_context():   # _resolve_divebar_spec reads current_app
+            return _cross_source_swap(app, item)
+    except Exception:
+        app.logger.exception("Cross-source fallback failed")
+        return None
+
+
+def _cross_source_swap(app, item):
+    choice = _non_youtube_choice(app, item)
+    if choice is None:
+        return None
+    req, src_type, src_ref, src_meta = choice
+    spec = None
+    path = src_ref if src_type == "local" else None
+    if src_type == "divebar":
+        brand_code = (src_meta or {}).get("brand_code") or ""
+        existing = _existing_media_for(app, _prospective_media_id(
+            "divebar", file_id=src_ref, brand_code=brand_code))
+        if existing:
+            path = existing["file_path"]
+        else:
+            spec, err = _resolve_divebar_spec(
+                src_ref, req.get("song_artist"), req.get("song_title"),
+                brand_code, (src_meta or {}).get("format"), app.kj_config)
+            if err:
+                return None
+    try:
+        app.sing_store.update_request_source(
+            req["id"], src_type, src_ref, _preserve_versions_meta(req, src_meta))
+    except Exception:
+        app.logger.exception("Cross-source fallback: update_request_source failed")
+    log_message(
+        f"Sing fallback: YouTube pick for request {req['id']} unavailable, "
+        f"switched to {src_type} version {src_ref}", app.kj_config)
+    item["cross_source"] = True
+    if path:
+        return path
+    with app._download_lock:
+        for key in ("candidates", "candidate_index", "transient_attempts"):
+            item.pop(key, None)
+        item.update(spec)
+        item.update(status="queued", error=None)
+    _sync_rotation_download(app, item)
+    return _REQUEUED
 
 
 def _notify_sing_outcome(app, item, decision):

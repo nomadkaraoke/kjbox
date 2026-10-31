@@ -2440,6 +2440,7 @@ function renderYtSettings(data) {
         { label: 'EJS', ok: data.ejs_installed },
         { label: 'Deno', ok: data.deno_available },
         { label: 'Cookies', ok: data.cookies_present && data.cookies_valid },
+        { label: 'Downloads', ok: !(data.breaker && data.breaker.open) },
     ];
     bar.innerHTML = items.map(({ label, ok, warn }) => {
         const cls = ok ? 'av-health-ok' : (warn || label === 'Cookies' ? 'av-health-warn' : 'av-health-error');
@@ -2454,7 +2455,18 @@ function renderYtSettings(data) {
     const ytdlpExtra = ytdlpOutdated
         ? ` <span class="yt-outdated">(latest: ${escapeHtml(data.ytdlp_latest)})</span> <button class="system-btn yt-upgrade-btn" onclick="upgradeYtdlp(this)">Update</button>`
         : '';
-    engineEl.innerHTML = `
+    // Breaker open = a singer's YouTube download kept failing, so singers
+    // aren't offered YouTube-only versions until a probe download works.
+    const br = data.breaker || {};
+    const breakerRow = br.open ? `
+        <div class="av-info-row">
+            <span class="av-info-label">Singer YouTube</span>
+            ${avDot('av-dot-error')}
+            <span class="av-info-value">Hidden from singers since ${escapeHtml(new Date(br.opened_at * 1000).toLocaleTimeString())}
+                (retries ${escapeHtml(new Date(br.next_probe_at * 1000).toLocaleTimeString())})
+                <button class="system-btn" onclick="probeYtBreaker(this)">Retry now</button></span>
+        </div>` : '';
+    engineEl.innerHTML = breakerRow + `
         <div class="av-info-row">
             <span class="av-info-label">yt-dlp</span>
             ${avDot(ytdlpDotCls)}
@@ -2507,7 +2519,7 @@ function updateYtHealthDot(data) {
     // Yellow: yt-dlp works but missing EJS or cookies
     // Red: yt-dlp broken
     dot.className = 'yt-health-dot';
-    if (!data.ytdlp_version) {
+    if (!data.ytdlp_version || (data.breaker && data.breaker.open)) {
         dot.classList.add('yt-dot-error');
     } else if (!data.ejs_installed || !data.cookies_present || !data.cookies_valid
                || data.ytdlp_outdated) {
@@ -2515,6 +2527,19 @@ function updateYtHealthDot(data) {
     } else {
         dot.classList.add('yt-dot-ok');
     }
+}
+
+async function probeYtBreaker(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Trying…';
+    try {
+        const r = await fetch('/youtube/breaker/probe', { method: 'POST' });
+        const data = await r.json();
+        btn.textContent = data.ok ? 'Working again' : 'Still failing';
+    } catch (e) {
+        btn.textContent = 'Error';
+    }
+    ytSettingsRefresh();
 }
 
 async function uploadYtCookies() {

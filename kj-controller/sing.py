@@ -34,6 +34,7 @@ from flask import (
 from singer_names import fold_name
 from sing_store import SingStore
 from wait_estimate import compute_all_estimates, compute_estimate
+from youtube_breaker import drop_youtube_only
 
 _normalize_instagram = SingStore.normalize_instagram
 
@@ -779,19 +780,29 @@ def search():
     # the results so the empty-state triage can show/hide card 2 without a
     # second round-trip. Cheap: one SQLite read already hot in the connection.
     store = current_app.sing_store
+    songs = _offerable(data["songs"])
     response = {
-        "songs": data["songs"],
+        "songs": songs,
         "make_requests_enabled": _make_enabled(store),
         "simple_mode": store.is_simple_mode(),
     }
     if data.get("karaoke_nerds_timeout"):
         response["karaoke_nerds_timeout"] = True
     _search_log("search", query, {
-        "songs": len(data["songs"]),
-        "top": [f'{s.get("artist", "")} — {s.get("title", "")}' for s in data["songs"][:3]],
+        "songs": len(songs),
+        "top": [f'{s.get("artist", "")} — {s.get("title", "")}' for s in songs[:3]],
         "kn_timeout": bool(data.get("karaoke_nerds_timeout")),
     })
     return jsonify(response)
+
+
+def _offerable(songs):
+    """Search results a singer may pick tonight: no YouTube-only versions while
+    the YouTube breaker is open (yt-dlp failing; see youtube_breaker.py)."""
+    breaker = getattr(current_app, "youtube_breaker", None)
+    if breaker is None or not breaker.is_open():
+        return songs
+    return drop_youtube_only(songs)
 
 
 # --- Song identification (question 1 — docs/SONG-IDENTIFICATION.md) --------
@@ -995,6 +1006,7 @@ def search_resolve():
                     corrected_q, current_app._get_current_object(), grouped=True,
                     catalog_limit=_safe_int(current_app.kj_config.get("sing_search_catalog_limit"), 60),
                 ).get("songs") or []
+                songs = _offerable(songs)
             return jsonify({"corrected": {"artist": artist, "title": title}, "kind": kind,
                             "typed": query, "songs": songs, "split": split})
     if kind == "ambiguous":

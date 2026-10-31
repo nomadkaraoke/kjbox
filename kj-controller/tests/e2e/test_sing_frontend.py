@@ -884,19 +884,16 @@ class TestVersionRowEnrichment:
         expect(page.locator(".result-row")).to_be_visible()
         page.locator(".sing-versions-toggle").click()
 
-    def test_availability_tiers_say_how_sure_it_will_play(self, page, live_server, live_token):
+    def test_no_reliability_copy_for_singers(self, page, live_server, live_token):
+        # Singers aren't told a version "occasionally fails" (or "definitely"
+        # works): YouTube is assumed to work, and the YouTube breaker hides
+        # those versions server-side when it doesn't.
         self._open_versions(page, live_server, live_token)
-        cards = page.locator(".sing-version-card")
-        local = cards.nth(0).locator('[data-testid="version-availability"]')
-        expect(local).to_have_text("Definitely available — works even offline")
-        expect(local).to_have_class(re.compile("sing-avail-sure"))
-        cloud = cards.nth(1).locator('[data-testid="version-availability"]')
-        expect(cloud).to_contain_text("Very reliable — from our cloud library")
-        expect(cloud).to_have_class(re.compile("sing-avail-high"))
-        page.locator('[data-testid="online-collapse-toggle"]').click()
-        yt = cards.nth(2).locator('[data-testid="version-availability"]')
-        expect(yt).to_have_text("Almost always works — YouTube downloads occasionally fail")
-        expect(yt).to_have_class(re.compile("sing-avail-likely"))
+        expect(page.locator(".sing-version-card").first).to_be_visible()
+        expect(page.locator('[data-testid="version-availability"]')).to_have_count(0)
+        expect(page.locator('[data-testid="song-risk"]')).to_have_count(0)
+        expect(page.locator("body")).not_to_contain_text("occasionally fail")
+        expect(page.locator("body")).not_to_contain_text("Definitely available")
 
     def test_cta_wording_is_request(self, page, live_server, live_token):
         # Compact rows: the CTA sits inline beside ▶, so it's one word.
