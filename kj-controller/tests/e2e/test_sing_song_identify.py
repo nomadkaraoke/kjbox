@@ -317,3 +317,52 @@ def test_corrected_search_with_only_near_misses_is_still_missing(page, live_serv
     expect(page.locator('[data-testid="similar-heading"]')).to_be_visible()
     expect(page.locator(".result-row")).to_have_count(3)
     expect(page.locator('[data-testid="make-bar"]')).to_have_count(0)
+
+
+LOVE_STORY = {"key": "g:ls", "artist": "Taylor Swift", "title": "Love Story", "version_count": 24,
+              "in_library": True, "versions": [{"source": "local", "priority_class": "unknown",
+              "local": {"path": "/m/ls.zip", "filename": "ls.zip", "disc_id": "CC2206-001"}}]}
+
+
+def test_typed_title_in_the_rows_gets_no_sticky_make_bar(page, live_server, live_token):
+    """Live 2026-10-30: "love story" showed "Not seeing your song? Generate it"
+    over 24 versions of Taylor Swift's Love Story."""
+    # A different row count per query, so each check waits for its own search.
+    rows = {"love story": 5, "love story taylor swift": 4, "love story - sarah cothran": 3}
+    _setup(page, live_server, live_token, {"status": "none"}, lambda q: [LOVE_STORY] + OTHERS[:rows.get(q, 0)])
+    for q in ("love story", "love story taylor swift"):
+        page.locator('input[type="search"]').fill(q)
+        expect(page.locator(".result-row")).to_have_count(rows[q] + 1)
+        expect(page.locator('[data-testid="make-bar"]')).to_have_count(0)
+    # Another artist named after a " - " is still not seeing their song.
+    page.locator('input[type="search"]').fill("love story - sarah cothran")
+    expect(page.locator(".result-row")).to_have_count(4)
+    expect(page.locator('[data-testid="make-bar"]')).to_be_visible()
+
+
+def test_picked_candidate_the_index_has_karaoke_for_is_never_missing(page, live_server, live_token):
+    """A "Which song?" pick keeps the index's karaoke flag: rows the picked name
+    can't match ("Love Story — Love Story") must not become "No karaoke version yet"."""
+    searched = []
+
+    def songs_for(q):
+        searched.append(q)
+        return OTHERS[:3]
+    _setup(page, live_server, live_token, {
+        "status": "candidates", "typed": "love story",
+        "candidates": [{"artist": "Love Story", "title": "Love Story", "karaoke": True},
+                       {"artist": "Taylor Swift", "title": "Love Story", "karaoke": True}],
+    }, songs_for)
+    page.locator('input[type="search"]').fill("love story")
+    page.locator('[data-testid="song-candidate"]').nth(0).click()
+    # Wait for the picked song's own karaoke search to land before checking absence.
+    page.wait_for_function("true")
+    for _ in range(50):
+        if "Love Story Love Story" in searched:
+            break
+        page.wait_for_timeout(100)
+    assert "Love Story Love Story" in searched, searched
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(200)
+    expect(page.locator(".result-row")).to_have_count(3)
+    expect(page.locator('[data-testid="song-missing"]')).to_have_count(0)

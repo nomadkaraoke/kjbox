@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-10-30 - Singer search: no make-it offer for "love story" (v0.146.1)
+
+Live at tonight's show, two singers searched "love story" and were offered make-it, although the top row
+was Taylor Swift's Love Story with 24 karaoke versions. Three causes (search log `search_log.db`):
+
+- **Identifier:** for a self-titled song ("Love Story — Love Story", an obscure KaraokeNerds entry; also
+  "BONES — Bones") the typed words counted as both artist and title, so it outscored Taylor Swift. It is now
+  scored as a title match only and popularity decides. Typing the name twice ("bones bones") still means
+  the self-titled song. `song_id_eval.py`: 125 cases unchanged (99 confident-correct, 0 wrong).
+- **Picking a "Which song?" candidate dropped the index's `karaoke` flag**, so a pick whose name matched no
+  row ("Love Story — Love Story") showed "No karaoke version yet · Make it" above the real versions.
+- **Sticky "Not seeing your song? Generate it" bar** no longer shows when a row's title is what the singer
+  typed (with or without the artist). Across all nights the bar had ~430 shows and 3 taps.
 ## 2026-10-29 - YouTube breaker, compact song cards, switch save-songs account (v0.146.0)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues).
