@@ -380,7 +380,10 @@ function _credits(artist) {
 // "love story taylor swift"): that song is right there, so a "Not seeing your
 // song?" bar is noise (live 2026-10-30: shown over 24 versions of Love Story).
 function typedNamesRow(songs, query) {
-  const q = _songKey(query);
+  // Not _songKey: it drops a " - …" / "(…)" tail, and in typed text that tail is
+  // often the artist ("love story - sarah cothran").
+  const q = String(query || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
   if (!q) return false;
   return songs.some((g) => {
     const t = _songKey(g.title);

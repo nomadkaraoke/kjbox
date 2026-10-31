@@ -334,6 +334,9 @@ def test_typed_title_in_the_rows_gets_no_sticky_make_bar(page, live_server, live
     page.locator('input[type="search"]').fill("love story taylor swift")
     expect(page.locator(".result-row")).to_have_count(6)
     expect(page.locator('[data-testid="make-bar"]')).to_have_count(0)
+    # Another artist named after a " - " is still not seeing their song.
+    page.locator('input[type="search"]').fill("love story - sarah cothran")
+    expect(page.locator('[data-testid="make-bar"]')).to_be_visible()
 
 
 def test_picked_candidate_the_index_has_karaoke_for_is_never_missing(page, live_server, live_token):
