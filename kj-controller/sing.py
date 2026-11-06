@@ -2894,6 +2894,106 @@ def forget_me():
     return ("", 204)
 
 
+def _phone_digits(phone):
+    """Last 10 digits of a phone number, or '' when there are fewer than 7."""
+    digits = re.sub(r"\D", "", str(phone or ""))
+    return digits[-10:] if len(digits) >= 7 else ""
+
+
+@sing_bp.route("/identity/claim", methods=["POST"])
+def claim_identity():
+    """A phone that has just been given a name joins that singer's night.
+
+    Live 2026-11-05 a singer in Safari private tabs (fresh storage per tab) got a
+    new device id with each tab, so My songs showed nothing until she submitted
+    again. Called whenever the phone saves a name (and once per load):
+
+    - The name matches (exact fold) a singer in tonight's rotation or requests
+      → the device is aliased to that singer's spelling, so My songs lists their
+      queued songs (reorder only). That is the trust a phone already gets by
+      submitting one song under the name.
+    - The phone number ALSO matches one on that singer's request tonight → the
+      requests' edit tokens come back too, restoring Cancel / Change.
+
+    Body ``{device_id, name, phone?, strict?}``. Never errors on "no match"; returns
+    ``{matched: false}``.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    if _singer_rate_limited(request):
+        return jsonify({"error": "rate_limited"}), 429
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "body must be a JSON object"}), 400
+    name = str(data.get("name") or "").strip()
+    device_id = str(data.get("device_id") or "").strip()[:64]
+    if not name or not device_id or len(name) > _MAX_SINGER_NAME_LEN:
+        return jsonify({"error": "name and device_id are required"}), 400
+    folded = _fold_name(name)
+    if not folded:
+        return jsonify({"matched": False})
+
+    # Tonight's requests under this name (the primary singer; tips excluded).
+    mine = []
+    try:
+        for req in store.list_requests(token=token):
+            if (req.get("source_type") != "tip"
+                    and _belongs_to_current_night(store, req)
+                    and _fold_name(req.get("singer_name")) == folded):
+                mine.append(req)
+    except Exception:
+        current_app.logger.exception("identity claim: request lookup failed")
+
+    # The KJ's spelling wins: a rotation member whose name folds the same.
+    canonical = None
+    songs = 0   # their songs still to sing tonight (the phone opens My songs when > 0)
+    rotation_mgr = getattr(current_app, "rotation", None)
+    entries = []
+    if rotation_mgr is not None:
+        try:
+            entries, _active, _np = _build_now_playing(rotation_mgr)
+        except Exception:
+            entries = []
+    for entry in entries:
+        hit = next((m for m in _entry_members(entry) if _fold_name(m) == folded), None)
+        if not hit:
+            continue
+        canonical = canonical or hit
+        if (entry.get("status") or "").lower() not in ("done", "left", "cancelled"):
+            songs += 1
+    songs += sum(1 for r in mine if (r.get("status") or "") == "pending")
+    if canonical is None and mine:
+        canonical = (mine[0].get("singer_name") or "").strip()
+    if not canonical:
+        return jsonify({"matched": False})
+
+    typed_phone = _phone_digits(data.get("phone"))
+    phone_ok = bool(typed_phone) and any(_phone_digits(r.get("phone")) == typed_phone for r in mine)
+    # ``strict`` (the automatic claim on page load) needs the phone to match: a
+    # name saved on the phone last week must not join tonight's same-name singer.
+    if data.get("strict") and not phone_ok:
+        return jsonify({"matched": False})
+
+    try:
+        if (store.get_alias(device_id) or "") != canonical:
+            store.set_alias(device_id, canonical)
+    except Exception:
+        current_app.logger.exception("identity claim: alias write failed")
+        return jsonify({"matched": False})
+
+    items = []
+    if phone_ok:
+        items = [{"id": r["id"], "edit_token": r.get("edit_token") or ""}
+                 for r in mine
+                 if r.get("edit_token") and (r.get("status") or "") not in ("cancelled", "rejected")]
+    return jsonify({"matched": True, "name": canonical, "items": items, "songs": songs})
+
+
 # --- Response shaping ----------------------------------------------------
 
 def _build_now_playing(rotation):

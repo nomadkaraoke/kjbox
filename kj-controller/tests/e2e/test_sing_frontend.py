@@ -1621,3 +1621,44 @@ class TestSongForAFriend:
         with page.expect_request("**/rename*") as req_info:
             page.locator(".identity-save").click()
         assert req_info.value.post_data_json["items"] == []
+
+
+class TestIdentityClaim:
+    """A fresh phone (new/private tab) that types the name of a singer already on
+    tonight's list re-joins them (live 2026-11-05: Alanna's private tabs)."""
+
+    def _fresh(self, page, live_server, live_token, claim_body, songs):
+        claims = []
+
+        def on_claim(route):
+            claims.append(json.loads(route.request.post_data or "{}"))
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(claim_body))
+
+        page.route("**/identity/claim*", on_claim)
+        page.route("**/my-requests*", lambda r: r.fulfill(
+            status=200, content_type="application/json",
+            body=json.dumps({"now_playing": {}, "requests": songs})))
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.get_by_label("First name + last initial").fill("alanna m")
+        page.get_by_label(re.compile("Mobile number")).fill("803 677 2185")
+        page.get_by_role("button", name="Next").click()
+        return claims
+
+    def test_known_singer_lands_on_their_songs(self, page, live_server, live_token):
+        song = {"request": {"id": None, "singer_name": "Alanna M", "song_artist": "",
+                            "song_title": "You and Me - Tom Petty", "status": "approved",
+                            "source_type": "rotation", "created_at": "now",
+                            "linked_entry_id": 1882, "additional_singers": None},
+                "entry_id": 1882, "added_by_host": True, "estimate": None,
+                "previewable": False, "performed": False}
+        claims = self._fresh(page, live_server, live_token,
+                             {"matched": True, "name": "Alanna M", "items": [], "songs": 1}, [song])
+        expect(page.locator('[data-testid="request-another"]')).to_be_visible()
+        expect(page.locator("#sing-root >> text=You and Me - Tom Petty")).to_be_visible()
+        assert claims[0]["name"] == "alanna m" and claims[0]["phone"] == "803 677 2185"
+        # The list's spelling replaces what was typed.
+        assert page.evaluate("localStorage.getItem('sing_name')") == "Alanna M"
+
+    def test_new_singer_goes_to_search(self, page, live_server, live_token):
+        self._fresh(page, live_server, live_token, {"matched": False}, [])
+        expect(page.locator('input[type="search"]')).to_be_visible()
