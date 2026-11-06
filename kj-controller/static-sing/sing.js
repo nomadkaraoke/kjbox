@@ -609,6 +609,14 @@ window.addEventListener("popstate", () => {
 });
 
 function render() {
+  // No name, no request flow: a phone without a saved name always gets the name
+  // screen first. Live 2026-11-05 a singer in a fresh Safari private tab reached
+  // search via My songs → "Request another song" and 20 sends bounced with
+  // "singer_name is required" (shown as "ask the host if requests are paused").
+  if ((state.step === "search" || state.step === "make") && !state.friend
+      && !(state.name || "").trim()) {
+    state.step = "identity";
+  }
   if (state.step !== "done") state.justSent = null;   // "You're on the list!" is for right after sending
   if (nowPlayingTimer && state.step !== "rotation") {
     clearInterval(nowPlayingTimer);
@@ -3480,6 +3488,15 @@ async function submitSelection() {
   }
 
   const friend = state.friend;
+  if (!friend && !(state.name || "").trim()) {
+    // Belt and braces for the render guard: never send a nameless request (the
+    // server 400s it); ask for the name, then the singer lands back on search.
+    state._identityMode = "setup";
+    state._identityReturnStep = "search";
+    state.step = "identity";
+    render();
+    throw Object.assign(new Error("name required"), { userMessage: t("identity.title") });
+  }
   const payload = {
     singer_name: friend ? friend.name : state.name,
     device_id: DEVICE_ID,
@@ -4238,8 +4255,7 @@ function renderDone() {
         state.showMakeForm = false;
         state.additional = [];
         state.justSent = null;
-        state.step = "search";
-        render();
+        _goRequestTab();   // name screen first if this phone doesn't know the singer
       },
     }, t("mySongs.requestAnother")),
     el("button", {

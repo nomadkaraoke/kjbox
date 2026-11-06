@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-05 - Singer page: a phone with no saved name always gets the name screen (v0.146.2)
+
+Live at tonight's show, a singer's 20 sends bounced with `singer_name is required`, shown as "Couldn't send
+— ask the host if requests are paused". She was in a Safari Private Browsing tab: since Safari 17 every
+private tab has its own storage, so each new tab (the QR code, a texted link) started with no name and a
+new device id. My songs → "Request another song" went straight to search without checking for a name.
+
+- "Request another song" now uses the same check as the Request tab: name screen first if there's no name.
+- `render()` sends a nameless phone from search/make to the name screen, whatever path got it there.
+- `submitSelection()` never sends a nameless request; it opens the name screen instead.
+
 ## 2026-10-30 - Singer search: no make-it offer for "love story" (v0.146.1)
 
 Live at tonight's show, two singers searched "love story" and were offered make-it, although the top row
