@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} ialah rakan: minta lagu untuk mereka",
     "renameConfirmYes": "Ya, saya {name}: tukar nama saya",
     "switchShort": "🔄 Tukar penyanyi",
-    "switchConfirm": "Tukar kepada penyanyi lain di telefon ini? Lagu {name} kekal dalam senarai malam ini, tetapi telefon ini tidak akan memaparkannya lagi."
+    "switchConfirm": "Tukar ke penyanyi lain pada telefon ini? Lagu-lagu {name} akan kekal dalam senarai malam ini, tetapi telefon ini tidak lagi memaparkannya."
   },
   "search": {
     "title": "Pilih lagu anda",
@@ -382,7 +382,7 @@
     "findingAudio": "Mencari audio…",
     "needAudio": "Pilih rakaman di atas",
     "socialFailed": "Log masuk tidak berjaya. Cuba lagi, atau gunakan e-mel anda.",
-    "socialStall": "Tiada apa-apa berlaku? Gunakan e-mel anda di bawah."
+    "socialStall": "Tiada apa-apa berlaku? Gunakan e-mel anda di bawah sebagai ganti."
   },
   "confirm": {
     "partnersTitle": "Menyanyi bersama orang lain? (pilihan)",
@@ -505,7 +505,7 @@
     "stepSent": "Dihantar",
     "stepMaking": "Sedang dihasilkan",
     "stepReady": "Sedia untuk dinyanyikan",
-    "phoneCode": "Kod telefon: {code} · Lagu hilang? Tunjukkan kod ini kepada hos dan mereka akan memautkan telefon ini kepada anda."
+    "phoneCode": "Kod telefon: {code} · Lagu hilang? Tunjukkan kod ini kepada hos dan mereka akan pautkan telefon ini kepada anda."
   },
   "notify": {
     "heading": "🔔 Apabila tiba giliran anda",

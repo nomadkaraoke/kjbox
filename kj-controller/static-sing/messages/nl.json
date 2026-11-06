@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} is een vriend(in): vraag een nummer voor hen aan",
     "renameConfirmYes": "Ja, ik ben {name}: wijzig mijn naam",
     "switchShort": "🔄 Wissel van zanger",
-    "switchConfirm": "Overschakelen naar een andere zanger op deze telefoon? De nummers van {name} blijven op de lijst van vanavond, maar deze telefoon toont ze niet meer."
+    "switchConfirm": "Wisselen naar een andere zanger op deze telefoon? De nummers van {name} blijven op de lijst van vanavond staan, maar worden niet meer op deze telefoon getoond."
   },
   "search": {
     "title": "Kies je nummer",
@@ -505,7 +505,7 @@
     "stepSent": "Verstuurd",
     "stepMaking": "Wordt gemaakt",
     "stepReady": "Klaar om te zingen",
-    "phoneCode": "Telefooncode: {code} · Missen er nummers? Laat deze code aan de host zien, dan koppelt die deze telefoon aan jou."
+    "phoneCode": "Telefooncode: {code} · Nummers kwijt? Laat deze code aan de host zien, dan koppelt die deze telefoon aan jou."
   },
   "notify": {
     "heading": "🔔 Als je aan de beurt bent",
@@ -663,6 +663,6 @@
     "saving": "Nummers van vanavond worden opgeslagen op {email}",
     "stop": "Stoppen met opslaan",
     "failed": "Het is niet gelukt om je nummers op te slaan. Probeer het opnieuw.",
-    "signOutEmail": "Afmelden bij e-mail"
+    "signOutEmail": "Uitloggen bij e-mail"
   }
 }

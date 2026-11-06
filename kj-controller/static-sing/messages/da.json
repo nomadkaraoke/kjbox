@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} er en ven: ønsk en sang for dem",
     "renameConfirmYes": "Ja, jeg er {name}: ændr mit navn",
     "switchShort": "🔄 Skift sanger",
-    "switchConfirm": "Skift til en anden sanger på denne telefon? {name}s sange bliver på aftenens liste, men denne telefon holder op med at vise dem."
+    "switchConfirm": "Vil du skifte til en anden sanger på denne telefon? {name}s sange bliver på aftenens liste, men de vises ikke længere på denne telefon."
   },
   "search": {
     "title": "Vælg din sang",
@@ -382,7 +382,7 @@
     "findingAudio": "Finder lyden…",
     "needAudio": "Vælg en optagelse ovenfor",
     "socialFailed": "Login mislykkedes. Prøv igen, eller brug din e-mail.",
-    "socialStall": "Sker der ikke noget? Brug din e-mail herunder i stedet."
+    "socialStall": "Sker der ingenting? Brug din e-mail nedenfor i stedet."
   },
   "confirm": {
     "partnersTitle": "Synger du med andre? (valgfrit)",
@@ -505,7 +505,7 @@
     "stepSent": "Sendt",
     "stepMaking": "Bliver lavet",
     "stepReady": "Klar til at blive sunget",
-    "phoneCode": "Telefonkode: {code} · Mangler dine sange? Vis koden til værten, så kobler de denne telefon til dig."
+    "phoneCode": "Telefonkode: {code} · Mangler der sange? Vis denne kode til værten, så knytter de denne telefon til dig."
   },
   "notify": {
     "heading": "🔔 Når det er din tur",

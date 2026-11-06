@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} est un·e ami·e : choisir un morceau pour cette personne",
     "renameConfirmYes": "Oui, je suis {name} : changer mon nom",
     "switchShort": "🔄 Changer de chanteur",
-    "switchConfirm": "Passer à un autre chanteur sur ce téléphone ? Les chansons de {name} restent sur la liste de ce soir, mais ce téléphone ne les affichera plus."
+    "switchConfirm": "Changer de chanteur sur ce téléphone ? Les morceaux de {name} restent sur la liste de ce soir, mais ce téléphone ne les affichera plus."
   },
   "search": {
     "title": "Choisis ta chanson",
@@ -382,7 +382,7 @@
     "findingAudio": "Recherche de l'audio…",
     "needAudio": "Choisis un enregistrement ci-dessus",
     "socialFailed": "La connexion n'a pas fonctionné. Réessaie ou utilise ton e-mail.",
-    "socialStall": "Rien ne se passe ? Utilisez plutôt votre e-mail ci-dessous."
+    "socialStall": "Rien ne se passe ? Utilise plutôt ton e-mail ci-dessous."
   },
   "confirm": {
     "partnersTitle": "Tu chantes avec quelqu'un d'autre ? (facultatif)",
@@ -505,7 +505,7 @@
     "stepSent": "Envoyée",
     "stepMaking": "En cours de création",
     "stepReady": "Prête à chanter",
-    "phoneCode": "Code du téléphone : {code} · Des chansons manquent ? Montrez ce code à l'animateur et il reliera ce téléphone à vous."
+    "phoneCode": "Code téléphone : {code} · Morceaux manquants ? Montre ce code à l'animateur et il associera ce téléphone à tes morceaux."
   },
   "notify": {
     "heading": "🔔 Quand c'est ton tour",
@@ -663,6 +663,6 @@
     "saving": "Enregistrement des morceaux de ce soir sur {email}",
     "stop": "Ne plus enregistrer",
     "failed": "Impossible d'enregistrer tes morceaux pour le moment. Merci de réessayer.",
-    "signOutEmail": "Se déconnecter de l'e-mail"
+    "signOutEmail": "Déconnexion de l'e-mail"
   }
 }

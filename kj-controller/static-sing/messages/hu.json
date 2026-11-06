@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} egy barátom: dal kérése neki",
     "renameConfirmYes": "Igen, én vagyok {name}: átnevezés",
     "switchShort": "🔄 Énekes váltása",
-    "switchConfirm": "Átváltasz egy másik énekesre ezen a telefonon? {name} dalai a ma esti listán maradnak, de ez a telefon nem mutatja őket tovább."
+    "switchConfirm": "Másik énekesre váltasz ezen a telefonon? {name} dalai a mai listán maradnak, de ez a telefon már nem fogja mutatni őket."
   },
   "search": {
     "title": "Válaszd ki a dalod",
@@ -382,7 +382,7 @@
     "findingAudio": "Zenei alap keresése…",
     "needAudio": "Válassz ki fent egy verziót",
     "socialFailed": "A bejelentkezés nem sikerült. Próbáld újra, vagy használd az e-mail-címedet.",
-    "socialStall": "Nem történik semmi? Használd inkább lent az e-mail-címedet."
+    "socialStall": "Nem történik semmi? Használd inkább az e-mail-címedet lentebb."
   },
   "confirm": {
     "partnersTitle": "Énekelsz még valakivel? (opcionális)",
@@ -505,7 +505,7 @@
     "stepSent": "Elküldve",
     "stepMaking": "Készül",
     "stepReady": "Éneklésre kész",
-    "phoneCode": "Telefonkód: {code} · Hiányoznak a dalaid? Mutasd meg ezt a kódot a házigazdának, és összekapcsolja ezt a telefont veled."
+    "phoneCode": "Telefonkód: {code} · Hiányoznak a dalaid? Mutasd meg ezt a kódot a műsorvezetőnek, és hozzád kapcsolja ezt a telefont."
   },
   "notify": {
     "heading": "🔔 Amikor te jössz",
@@ -663,6 +663,6 @@
     "saving": "Ma esti dalok mentése ide: {email}",
     "stop": "Mentés leállítása",
     "failed": "Most nem sikerült elmenteni a dalaidat. Kérjük, próbáld újra!",
-    "signOutEmail": "Kijelentkezés az e-mailből"
+    "signOutEmail": "Kijelentkezés az e-mail-fiókból"
   }
 }

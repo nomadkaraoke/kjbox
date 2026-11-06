@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} è un amico/a: prenota per lui/lei",
     "renameConfirmYes": "Sì, sono {name}: cambia il mio nome",
     "switchShort": "🔄 Cambia cantante",
-    "switchConfirm": "Passare a un altro cantante su questo telefono? Le canzoni di {name} restano nella lista di stasera, ma questo telefono non le mostrerà più."
+    "switchConfirm": "Vuoi passare a un altro cantante su questo telefono? I brani di {name} rimarranno nella scaletta di stasera, ma non saranno più mostrati su questo telefono."
   },
   "search": {
     "title": "Scegli la tua canzone",
@@ -382,7 +382,7 @@
     "findingAudio": "Ricerca dell'audio in corso…",
     "needAudio": "Scegli una registrazione qui sopra",
     "socialFailed": "Accesso non riuscito. Riprova o usa la tua email.",
-    "socialStall": "Non succede niente? Usa invece la tua email qui sotto."
+    "socialStall": "Non succede nulla? Usa la tua email qui sotto."
   },
   "confirm": {
     "partnersTitle": "Canti con qualcun altro? (opzionale)",
@@ -505,7 +505,7 @@
     "stepSent": "Inviata",
     "stepMaking": "In fase di creazione",
     "stepReady": "Pronta da cantare",
-    "phoneCode": "Codice del telefono: {code} · Mancano canzoni? Mostra questo codice al presentatore e collegherà questo telefono a te."
+    "phoneCode": "Codice telefono: {code} · Mancano dei brani? Mostra questo codice al KJ per collegare questo telefono al tuo profilo."
   },
   "notify": {
     "heading": "🔔 Quando tocca a te",
@@ -663,6 +663,6 @@
     "saving": "Salvataggio delle canzoni di stasera su {email} in corso...",
     "stop": "Interrompi salvataggio",
     "failed": "Non siamo riusciti a salvare le tue canzoni. Riprova più tardi.",
-    "signOutEmail": "Esci dall'email"
+    "signOutEmail": "Disconnetti email"
   }
 }

@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} bir arkadaşım: onun için şarkı iste",
     "renameConfirmYes": "Evet, ben {name}: adımı değiştir",
     "switchShort": "🔄 Şarkıcı değiştir",
-    "switchConfirm": "Bu telefonda başka bir şarkıcıya geçilsin mi? {name} adlı kişinin şarkıları bu akşamki listede kalır, ancak bu telefon artık onları göstermez."
+    "switchConfirm": "Bu telefonda başka bir şarkıcıya geçmek istiyor musun? {name} adlı kişinin şarkıları bu gecenin listesinde kalır, ancak artık bu telefonda görünmez."
   },
   "search": {
     "title": "Şarkını seç",
@@ -382,7 +382,7 @@
     "findingAudio": "Ses aranıyor…",
     "needAudio": "Yukarıdan bir kayıt seç",
     "socialFailed": "Giriş yapılamadı. Tekrar dene veya e-postanı kullan.",
-    "socialStall": "Hiçbir şey olmuyor mu? Bunun yerine aşağıdaki e-postanı kullan."
+    "socialStall": "Hiçbir şey olmuyor mu? Bunun yerine aşağıdaki e-posta adresini kullan."
   },
   "confirm": {
     "partnersTitle": "Başka biriyle mi söylüyorsun? (isteğe bağlı)",
@@ -505,7 +505,7 @@
     "stepSent": "Gönderildi",
     "stepMaking": "Yapılıyor",
     "stepReady": "Söylemeye hazır",
-    "phoneCode": "Telefon kodu: {code} · Şarkıların görünmüyor mu? Bu kodu sunucuya göster, bu telefonu seninle bağlasın."
+    "phoneCode": "Telefon kodu: {code} · Şarkıların görünmüyor mu? Bu kodu karaoke sunucusuna göster, bu telefonu seninle eşleştirsin."
   },
   "notify": {
     "heading": "🔔 Sıran geldiğinde",
@@ -663,6 +663,6 @@
     "saving": "Bu gecenin şarkıları {email} hesabına kaydediliyor",
     "stop": "Kaydetmeyi durdur",
     "failed": "Şarkılarını şu anda kaydedemedik. Lütfen tekrar dene.",
-    "signOutEmail": "E-postadan çıkış yap"
+    "signOutEmail": "E-posta oturumunu kapat"
   }
 }
