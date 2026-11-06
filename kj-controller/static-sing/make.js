@@ -169,7 +169,9 @@ function googleButton({ el, social, holder, onToken, testPrefix, w }) {
                      callback: (resp) => onToken("google", resp && resp.credential) });
     gid.renderButton(node, { type: "standard", theme: "filled_black", size: "large", shape: "pill",
                              text: "continue_with", logo_alignment: "center", locale: getLocale(),
-                             width: Math.min(400, node.clientWidth || 320) });
+                             width: Math.min(400, node.clientWidth || 320),
+                             // Google's documented tap hook (the button is a cross-origin iframe).
+                             click_listener: () => holder.onGoogleTap && holder.onGoogleTap() });
   }).catch(() => {   // blocked / offline: email still works
     node.hidden = true;
     w.report("google", "script_failed");
@@ -214,6 +216,10 @@ export function socialButtons({ el, social, holder, onToken, onError, report = (
     report: (provider, event, detail) => { try { report(provider, event, detail || ""); } catch { /* best-effort */ } },
     settle,
     tapped: (provider) => {
+      // Google's click_listener and the window-blur fallback can both fire for one tap.
+      const now = Date.now();
+      if (holder.lastTap && holder.lastTap.provider === provider && now - holder.lastTap.at < 1500) return;
+      holder.lastTap = { provider, at: now };
       w.report(provider, "tap");
       clearTimeout(holder.stallTimer);
       holder.stallTimer = setTimeout(() => {
@@ -233,7 +239,10 @@ export function socialButtons({ el, social, holder, onToken, onError, report = (
   const google = social.google ? googleButton(opts) : null;
   const apple = social.apple ? appleButton(opts) : null;
   if (!google && !apple) return null;
-  if (google) hookGoogleTap(() => w.tapped("google"));
+  if (google) {
+    holder.onGoogleTap = () => w.tapped("google");
+    hookGoogleTap(() => w.tapped("google"));
+  }
   if (apple && !window.__SING_SOCIAL_STUB) loadScript(APPLE_SRC).catch(() => {});   // so the tap opens the popup at once
   return el("div", { class: "mk-socials" },
     ...(onApplePlatform() ? [apple, google] : [google, apple]), hint);
