@@ -6,12 +6,17 @@ Set SING_E2E_SCREENSHOTS=<dir> to save screenshots of each state.
 """
 
 import json
+import re
 import os
 
 from playwright.sync_api import expect
 
 from tests.e2e.test_sing_i18n_footer import _login
 from tests.e2e.test_sing_make_wizard import _open_wizard
+
+# /sing/make/social only, never /sing/make/social-event (a glob "?" is a wildcard
+# before Playwright 1.52, so "social?*" would also catch the event posts).
+SOCIAL_SIGNIN_URL = re.compile(r".*/sing/make/social(?:\?.*)?$")
 
 EMAIL = "mary@example.com"
 LINK = "Save tonight's songs to an account"
@@ -82,7 +87,7 @@ def _fake_account(page, email=None, linked=False):
         calls["social"].append(body)
         acct["email"] = "new@example.com"
         _json(route, {"email": "new@example.com"})
-    page.route("**/sing/make/social?*", social)
+    page.route(SOCIAL_SIGNIN_URL, social)
     return calls
 
 

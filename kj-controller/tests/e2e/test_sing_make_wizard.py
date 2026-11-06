@@ -5,12 +5,17 @@ real singer UI + the gen-ported categorisation / best-pick / correction logic.
 """
 
 import json
+import re
 
 import pytest
 
 from playwright.sync_api import expect
 
 from tests.e2e.test_sing_i18n_footer import _login
+
+# /sing/make/social only, never /sing/make/social-event (a glob "?" is a wildcard
+# before Playwright 1.52, so "social?*" would also catch the event posts).
+SOCIAL_SIGNIN_URL = re.compile(r".*/sing/make/social(?:\?.*)?$")
 
 LOSSLESS = {"index": 0, "provider": "RED", "title": "Pablo Honey", "artist": "Radiohead",
             "is_lossless": True, "seeders": 120, "release_type": "Album", "year": 1993,
@@ -543,7 +548,7 @@ class TestOneScreen:
     def test_one_tap_sign_in_then_audio_then_send(self, page, live_server, live_token, provider, label):
         page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
         social = []
-        page.route("**/sing/make/social?*", lambda r: (social.append(json.loads(r.request.post_data)),
+        page.route(SOCIAL_SIGNIN_URL, lambda r: (social.append(json.loads(r.request.post_data)),
                                                       _json(r, {"email": "anya@example.com"})))
         calls = _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
         page.locator(".mk-social", has_text=label).click()
@@ -564,7 +569,7 @@ class TestOneScreen:
 
     def test_social_failure_falls_back_to_email(self, page, live_server, live_token):
         page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
-        page.route("**/sing/make/social?*", lambda r: _json(r, {"error": "social_failed"}, 400))
+        page.route(SOCIAL_SIGNIN_URL, lambda r: _json(r, {"error": "social_failed"}, 400))
         _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
         page.locator(".mk-social", has_text="Continue with Google").click()
         expect(page.locator('[data-testid="make-error"]')).to_contain_text("use your email")
@@ -594,7 +599,7 @@ class TestOneScreen:
         events = []
         page.route("**/sing/make/social-event*", lambda r: (events.append(json.loads(r.request.post_data)),
                                                             r.fulfill(status=204)))
-        page.route("**/sing/make/social?*", lambda r: _json(r, {"email": "anya@example.com"}))
+        page.route(SOCIAL_SIGNIN_URL, lambda r: _json(r, {"email": "anya@example.com"}))
         _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
         page.locator(".mk-social", has_text="Continue with Apple").click()
         expect(page.locator('[data-testid="make-signed-in"]')).to_contain_text("anya@example.com")
