@@ -7781,6 +7781,13 @@ function buildSingerActions(actions, singer, row) {
     mergeBtn.onclick = () => openMergeModal(singer);
     actions.appendChild(mergeBtn);
 
+    const linkBtn = document.createElement('button');
+    linkBtn.className = 'singer-stats-btn';
+    linkBtn.textContent = 'Link phone';
+    linkBtn.title = "Link a singer's phone to this singer \u2014 they read the code from My songs on their phone";
+    linkBtn.onclick = () => linkSingerPhone(singer);
+    actions.appendChild(linkBtn);
+
     const splitBtn = document.createElement('button');
     splitBtn.className = 'singer-stats-btn';
     splitBtn.textContent = 'Split';
@@ -8137,6 +8144,33 @@ function openSplitModal(singer) {
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
     newInput.focus();
+}
+
+// "Link phone": the singer reads the 4-digit code from My songs on their phone
+// (any phone or tab, even one that never sent a song) and it becomes theirs.
+async function linkSingerPhone(singer) {
+    const code = (window.prompt('Phone code for ' + singer.name + '\n(the singer finds it at the bottom of My songs on their phone)') || '').replace(/\D/g, '');
+    if (!code) return;
+    showRotationIndicator('spin');
+    try {
+        const resp = await fetch('/rotation/singer/link-phone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: singer.name, code }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+            showRotationIndicator('error');
+            window.alert(result.message || result.error || 'Could not link that phone.');
+            return;
+        }
+        if (result.entries) { rotationData = result.entries; renderRotation(rotationData); }
+        if (result.singer_stats) { renderSingerStats(result.singer_stats); }
+        showRotationIndicator('success');
+        window.alert('Linked. ' + singer.name + "'s songs will show on that phone within a few seconds.");
+    } catch (e) {
+        showRotationIndicator('error');
+    }
 }
 
 async function singerAction(action, data) {    showRotationIndicator('spin');

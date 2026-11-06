@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Promijeniti tvoje ime u {name}?",
     "renameConfirmBody": "Tvoje pjesme večeras bit će navedene pod imenom {name} umjesto {old}. Ako je {name} tvoj prijatelj, radije naruči pjesmu za njega.",
     "renameConfirmFriend": "🎤 {name} je prijatelj: naruči pjesmu za njega",
-    "renameConfirmYes": "Da, ja sam {name}: promijeni mi ime"
+    "renameConfirmYes": "Da, ja sam {name}: promijeni mi ime",
+    "switchShort": "🔄 Promijeni pjevača",
+    "switchConfirm": "Prebaciti na drugog pjevača na ovom telefonu? Pjesme korisnika {name} ostaju na večerašnjem popisu, ali ih ovaj telefon više neće prikazivati."
   },
   "search": {
     "title": "Odaberi svoju pjesmu",
@@ -501,7 +503,8 @@
     "makeDetails": "Napredak izrade videa",
     "stepSent": "Poslano",
     "stepMaking": "U izradi",
-    "stepReady": "Spremno za pjevanje"
+    "stepReady": "Spremno za pjevanje",
+    "phoneCode": "Kôd telefona: {code} · Nedostaju pjesme? Pokažite ovaj kôd voditelju i on će povezati ovaj telefon s vama."
   },
   "notify": {
     "heading": "🔔 Kad si na redu",
@@ -658,6 +661,7 @@
     "explainer": "Spremit ćemo pjesme koje večeras pjevaš na tvoj Nomad Karaoke račun kako bi ti aplikacija mogla prikazati povijest pjevanja i preporučiti pjesme.",
     "saving": "Spremanje večerašnjih pjesama na {email}",
     "stop": "Prekini spremanje",
-    "failed": "Pjesme trenutno nismo mogli spremiti. Pokušaj ponovno."
+    "failed": "Pjesme trenutno nismo mogli spremiti. Pokušaj ponovno.",
+    "signOutEmail": "Odjava s e-pošte"
   }
 }

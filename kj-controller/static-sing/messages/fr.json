@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Changer ton nom pour {name} ?",
     "renameConfirmBody": "Tes chansons de ce soir seront enregistrées sous le nom de {name} au lieu de {old}. Si {name} est un·e ami·e, choisis plutôt un morceau pour cette personne.",
     "renameConfirmFriend": "🎤 {name} est un·e ami·e : choisir un morceau pour cette personne",
-    "renameConfirmYes": "Oui, je suis {name} : changer mon nom"
+    "renameConfirmYes": "Oui, je suis {name} : changer mon nom",
+    "switchShort": "🔄 Changer de chanteur",
+    "switchConfirm": "Passer à un autre chanteur sur ce téléphone ? Les chansons de {name} restent sur la liste de ce soir, mais ce téléphone ne les affichera plus."
   },
   "search": {
     "title": "Choisis ta chanson",
@@ -501,7 +503,8 @@
     "makeDetails": "Progression de la vidéo",
     "stepSent": "Envoyée",
     "stepMaking": "En cours de création",
-    "stepReady": "Prête à chanter"
+    "stepReady": "Prête à chanter",
+    "phoneCode": "Code du téléphone : {code} · Des chansons manquent ? Montrez ce code à l'animateur et il reliera ce téléphone à vous."
   },
   "notify": {
     "heading": "🔔 Quand c'est ton tour",
@@ -658,6 +661,7 @@
     "explainer": "On enregistrera les morceaux que tu chantes ce soir sur ton compte Nomad Karaoke pour que l'appli puisse afficher ton historique et te recommander des chansons.",
     "saving": "Enregistrement des morceaux de ce soir sur {email}",
     "stop": "Ne plus enregistrer",
-    "failed": "Impossible d'enregistrer tes morceaux pour le moment. Merci de réessayer."
+    "failed": "Impossible d'enregistrer tes morceaux pour le moment. Merci de réessayer.",
+    "signOutEmail": "Se déconnecter de l'e-mail"
   }
 }

@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Mudar seu nome para {name}?",
     "renameConfirmBody": "Suas músicas de hoje vão aparecer com o nome {name} em vez de {old}. Se {name} for um(a) amigo(a), peça uma música para ele(a).",
     "renameConfirmFriend": "🎤 {name} é um(a) amigo(a): pedir uma música para ele(a)",
-    "renameConfirmYes": "Sim, eu sou {name}: mudar meu nome"
+    "renameConfirmYes": "Sim, eu sou {name}: mudar meu nome",
+    "switchShort": "🔄 Trocar de cantor",
+    "switchConfirm": "Trocar para outro cantor neste telefone? As músicas de {name} continuam na lista desta noite, mas este telefone deixará de mostrá-las."
   },
   "search": {
     "title": "Escolha sua música",
@@ -501,7 +503,8 @@
     "makeDetails": "Progresso do vídeo",
     "stepSent": "Enviado",
     "stepMaking": "Em produção",
-    "stepReady": "Pronto para cantar"
+    "stepReady": "Pronto para cantar",
+    "phoneCode": "Código do telefone: {code} · Faltam músicas? Mostre este código ao anfitrião e ele vai vincular este telefone a você."
   },
   "notify": {
     "heading": "🔔 Quando for a sua vez",
@@ -658,6 +661,7 @@
     "explainer": "Vamos salvar as músicas que você cantar hoje na sua conta do Nomad Karaoke, para que o aplicativo possa mostrar seu histórico e recomendar músicas.",
     "saving": "Salvando as músicas de hoje em {email}",
     "stop": "Parar de salvar",
-    "failed": "Não conseguimos salvar suas músicas agora. Por favor, tente novamente."
+    "failed": "Não conseguimos salvar suas músicas agora. Por favor, tente novamente.",
+    "signOutEmail": "Sair do e-mail"
   }
 }

@@ -70,7 +70,9 @@
     "renameConfirmTitle": "名前を {name} に変更しますか？",
     "renameConfirmBody": "今夜のリクエスト曲の登録名が、{old} から {name} に変更されます。もし {name} さんがお友達の場合は、代わりに「お友達へのリクエスト」を行ってください。",
     "renameConfirmFriend": "🎤 {name} は友達です：代わりにリクエストする",
-    "renameConfirmYes": "はい、私が {name} です：変更する"
+    "renameConfirmYes": "はい、私が {name} です：変更する",
+    "switchShort": "🔄 歌手を切り替える",
+    "switchConfirm": "この端末で別の歌手に切り替えますか？{name}さんの曲は今夜のリストに残りますが、この端末には表示されなくなります。"
   },
   "search": {
     "title": "曲を選ぶ",
@@ -501,7 +503,8 @@
     "makeDetails": "動画の作成状況",
     "stepSent": "送信完了",
     "stepMaking": "作成中",
-    "stepReady": "いつでも歌えます"
+    "stepReady": "いつでも歌えます",
+    "phoneCode": "端末コード: {code} · 曲が見当たらない場合は、このコードをホストに見せてください。この端末をあなたに紐付けます。"
   },
   "notify": {
     "heading": "🔔 あなたの番になったら",
@@ -658,6 +661,7 @@
     "explainer": "今夜歌った曲をNomad Karaokeアカウントに保存します。履歴の確認やおすすめの曲のチェックができるようになります。",
     "saving": "今夜歌った曲を{email}に保存中",
     "stop": "保存を停止",
-    "failed": "曲を保存できませんでした。もう一度お試しください。"
+    "failed": "曲を保存できませんでした。もう一度お試しください。",
+    "signOutEmail": "メールからログアウト"
   }
 }

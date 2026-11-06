@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Palitan ang iyong pangalan sa {name}?",
     "renameConfirmBody": "Ang mga kanta mo ngayong gabi ay ililista sa ilalim ng {name} sa halip na {old}. Kung si {name} ay isang kaibigan, pumili na lang ng kanta para sa kanila.",
     "renameConfirmFriend": "🎤 Kaibigan ko si {name}: mag-request ng kanta para sa kanila",
-    "renameConfirmYes": "Oo, ako si {name}: palitan ang pangalan ko"
+    "renameConfirmYes": "Oo, ako si {name}: palitan ang pangalan ko",
+    "switchShort": "🔄 Magpalit ng kakanta",
+    "switchConfirm": "Lumipat sa ibang mang-aawit sa teleponong ito? Mananatili sa listahan ngayong gabi ang mga kanta ni {name}, pero hindi na ito ipapakita ng teleponong ito."
   },
   "search": {
     "title": "Piliin ang kanta mo",
@@ -501,7 +503,8 @@
     "makeDetails": "Progreso ng video",
     "stepSent": "Naipadala na",
     "stepMaking": "Ginagawa na",
-    "stepReady": "Handa nang kantahin"
+    "stepReady": "Handa nang kantahin",
+    "phoneCode": "Code ng telepono: {code} · Nawawala ang mga kanta? Ipakita ang code na ito sa host at ili-link nila ang teleponong ito sa iyo."
   },
   "notify": {
     "heading": "🔔 Kapag turn mo na",
@@ -658,6 +661,7 @@
     "explainer": "Ise-save namin ang mga kantang kakantahin mo ngayong gabi sa iyong Nomad Karaoke account, para maipakita ng app ang history mo at makapag-rekomenda ng mga kanta.",
     "saving": "Sine-save ang mga kanta ngayong gabi sa {email}",
     "stop": "Itigil ang pag-save",
-    "failed": "Hindi namin ma-save ang mga kanta mo ngayon. Pakisubukang muli."
+    "failed": "Hindi namin ma-save ang mga kanta mo ngayon. Pakisubukang muli.",
+    "signOutEmail": "Mag-sign out sa email"
   }
 }

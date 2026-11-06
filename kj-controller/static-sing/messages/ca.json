@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Vols canviar el teu nom a {name}?",
     "renameConfirmBody": "Les teves cançons d'avui apareixeran a nom de {name} en comptes de {old}. Si {name} és un amic o amiga, és millor demanar una cançó per a aquesta persona.",
     "renameConfirmFriend": "🎤 {name} és un amic/amiga: demana una cançó per a ell/ella",
-    "renameConfirmYes": "Sí, soc {name}: canvia'm el nom"
+    "renameConfirmYes": "Sí, soc {name}: canvia'm el nom",
+    "switchShort": "🔄 Canvia de cantant",
+    "switchConfirm": "Vols canviar a un altre cantant en aquest telèfon? Les cançons de {name} es queden a la llista d'aquesta nit, però aquest telèfon deixarà de mostrar-les."
   },
   "search": {
     "title": "Tria la teva cançó",
@@ -501,7 +503,8 @@
     "makeDetails": "Progrés del vídeo",
     "stepSent": "Enviat",
     "stepMaking": "S'està creant",
-    "stepReady": "A punt per cantar"
+    "stepReady": "A punt per cantar",
+    "phoneCode": "Codi del telèfon: {code} · Falten cançons? Mostra aquest codi a l'amfitrió i vincularà aquest telèfon a tu."
   },
   "notify": {
     "heading": "🔔 Quan et toqui",
@@ -658,6 +661,7 @@
     "explainer": "Desarem les cançons que cantis aquesta nit al teu compte de Nomad Karaoke, perquè l'aplicació pugui mostrar el teu historial i recomanar-te cançons.",
     "saving": "Desant les cançons d'aquesta nit a {email}",
     "stop": "Deixa de desar",
-    "failed": "No hem pogut desar les teves cançons ara mateix. Torna-ho a provar."
+    "failed": "No hem pogut desar les teves cançons ara mateix. Torna-ho a provar.",
+    "signOutEmail": "Tanca la sessió del correu"
   }
 }

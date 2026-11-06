@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Îți schimbi numele în {name}?",
     "renameConfirmBody": "Piesele tale din seara asta vor fi listate sub numele {name} în loc de {old}. Dacă {name} este un prieten, cere mai bine o piesă pentru el.",
     "renameConfirmFriend": "🎤 {name} este un prieten: cere o piesă pentru el",
-    "renameConfirmYes": "Da, eu sunt {name}: schimbă-mi numele"
+    "renameConfirmYes": "Da, eu sunt {name}: schimbă-mi numele",
+    "switchShort": "🔄 Schimbă cântărețul",
+    "switchConfirm": "Treci la alt cântăreț pe acest telefon? Melodiile lui {name} rămân pe lista din seara asta, dar acest telefon nu le va mai afișa."
   },
   "search": {
     "title": "Alege-ți piesa",
@@ -501,7 +503,8 @@
     "makeDetails": "Progres video",
     "stepSent": "Trimis",
     "stepMaking": "În lucru",
-    "stepReady": "Gata de cântat"
+    "stepReady": "Gata de cântat",
+    "phoneCode": "Cod telefon: {code} · Lipsesc melodii? Arată acest cod gazdei și va conecta acest telefon la tine."
   },
   "notify": {
     "heading": "🔔 Când îți vine rândul",
@@ -658,6 +661,7 @@
     "explainer": "Vom salva melodiile pe care le cânți în această seară în contul tău Nomad Karaoke, astfel încât aplicația să-ți poată arăta istoricul și să-ți recomande melodii.",
     "saving": "Se salvează melodiile din această seară în contul {email}",
     "stop": "Nu mai salva",
-    "failed": "Nu am putut salva melodiile chiar acum. Te rugăm să încerci din nou."
+    "failed": "Nu am putut salva melodiile chiar acum. Te rugăm să încerci din nou.",
+    "signOutEmail": "Deconectează-te de la e-mail"
   }
 }

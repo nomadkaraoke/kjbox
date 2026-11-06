@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Endre navnet ditt til {name}?",
     "renameConfirmBody": "Sangene dine i kveld vil bli oppført under {name} i stedet for {old}. Hvis {name} er en venn, kan du ønske en sang for dem i stedet.",
     "renameConfirmFriend": "🎤 {name} er en venn: ønsk en sang for dem",
-    "renameConfirmYes": "Ja, jeg er {name}: endre navnet mitt"
+    "renameConfirmYes": "Ja, jeg er {name}: endre navnet mitt",
+    "switchShort": "🔄 Bytt sanger",
+    "switchConfirm": "Bytte til en annen sanger på denne telefonen? Sangene til {name} blir på kveldens liste, men denne telefonen slutter å vise dem."
   },
   "search": {
     "title": "Velg sangen din",
@@ -501,7 +503,8 @@
     "makeDetails": "Videofremdrift",
     "stepSent": "Sendt",
     "stepMaking": "Lages nå",
-    "stepReady": "Klar til å synges"
+    "stepReady": "Klar til å synges",
+    "phoneCode": "Telefonkode: {code} · Mangler sanger? Vis denne koden til verten, så kobler de denne telefonen til deg."
   },
   "notify": {
     "heading": "🔔 Når det er din tur",
@@ -658,6 +661,7 @@
     "explainer": "Vi lagrer sangene du synger i kveld på Nomad Karaoke-kontoen din, slik at appen kan vise historikken din og anbefale sanger.",
     "saving": "Lagrer kveldens sanger til {email}",
     "stop": "Stopp lagring",
-    "failed": "Vi klarte ikke å lagre sangene dine akkurat nå. Prøv igjen."
+    "failed": "Vi klarte ikke å lagre sangene dine akkurat nå. Prøv igjen.",
+    "signOutEmail": "Logg ut av e-post"
   }
 }
