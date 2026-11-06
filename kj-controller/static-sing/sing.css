@@ -1737,7 +1737,6 @@ button.sing-social-link { padding: 0; font: inherit; cursor: pointer; }
 .mk-song { padding: 0.2rem 0; }
 .mk-song-title { font-size: 1.25rem; font-weight: 700; }
 .mk-song-artist { color: var(--nk-text-dim); }
-.mk-searching { font-style: italic; }
 .mk-code { font-size: 1.6rem; letter-spacing: 0.4em; text-align: center; }
 .mk-code-actions, .mk-foot { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: space-between; }
 .mk-fineprint { margin: 0; font-size: 0.8rem; }
@@ -2148,3 +2147,15 @@ body:has(#sing-tabs:not([hidden])) .mk-submit-bar {
   .sing-song-choose,
   .sing-song-preview { font-size: 0.76rem; padding: 0 0.35rem; }
 }
+
+/* Make-it: the audio search is slow (up to ~30 s), so the audio section uses the
+   bouncing-notes loader and the disabled send button spins while it works. */
+.mk-card .sing-searching { justify-content: flex-start; padding: 0.4rem 0; text-align: start; }
+.mk-card .sing-searching-label { flex: 1 1 auto; min-width: 0; }
+.mk-spinner {
+  display: inline-block; width: 1em; height: 1em; margin-inline-end: 0.55em; vertical-align: -0.15em;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: mk-spin 0.8s linear infinite;
+}
+@keyframes mk-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .mk-spinner { animation-duration: 2.4s; } }
