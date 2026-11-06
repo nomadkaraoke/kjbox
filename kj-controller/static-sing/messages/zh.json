@@ -663,6 +663,6 @@
     "saving": "正在保存今晚的歌曲到 {email}",
     "stop": "停止保存",
     "failed": "刚才未能保存你的歌曲，请重试。",
-    "signOutEmail": "退出邮箱"
+    "signOutEmail": "退出邮箱账户"
   }
 }
