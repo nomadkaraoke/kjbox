@@ -134,6 +134,24 @@ def _date_vars(night: str) -> dict:
     return {"date": night, "date_pretty": f"{d.strftime('%B')} {d.day}", "weekday": d.strftime("%A")}
 
 
+def apply_handle_overrides(songs: list[dict], handles: dict[str, str]) -> int:
+    """Fill in ``instagram`` from the config's ``[handles]`` for consenting performers.
+
+    A handle the singer gave on the night wins. Performers who didn't say yes are
+    never tagged. Returns how many performers got a handle.
+    """
+    n = 0
+    for song in songs:
+        for p in song.get("performers") or []:
+            if p.get("consent") != "yes" or (p.get("instagram") or "").strip():
+                continue
+            handle = handles.get(name_key(p.get("name", "")))
+            if handle:
+                p["instagram"] = handle
+                n += 1
+    return n
+
+
 def performer_credit(p: dict) -> str:
     handle = (p.get("instagram") or "").strip().lstrip("@")
     return f"@{handle}" if handle else (p.get("name") or "").strip()

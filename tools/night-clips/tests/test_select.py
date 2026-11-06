@@ -1,5 +1,6 @@
 import datetime as dt
 
+import pytest
 from nightclips import match
 from nightclips import select as sel
 from nightclips.clips import Clip
@@ -137,3 +138,41 @@ def test_config_created_with_defaults(tmp_path):
     assert cfg["max_clips"] == 20  # clamped to Instagram's limit
     assert cfg["caption"]["footer"] == "#x"
     assert cfg["caption"]["header"].startswith("Thursday")
+
+
+def test_handles_table_parsed_and_normalized(tmp_path):
+    (tmp_path / "config.toml").write_text(
+        '[handles]\n"Big  Dave" = "@DaveTheVoice"\n"Anya" = "https://www.instagram.com/anya.sings/"\n"Ezgi" = ""\n'
+    )
+    cfg = load_config(tmp_path)
+    assert cfg["handles"] == {"big dave": "davethevoice", "anya": "anya.sings"}
+
+
+def test_default_config_has_no_handles(tmp_path):
+    assert load_config(tmp_path)["handles"] == {}
+
+
+def test_bad_handle_fails_loudly(tmp_path):
+    (tmp_path / "config.toml").write_text('[handles]\n"Dave" = "not a handle!"\n')
+    with pytest.raises(SystemExit, match="Dave"):
+        load_config(tmp_path)
+
+
+def test_apply_handle_overrides_only_fills_consenting_without_handle():
+    songs = [
+        {"song": "A", "performers": [
+            {"name": "big dave", "consent": "yes", "instagram": None},
+            {"name": "Mija", "consent": "yes", "instagram": "mija"},
+        ]},
+        {"song": "B", "performers": [{"name": "Shy", "consent": "no", "instagram": None}]},
+        {"song": "C", "performers": [{"name": "Unsure", "consent": None, "instagram": None}]},
+    ]
+    handles = {"big dave": "davethevoice", "mija": "other", "shy": "shy", "unsure": "unsure"}
+    assert sel.apply_handle_overrides(songs, handles) == 1
+    assert songs[0]["performers"][0]["instagram"] == "davethevoice"
+    assert songs[0]["performers"][1]["instagram"] == "mija"  # singer's own handle wins
+    assert songs[1]["performers"][0]["instagram"] is None
+    assert songs[2]["performers"][0]["instagram"] is None
+    assert sel.render_caption("2026-10-08", [{"song_idx": 0}], songs, DEFAULTS["caption"]).splitlines()[2] == (
+        "@davethevoice & @mija — A"
+    )

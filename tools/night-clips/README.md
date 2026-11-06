@@ -154,7 +154,17 @@ facebook_location = ""   # search text for Facebook "Check in"; empty = skip
 header = "Thursday night karaoke 🎤 {date_pretty}"   # {date_pretty} {date} {weekday}
 line = "{performers} — {song}"                       # @handle, or the name; duets joined with " & "
 footer = "#karaoke #nomadkaraoke"
+
+[handles]                                            # regulars' handles you already know
+"Big Dave" = "davethevoice"
 ```
+
+`[handles]` fills in an Instagram handle for a singer who didn't give one in the singer UI. Names
+match the way consent does (case and extra spaces are ignored), so use the name they sign up with.
+A handle the singer gave on the night always wins, and nobody is tagged unless they said yes to
+photos. An empty `""` means no handle yet. `@name` and `instagram.com/name` links are accepted; an invalid handle stops the run with
+an error. If you change it while the review page is open, restart `night-clips` and click
+**Regenerate** on the caption.
 
 ## Files
 

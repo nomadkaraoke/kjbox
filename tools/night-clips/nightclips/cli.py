@@ -34,6 +34,9 @@ def build_state(night: str, cfg: dict, args, out=print) -> ReviewState:
     songs = match.index_songs(data["songs"])
     if not songs:
         raise SystemExit(f"ERROR: no sung songs recorded for {night}. Wrong date?")
+    if cfg["handles"]:
+        n = sel.apply_handle_overrides(songs, cfg["handles"])
+        out(f"Tagged {n} singer(s) from [handles] in {cfg['path']}.")
 
     window = clipmod.night_window(songs)
     camera = Path(cfg["camera_uploads"])
