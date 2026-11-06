@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} 是朋友：帮他们点歌",
     "renameConfirmYes": "是的，我是 {name}：修改我的名字",
     "switchShort": "🔄 换个歌手",
-    "switchConfirm": "要在这部手机上切换到另一位歌手吗？{name} 的歌曲仍在今晚的列表中，但这部手机将不再显示它们。"
+    "switchConfirm": "在这部手机上切换到其他演唱者？{name} 点的歌仍会保留在今晚的歌单中，但这部手机将不再显示它们。"
   },
   "search": {
     "title": "选首歌吧",
@@ -382,7 +382,7 @@
     "findingAudio": "正在寻找音频…",
     "needAudio": "请在上方选择一个版本",
     "socialFailed": "登录失败。请重试，或改用邮箱。",
-    "socialStall": "没有反应？请改用下方的邮箱。"
+    "socialStall": "没有反应？请改用下方的电子邮箱。"
   },
   "confirm": {
     "partnersTitle": "和朋友一起唱？（选填）",
@@ -505,7 +505,7 @@
     "stepSent": "已提交",
     "stepMaking": "制作中",
     "stepReady": "可以开唱了",
-    "phoneCode": "手机代码：{code} · 歌曲不见了？把这个代码给主持人看，他们会把这部手机关联到你。"
+    "phoneCode": "手机识别码：{code} · 没看到你点的歌？向主持人出示此码，主持人会帮你关联这部手机。"
   },
   "notify": {
     "heading": "🔔 快到您的时候",
@@ -663,6 +663,6 @@
     "saving": "正在保存今晚的歌曲到 {email}",
     "stop": "停止保存",
     "failed": "刚才未能保存你的歌曲，请重试。",
-    "signOutEmail": "退出邮箱登录"
+    "signOutEmail": "退出邮箱账户"
   }
 }

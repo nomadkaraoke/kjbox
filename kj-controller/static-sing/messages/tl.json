@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 Kaibigan ko si {name}: mag-request ng kanta para sa kanila",
     "renameConfirmYes": "Oo, ako si {name}: palitan ang pangalan ko",
     "switchShort": "🔄 Magpalit ng kakanta",
-    "switchConfirm": "Lumipat sa ibang mang-aawit sa teleponong ito? Mananatili sa listahan ngayong gabi ang mga kanta ni {name}, pero hindi na ito ipapakita ng teleponong ito."
+    "switchConfirm": "Lumipat sa ibang singer sa phone na ito? Mananatili sa listahan ngayong gabi ang mga kanta ni {name}, pero hindi na ipapakita ng phone na ito ang mga iyon."
   },
   "search": {
     "title": "Piliin ang kanta mo",
@@ -505,7 +505,7 @@
     "stepSent": "Naipadala na",
     "stepMaking": "Ginagawa na",
     "stepReady": "Handa nang kantahin",
-    "phoneCode": "Code ng telepono: {code} · Nawawala ang mga kanta? Ipakita ang code na ito sa host at ili-link nila ang teleponong ito sa iyo."
+    "phoneCode": "Phone code: {code} · May nawawalang kanta? Ipakita ang code na ito sa host at iuugnay nila ang phone na ito sa iyo."
   },
   "notify": {
     "heading": "🔔 Kapag turn mo na",

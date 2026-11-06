@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} és un amic/amiga: demana una cançó per a ell/ella",
     "renameConfirmYes": "Sí, soc {name}: canvia'm el nom",
     "switchShort": "🔄 Canvia de cantant",
-    "switchConfirm": "Vols canviar a un altre cantant en aquest telèfon? Les cançons de {name} es queden a la llista d'aquesta nit, però aquest telèfon deixarà de mostrar-les."
+    "switchConfirm": "Vols canviar a un altre cantant en aquest telèfon? Les cançons de {name} es quedaran a la llista d'avui, però aquest telèfon deixarà de mostrar-les."
   },
   "search": {
     "title": "Tria la teva cançó",
@@ -382,7 +382,7 @@
     "findingAudio": "Buscant l'àudio…",
     "needAudio": "Tria un enregistrament de dalt",
     "socialFailed": "No s'ha pogut iniciar sessió. Torna-ho a provar o fes servir el teu correu electrònic.",
-    "socialStall": "No passa res? Fes servir el teu correu a sota."
+    "socialStall": "No passa res? Fes servir el teu correu electrònic aquí sota."
   },
   "confirm": {
     "partnersTitle": "Cantes amb algú més? (opcional)",
@@ -505,7 +505,7 @@
     "stepSent": "Enviat",
     "stepMaking": "S'està creant",
     "stepReady": "A punt per cantar",
-    "phoneCode": "Codi del telèfon: {code} · Falten cançons? Mostra aquest codi a l'amfitrió i vincularà aquest telèfon a tu."
+    "phoneCode": "Codi del telèfon: {code} · Et falten cançons? Ensenya aquest codi a l'amfitrió i t'enllaçarà aquest telèfon."
   },
   "notify": {
     "heading": "🔔 Quan et toqui",
@@ -663,6 +663,6 @@
     "saving": "Desant les cançons d'aquesta nit a {email}",
     "stop": "Deixa de desar",
     "failed": "No hem pogut desar les teves cançons ara mateix. Torna-ho a provar.",
-    "signOutEmail": "Tanca la sessió del correu"
+    "signOutEmail": "Tanca la sessió del correu electrònic"
   }
 }

@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} on kaveri: toivo kappale hänelle",
     "renameConfirmYes": "Kyllä, olen {name}: vaihda nimeni",
     "switchShort": "🔄 Vaihda laulajaa",
-    "switchConfirm": "Vaihdetaanko tässä puhelimessa toiseen laulajaan? Laulajan {name} kappaleet pysyvät illan listalla, mutta tämä puhelin ei enää näytä niitä."
+    "switchConfirm": "Haluatko vaihtaa toiseen laulajaan tällä puhelimella? Laulajan {name} kappaleet pysyvät tämän illan listalla, mutta ne eivät enää näy tällä puhelimella."
   },
   "search": {
     "title": "Valitse laulusi",
@@ -382,7 +382,7 @@
     "findingAudio": "Etsitään ääniraitaa…",
     "needAudio": "Valitse versio yltä",
     "socialFailed": "Kirjautuminen ei onnistunut. Yritä uudelleen tai käytä sähköpostia.",
-    "socialStall": "Eikö mitään tapahdu? Käytä sen sijaan sähköpostiasi alla."
+    "socialStall": "Eikö mitään tapahdu? Käytä sen sijaan alla olevaa sähköpostikirjautumista."
   },
   "confirm": {
     "partnersTitle": "Laulatko jonkun muun kanssa? (valinnainen)",
@@ -663,6 +663,6 @@
     "saving": "Tallennetaan tämän illan kappaleita tilille {email}",
     "stop": "Lopeta tallentaminen",
     "failed": "Kappaleiden tallentaminen ei juuri nyt onnistunut. Yritä uudelleen.",
-    "signOutEmail": "Kirjaudu ulos sähköpostista"
+    "signOutEmail": "Kirjaudu ulos sähköpostitililtä"
   }
 }

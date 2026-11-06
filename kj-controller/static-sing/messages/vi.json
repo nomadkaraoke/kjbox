@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} là bạn của tôi: yêu cầu bài hát cho họ",
     "renameConfirmYes": "Đúng, tôi là {name}: đổi tên tôi",
     "switchShort": "🔄 Đổi người hát",
-    "switchConfirm": "Chuyển sang ca sĩ khác trên điện thoại này? Các bài của {name} vẫn nằm trong danh sách tối nay, nhưng điện thoại này sẽ không hiển thị chúng nữa."
+    "switchConfirm": "Chuyển sang người hát khác trên điện thoại này? Các bài hát của {name} vẫn sẽ ở trong danh sách tối nay, nhưng điện thoại này sẽ không hiển thị các bài đó nữa."
   },
   "search": {
     "title": "Chọn bài của bạn",
@@ -382,7 +382,7 @@
     "findingAudio": "Đang tìm bản nhạc…",
     "needAudio": "Chọn một bản thu ở trên",
     "socialFailed": "Đăng nhập không thành công. Hãy thử lại hoặc dùng email của bạn nhé.",
-    "socialStall": "Không thấy gì xảy ra? Hãy dùng email của bạn ở bên dưới."
+    "socialStall": "Không thấy phản hồi gì? Hãy dùng email của bạn ở bên dưới nhé."
   },
   "confirm": {
     "partnersTitle": "Hát cùng ai khác không? (không bắt buộc)",
@@ -505,7 +505,7 @@
     "stepSent": "Đã gửi",
     "stepMaking": "Đang tạo",
     "stepReady": "Sẵn sàng lên mic",
-    "phoneCode": "Mã điện thoại: {code} · Thiếu bài hát? Đưa mã này cho người dẫn chương trình để họ liên kết điện thoại này với bạn."
+    "phoneCode": "Mã điện thoại: {code} · Bị thiếu bài hát? Hãy đưa mã này cho host để được liên kết điện thoại này với bạn."
   },
   "notify": {
     "heading": "🔔 Khi đến lượt bạn",

@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} adalah teman: minta lagu untuknya",
     "renameConfirmYes": "Ya, saya {name}: ubah nama saya",
     "switchShort": "🔄 Ganti penyanyi",
-    "switchConfirm": "Ganti ke penyanyi lain di ponsel ini? Lagu {name} tetap ada di daftar malam ini, tetapi ponsel ini tidak akan menampilkannya lagi."
+    "switchConfirm": "Ganti ke penyanyi lain di ponsel ini? Lagu-lagu {name} tetap ada di daftar malam ini, tetapi ponsel ini tidak akan menampilkannya lagi."
   },
   "search": {
     "title": "Pilih lagumu",
@@ -382,7 +382,7 @@
     "findingAudio": "Mencari audio…",
     "needAudio": "Pilih rekaman di atas",
     "socialFailed": "Gagal masuk. Coba lagi, atau gunakan emailmu.",
-    "socialStall": "Tidak ada yang terjadi? Pakai email kamu di bawah saja."
+    "socialStall": "Tidak ada respons? Gunakan email Anda di bawah ini sebagai gantinya."
   },
   "confirm": {
     "partnersTitle": "Nyanyi bareng orang lain? (opsional)",
@@ -505,7 +505,7 @@
     "stepSent": "Terkirim",
     "stepMaking": "Sedang dibuat",
     "stepReady": "Siap dinyanyikan",
-    "phoneCode": "Kode ponsel: {code} · Lagu tidak muncul? Tunjukkan kode ini ke host dan mereka akan menautkan ponsel ini ke kamu."
+    "phoneCode": "Kode ponsel: {code} · Lagu tidak muncul? Tunjukkan kode ini ke host agar ponsel ini bisa dihubungkan ke akun Anda."
   },
   "notify": {
     "heading": "🔔 Saat giliranmu tiba",

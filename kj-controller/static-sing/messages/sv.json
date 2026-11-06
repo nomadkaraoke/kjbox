@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} är en vän: önska en låt åt dem",
     "renameConfirmYes": "Ja, jag är {name}: byt mitt namn",
     "switchShort": "🔄 Byt sångare",
-    "switchConfirm": "Byta till en annan sångare på den här telefonen? {name}s låtar ligger kvar på kvällens lista, men den här telefonen slutar visa dem."
+    "switchConfirm": "Vill du byta till en annan sångare på den här telefonen? {name}s låtar ligger kvar på kvällens lista, men de visas inte längre på den här telefonen."
   },
   "search": {
     "title": "Välj din låt",
@@ -382,7 +382,7 @@
     "findingAudio": "Letar efter ljudspåret…",
     "needAudio": "Välj en inspelning ovan",
     "socialFailed": "Inloggningen fungerade inte. Försök igen eller använd din e-postadress.",
-    "socialStall": "Händer inget? Använd din e-post nedan i stället."
+    "socialStall": "Händer det ingenting? Använd din e-postadress nedan i stället."
   },
   "confirm": {
     "partnersTitle": "Sjunger du med någon annan? (valfritt)",
@@ -505,7 +505,7 @@
     "stepSent": "Skickad",
     "stepMaking": "Skapas",
     "stepReady": "Redo att sjungas",
-    "phoneCode": "Telefonkod: {code} · Saknas låtar? Visa koden för värden så kopplar de den här telefonen till dig."
+    "phoneCode": "Telefonkod: {code} · Saknas dina låtar? Visa den här koden för värden så kopplar hen ihop den här telefonen med dig."
   },
   "notify": {
     "heading": "🔔 När det är din tur",

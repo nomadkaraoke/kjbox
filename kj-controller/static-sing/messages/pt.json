@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} é um(a) amigo(a): pedir uma música para ele(a)",
     "renameConfirmYes": "Sim, eu sou {name}: mudar meu nome",
     "switchShort": "🔄 Trocar de cantor",
-    "switchConfirm": "Trocar para outro cantor neste telefone? As músicas de {name} continuam na lista desta noite, mas este telefone deixará de mostrá-las."
+    "switchConfirm": "Mudar para outro cantor neste celular? As músicas de {name} continuam na lista de hoje, mas este celular vai parar de mostrá-las."
   },
   "search": {
     "title": "Escolha sua música",
@@ -382,7 +382,7 @@
     "findingAudio": "Procurando o áudio…",
     "needAudio": "Escolha uma gravação acima",
     "socialFailed": "Não foi possível entrar. Tente novamente ou use seu e-mail.",
-    "socialStall": "Nada acontecendo? Use seu e-mail abaixo."
+    "socialStall": "Nada aconteceu? Use seu e-mail abaixo."
   },
   "confirm": {
     "partnersTitle": "Vai cantar com mais alguém? (opcional)",
@@ -505,7 +505,7 @@
     "stepSent": "Enviado",
     "stepMaking": "Em produção",
     "stepReady": "Pronto para cantar",
-    "phoneCode": "Código do telefone: {code} · Faltam músicas? Mostre este código ao anfitrião e ele vai vincular este telefone a você."
+    "phoneCode": "Código do celular: {code} · Músicas sumiram? Mostre este código ao KJ e ele vai vincular este celular a você."
   },
   "notify": {
     "heading": "🔔 Quando for a sua vez",

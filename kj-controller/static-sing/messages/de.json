@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} ist ein/e Freund/in: Song für sie/ihn wünschen",
     "renameConfirmYes": "Ja, ich bin {name}: Namen ändern",
     "switchShort": "🔄 Sänger wechseln",
-    "switchConfirm": "Auf diesem Handy zu einem anderen Sänger wechseln? Die Songs von {name} bleiben auf der Liste für heute Abend, aber dieses Handy zeigt sie nicht mehr an."
+    "switchConfirm": "Auf diesem Handy zu einer anderen Person wechseln? Die Songs von {name} bleiben auf der Liste für heute Abend, werden aber auf diesem Handy nicht mehr angezeigt."
   },
   "search": {
     "title": "Wähle deinen Song",
@@ -382,7 +382,7 @@
     "findingAudio": "Audio wird gesucht…",
     "needAudio": "Wähle oben eine Aufnahme aus",
     "socialFailed": "Die Anmeldung hat leider nicht geklappt. Versuch es nochmal oder nutze deine E-Mail-Adresse.",
-    "socialStall": "Passiert nichts? Nutze stattdessen unten deine E-Mail."
+    "socialStall": "Es tut sich nichts? Nutze stattdessen unten deine E-Mail-Adresse."
   },
   "confirm": {
     "partnersTitle": "Singst du noch mit jemandem? (optional)",
@@ -505,7 +505,7 @@
     "stepSent": "Gesendet",
     "stepMaking": "Wird erstellt",
     "stepReady": "Bereit zum Singen",
-    "phoneCode": "Handy-Code: {code} · Songs fehlen? Zeig diesen Code dem Host, dann verknüpft er dieses Handy mit dir."
+    "phoneCode": "Handy-Code: {code} · Fehlen Songs? Zeige diesen Code dem Host, damit dein Handy mit dir verknüpft wird."
   },
   "notify": {
     "heading": "🔔 Wenn du dran bist",

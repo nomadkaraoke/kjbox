@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} este un prieten: cere o piesă pentru el",
     "renameConfirmYes": "Da, eu sunt {name}: schimbă-mi numele",
     "switchShort": "🔄 Schimbă cântărețul",
-    "switchConfirm": "Treci la alt cântăreț pe acest telefon? Melodiile lui {name} rămân pe lista din seara asta, dar acest telefon nu le va mai afișa."
+    "switchConfirm": "Vrei să schimbi cântărețul pe acest telefon? Melodiile lui {name} rămân în lista din această seară, dar nu vor mai apărea pe acest telefon."
   },
   "search": {
     "title": "Alege-ți piesa",
@@ -382,7 +382,7 @@
     "findingAudio": "Căutăm varianta audio…",
     "needAudio": "Alege o înregistrare de mai sus",
     "socialFailed": "Conectarea nu a funcționat. Încearcă din nou sau folosește adresa de email.",
-    "socialStall": "Nu se întâmplă nimic? Folosește mai jos adresa ta de e-mail."
+    "socialStall": "Nu se întâmplă nimic? Folosește mai jos adresa de e-mail."
   },
   "confirm": {
     "partnersTitle": "Mai cânți cu cineva? (opțional)",
@@ -505,7 +505,7 @@
     "stepSent": "Trimis",
     "stepMaking": "În lucru",
     "stepReady": "Gata de cântat",
-    "phoneCode": "Cod telefon: {code} · Lipsesc melodii? Arată acest cod gazdei și va conecta acest telefon la tine."
+    "phoneCode": "Cod telefon: {code} · Lipsesc melodii? Arată-i codul gazdei și îți va conecta telefonul."
   },
   "notify": {
     "heading": "🔔 Când îți vine rândul",

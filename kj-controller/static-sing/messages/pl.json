@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} to znajomy: zamów piosenkę dla niego",
     "renameConfirmYes": "Tak, to ja ({name}): zmień moje imię",
     "switchShort": "🔄 Zmień wykonawcę",
-    "switchConfirm": "Przełączyć na innego wokalistę na tym telefonie? Piosenki {name} zostaną na dzisiejszej liście, ale ten telefon przestanie je pokazywać."
+    "switchConfirm": "Przełączyć na innego wokalistę na tym telefonie? Piosenki wykonawcy {name} pozostaną na dzisiejszej liście, ale ten telefon przestanie je wyświetlać."
   },
   "search": {
     "title": "Wybierz swoją piosenkę",
@@ -382,7 +382,7 @@
     "findingAudio": "Szukamy audio…",
     "needAudio": "Wybierz nagranie powyżej",
     "socialFailed": "Logowanie się nie powiodło. Spróbuj ponownie lub użyj e-maila.",
-    "socialStall": "Nic się nie dzieje? Użyj zamiast tego swojego e-maila poniżej."
+    "socialStall": "Nic się nie dzieje? Podaj poniżej swój adres e-mail."
   },
   "confirm": {
     "partnersTitle": "Śpiewasz z kimś jeszcze? (opcjonalnie)",
@@ -505,7 +505,7 @@
     "stepSent": "Wysłano",
     "stepMaking": "W trakcie tworzenia",
     "stepReady": "Gotowe do zaśpiewania",
-    "phoneCode": "Kod telefonu: {code} · Brakuje piosenek? Pokaż ten kod prowadzącemu, a połączy ten telefon z tobą."
+    "phoneCode": "Kod telefonu: {code} · Brakuje Twoich piosenek? Pokaż ten kod prowadzącemu, a połączy ten telefon z Tobą."
   },
   "notify": {
     "heading": "🔔 Kiedy nadejdzie twoja kolej",
@@ -663,6 +663,6 @@
     "saving": "Zapisywanie dzisiejszych piosenek na koncie {email}",
     "stop": "Nie zapisuj",
     "failed": "Nie udało się teraz zapisać Twoich piosenek. Spróbuj ponownie za chwilę.",
-    "signOutEmail": "Wyloguj się z e-maila"
+    "signOutEmail": "Wyloguj się z adresu e-mail"
   }
 }

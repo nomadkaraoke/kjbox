@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} je prijatelj: naruči pjesmu za njega",
     "renameConfirmYes": "Da, ja sam {name}: promijeni mi ime",
     "switchShort": "🔄 Promijeni pjevača",
-    "switchConfirm": "Prebaciti na drugog pjevača na ovom telefonu? Pjesme korisnika {name} ostaju na večerašnjem popisu, ali ih ovaj telefon više neće prikazivati."
+    "switchConfirm": "Želiš li se prebaciti na drugog pjevača na ovom mobitelu? Pjesme koje je dodao/la {name} ostaju na večerašnjem popisu, ali se više neće prikazivati na ovom mobitelu."
   },
   "search": {
     "title": "Odaberi svoju pjesmu",
@@ -382,7 +382,7 @@
     "findingAudio": "Tražimo snimku…",
     "needAudio": "Odaberi snimku iznad",
     "socialFailed": "Prijava nije uspjela. Pokušaj ponovno ili unesi e-poštu.",
-    "socialStall": "Ništa se ne događa? Umjesto toga upotrijebite svoju e-poštu ispod."
+    "socialStall": "Ništa se ne događa? Umjesto toga upotrijebi svoju e-poštu u nastavku."
   },
   "confirm": {
     "partnersTitle": "Pjevaš li s još nekim? (opcionalno)",
@@ -505,7 +505,7 @@
     "stepSent": "Poslano",
     "stepMaking": "U izradi",
     "stepReady": "Spremno za pjevanje",
-    "phoneCode": "Kôd telefona: {code} · Nedostaju pjesme? Pokažite ovaj kôd voditelju i on će povezati ovaj telefon s vama."
+    "phoneCode": "Kod mobitela: {code} · Nedostaju ti pjesme? Pokaži ovaj kod voditelju i povezat će ovaj mobitel s tobom."
   },
   "notify": {
     "heading": "🔔 Kad si na redu",
@@ -663,6 +663,6 @@
     "saving": "Spremanje večerašnjih pjesama na {email}",
     "stop": "Prekini spremanje",
     "failed": "Pjesme trenutno nismo mogli spremiti. Pokušaj ponovno.",
-    "signOutEmail": "Odjava s e-pošte"
+    "signOutEmail": "Odjavi se s e-pošte"
   }
 }

@@ -72,7 +72,7 @@
     "renameConfirmFriend": "🎤 {name} je kamarát: objednať pieseň preňho",
     "renameConfirmYes": "Áno, ja som {name}: zmeniť moje meno",
     "switchShort": "🔄 Zmeniť speváka",
-    "switchConfirm": "Prepnúť na iného speváka na tomto telefóne? Piesne {name} zostanú v dnešnom zozname, ale tento telefón ich prestane zobrazovať."
+    "switchConfirm": "Prepnúť na tomto telefóne iného speváka? Pesničky speváka {name} zostanú v dnešnom zozname, ale na tomto telefóne sa už nebudú zobrazovať."
   },
   "search": {
     "title": "Vyber si pieseň",
@@ -382,7 +382,7 @@
     "findingAudio": "Hľadá sa zvuk…",
     "needAudio": "Vyber si nahrávku vyššie",
     "socialFailed": "Prihlásenie sa nepodarilo. Skús to znova alebo použi svoj e-mail.",
-    "socialStall": "Nič sa nedeje? Použite radšej svoj e-mail nižšie."
+    "socialStall": "Nič sa nedeje? Použi radšej svoj e-mail nižšie."
   },
   "confirm": {
     "partnersTitle": "Spievaš ešte s niekým? (voliteľné)",
@@ -505,7 +505,7 @@
     "stepSent": "Odoslané",
     "stepMaking": "Vytvára sa",
     "stepReady": "Pripravené na spievanie",
-    "phoneCode": "Kód telefónu: {code} · Chýbajú piesne? Ukážte tento kód hostiteľovi a ten tento telefón prepojí s vami."
+    "phoneCode": "Kód telefónu: {code} · Chýbajú ti pesničky? Ukáž tento kód hostiteľovi a ten ti tento telefón prepojí."
   },
   "notify": {
     "heading": "🔔 Keď budeš na rade",

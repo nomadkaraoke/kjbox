@@ -2,6 +2,18 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-06 - Singer page: pipeline translations for the five strings added on 2026-11-05 (v0.149.2)
+
+The strings added mid-show (`identity.switchShort`, `identity.switchConfirm`, `mySongs.phoneCode`,
+`saveSongs.signOutEmail`, `make.socialStall`) had been hand-translated, because `translate.py` needed a gcloud
+login. They were re-run through the Gemini pipeline (`scripts/gcp-admin python scripts/translate.py ... --target all`,
+5 strings x 32 locales, after removing them from the locale files). Review fixes on top:
+
+- `switchShort` stays "🔄 " + each locale's existing `switchSinger`, so the two labels always match. The pipeline had
+  re-worded it, e.g. ja シンガー where the page uses 歌手.
+- `signOutEmail`: de "Per E-Mail abmelden" and nl "Uitloggen met e-mail" meant "sign out *by* email" →
+  "Von E-Mail abmelden" / "Uitloggen bij e-mail". hi switched to the formal करें used by the existing "Log out".
+
 ## 2026-11-06 - Google sign-in tap detected via Google's own click_listener (v0.149.1)
 
 A test against production after v0.149.0 found the window-blur check misses some Google taps. The Google button now
