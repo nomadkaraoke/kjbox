@@ -443,6 +443,32 @@ async function renameMe(newName) {
   });
 }
 
+// Join this phone to the singer of the same name already on tonight's list, so
+// a new tab or phone sees their songs without submitting again (live 2026-11-05:
+// Safari private tabs gave a singer a fresh device id per tab). A matching
+// phone number also restores Cancel/Change (the requests' edit tokens).
+// Resolves to {matched, songs}; never throws.
+let _claimedKey = "";
+async function claimIdentity({ strict = false } = {}) {
+  const name = (state.name || "").trim();
+  const key = `${DEVICE_ID}|${name}|${state.phone || ""}|${strict}`;
+  if (!name || state.friend || _claimedKey === key) return { matched: false, songs: 0 };
+  _claimedKey = key;
+  try {
+    const d = await fetchJson(`${BASE}/identity/claim`, {
+      method: "POST",
+      body: JSON.stringify({ device_id: DEVICE_ID, name, phone: state.phone || "", strict }),
+    });
+    if (!d || !d.matched) return { matched: false, songs: 0 };
+    for (const it of d.items || []) rememberRequestId(TOKEN, it.id, it.edit_token);
+    if (d.name && d.name !== state.name) { state.name = d.name; LS.set("sing_name", d.name); }
+    return { matched: true, songs: d.songs || 0 };
+  } catch {
+    _claimedKey = "";
+    return { matched: false, songs: 0 };
+  }
+}
+
 // Drop this device's alias when the visitor declares they're someone new
 // ("switch" on the landing screen) — best-effort so it never blocks the UI.
 async function forgetIdentity() {
@@ -1424,6 +1450,18 @@ function renderIdentity() {
     state.phone = phoneTrimmed;
     LS.set("sing_name", state.name);
     LS.set("sing_phone", state.phone);
+    if (!isEdit) {
+      // A singer already on tonight's list (new tab, new phone, cleared
+      // browser) lands on their songs instead of an empty search. Capped so a
+      // slow box never holds the singer on the name screen.
+      const btn = root.querySelector(".identity-save");
+      if (btn) btn.disabled = true;
+      const claim = await Promise.race([
+        claimIdentity(),
+        new Promise((r) => setTimeout(() => r({ matched: false, songs: 0 }), 2500)),
+      ]);
+      if (claim.matched && claim.songs > 0) { leaveIdentity("done"); return; }
+    }
     // Editing from the done screen returns there and re-polls (so the renamed
     // songs show); otherwise fall through to search as the setup flow always did.
     leaveIdentity(isEdit ? returnStep : "search");
@@ -5620,6 +5658,17 @@ if (codeEntryEl) {
   // with backoff — but stop the moment they navigate off landing (the step
   // guard) so we never yank someone mid-search into their list.
   if (state.step !== "done") bootRestore(0);
+  // A phone that knows its singer's name AND number re-joins them on every
+  // load, so songs sent from another tab/phone show here too. Strict: a name
+  // alone (maybe saved last week) must not join tonight's same-name singer.
+  if (state.phone) claimIdentity({ strict: true }).then((c) => {
+    if (!c.matched) return;
+    if (state.step === "done") render();
+    else if (c.songs > 0 && state.step === "search" && !(state.query || "").trim()) {
+      state.step = "done";
+      render();
+    }
+  });
 } else {
   // "Requests closed" page — still offer the language pill on the card.
   document.querySelector(".sing-closed")?.prepend(langPill());
