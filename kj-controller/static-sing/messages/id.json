@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Ubah namamu menjadi {name}?",
     "renameConfirmBody": "Lagu-lagumu malam ini akan terdaftar atas nama {name}, bukan {old}. Jika {name} adalah temanmu, pilih untuk meminta lagu untuk mereka.",
     "renameConfirmFriend": "🎤 {name} adalah teman: minta lagu untuknya",
-    "renameConfirmYes": "Ya, saya {name}: ubah nama saya"
+    "renameConfirmYes": "Ya, saya {name}: ubah nama saya",
+    "switchShort": "🔄 Ganti penyanyi",
+    "switchConfirm": "Ganti ke penyanyi lain di ponsel ini? Lagu {name} tetap ada di daftar malam ini, tetapi ponsel ini tidak akan menampilkannya lagi."
   },
   "search": {
     "title": "Pilih lagumu",
@@ -501,7 +503,8 @@
     "makeDetails": "Progres video",
     "stepSent": "Terkirim",
     "stepMaking": "Sedang dibuat",
-    "stepReady": "Siap dinyanyikan"
+    "stepReady": "Siap dinyanyikan",
+    "phoneCode": "Kode ponsel: {code} · Lagu tidak muncul? Tunjukkan kode ini ke host dan mereka akan menautkan ponsel ini ke kamu."
   },
   "notify": {
     "heading": "🔔 Saat giliranmu tiba",
@@ -658,6 +661,7 @@
     "explainer": "Kami akan menyimpan lagu-lagu yang kamu nyanyikan malam ini ke akun Nomad Karaoke kamu, agar aplikasi bisa menampilkan riwayat bernyanyimu dan merekomendasikan lagu.",
     "saving": "Menyimpan lagu malam ini ke {email}",
     "stop": "Berhenti menyimpan",
-    "failed": "Kami belum bisa menyimpan lagumu tadi. Silakan coba lagi."
+    "failed": "Kami belum bisa menyimpan lagumu tadi. Silakan coba lagi.",
+    "signOutEmail": "Keluar dari email"
   }
 }

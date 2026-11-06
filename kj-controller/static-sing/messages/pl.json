@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Zmienić Twoje imię na {name}?",
     "renameConfirmBody": "Twoje dzisiejsze piosenki będą widoczne pod imieniem {name} zamiast {old}. Jeśli {name} to Twój znajomy, zamów piosenkę dla niego.",
     "renameConfirmFriend": "🎤 {name} to znajomy: zamów piosenkę dla niego",
-    "renameConfirmYes": "Tak, to ja ({name}): zmień moje imię"
+    "renameConfirmYes": "Tak, to ja ({name}): zmień moje imię",
+    "switchShort": "🔄 Zmień wykonawcę",
+    "switchConfirm": "Przełączyć na innego wokalistę na tym telefonie? Piosenki {name} zostaną na dzisiejszej liście, ale ten telefon przestanie je pokazywać."
   },
   "search": {
     "title": "Wybierz swoją piosenkę",
@@ -501,7 +503,8 @@
     "makeDetails": "Postęp tworzenia wideo",
     "stepSent": "Wysłano",
     "stepMaking": "W trakcie tworzenia",
-    "stepReady": "Gotowe do zaśpiewania"
+    "stepReady": "Gotowe do zaśpiewania",
+    "phoneCode": "Kod telefonu: {code} · Brakuje piosenek? Pokaż ten kod prowadzącemu, a połączy ten telefon z tobą."
   },
   "notify": {
     "heading": "🔔 Kiedy nadejdzie twoja kolej",
@@ -658,6 +661,7 @@
     "explainer": "Zapiszemy piosenki, które dziś zaśpiewasz, na Twoim koncie Nomad Karaoke, żeby aplikacja mogła pokazywać Twoją historię i polecać piosenki.",
     "saving": "Zapisywanie dzisiejszych piosenek na koncie {email}",
     "stop": "Nie zapisuj",
-    "failed": "Nie udało się teraz zapisać Twoich piosenek. Spróbuj ponownie za chwilę."
+    "failed": "Nie udało się teraz zapisać Twoich piosenek. Spróbuj ponownie za chwilę.",
+    "signOutEmail": "Wyloguj się z e-maila"
   }
 }

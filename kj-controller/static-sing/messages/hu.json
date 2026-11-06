@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Átnevezed magad a következőre: {name}?",
     "renameConfirmBody": "A ma esti számaid {name} név alatt fognak megjelenni a(z) {old} helyett. Ha {name} egy barátod, kérj inkább dalt az ő nevében.",
     "renameConfirmFriend": "🎤 {name} egy barátom: dal kérése neki",
-    "renameConfirmYes": "Igen, én vagyok {name}: átnevezés"
+    "renameConfirmYes": "Igen, én vagyok {name}: átnevezés",
+    "switchShort": "🔄 Énekes váltása",
+    "switchConfirm": "Átváltasz egy másik énekesre ezen a telefonon? {name} dalai a ma esti listán maradnak, de ez a telefon nem mutatja őket tovább."
   },
   "search": {
     "title": "Válaszd ki a dalod",
@@ -501,7 +503,8 @@
     "makeDetails": "Videó állapota",
     "stepSent": "Elküldve",
     "stepMaking": "Készül",
-    "stepReady": "Éneklésre kész"
+    "stepReady": "Éneklésre kész",
+    "phoneCode": "Telefonkód: {code} · Hiányoznak a dalaid? Mutasd meg ezt a kódot a házigazdának, és összekapcsolja ezt a telefont veled."
   },
   "notify": {
     "heading": "🔔 Amikor te jössz",
@@ -658,6 +661,7 @@
     "explainer": "Elmentjük a ma este énekelt dalaidat a Nomad Karaoke fiókodba, így az app mutatni tudja az előzményeidet, és dalokat is ajánlhat neked.",
     "saving": "Ma esti dalok mentése ide: {email}",
     "stop": "Mentés leállítása",
-    "failed": "Most nem sikerült elmenteni a dalaidat. Kérjük, próbáld újra!"
+    "failed": "Most nem sikerült elmenteni a dalaidat. Kérjük, próbáld újra!",
+    "signOutEmail": "Kijelentkezés az e-mailből"
   }
 }

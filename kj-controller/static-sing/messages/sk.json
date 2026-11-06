@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Zmeniť tvoje meno na {name}?",
     "renameConfirmBody": "Tvoje dnešné piesne budú uvedené pod menom {name} namiesto {old}. Ak je {name} kamarát, radšej objednaj pieseň priamo preňho.",
     "renameConfirmFriend": "🎤 {name} je kamarát: objednať pieseň preňho",
-    "renameConfirmYes": "Áno, ja som {name}: zmeniť moje meno"
+    "renameConfirmYes": "Áno, ja som {name}: zmeniť moje meno",
+    "switchShort": "🔄 Zmeniť speváka",
+    "switchConfirm": "Prepnúť na iného speváka na tomto telefóne? Piesne {name} zostanú v dnešnom zozname, ale tento telefón ich prestane zobrazovať."
   },
   "search": {
     "title": "Vyber si pieseň",
@@ -501,7 +503,8 @@
     "makeDetails": "Priebeh tvorby videa",
     "stepSent": "Odoslané",
     "stepMaking": "Vytvára sa",
-    "stepReady": "Pripravené na spievanie"
+    "stepReady": "Pripravené na spievanie",
+    "phoneCode": "Kód telefónu: {code} · Chýbajú piesne? Ukážte tento kód hostiteľovi a ten tento telefón prepojí s vami."
   },
   "notify": {
     "heading": "🔔 Keď budeš na rade",
@@ -658,6 +661,7 @@
     "explainer": "Piesne, ktoré dnes zaspievaš, uložíme do tvojho účtu Nomad Karaoke, aby ti aplikácia mohla zobraziť históriu a odporúčať ďalšie skladby.",
     "saving": "Ukladám dnešné piesne do účtu {email}",
     "stop": "Zastaviť ukladanie",
-    "failed": "Tvoje piesne sa teraz nepodarilo uložiť. Skús to znova, prosím."
+    "failed": "Tvoje piesne sa teraz nepodarilo uložiť. Skús to znova, prosím.",
+    "signOutEmail": "Odhlásiť sa z e-mailu"
   }
 }

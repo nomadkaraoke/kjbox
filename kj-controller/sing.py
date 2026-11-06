@@ -2994,6 +2994,58 @@ def claim_identity():
     return jsonify({"matched": True, "name": canonical, "items": items, "songs": songs})
 
 
+def _own_request_items(store, token, name):
+    """{id, edit_token} for tonight's live requests under ``name`` (tips excluded)."""
+    folded = _fold_name(name)
+    items = []
+    if not folded:
+        return items
+    for req in store.list_requests(token=token):
+        if (req.get("source_type") != "tip"
+                and _belongs_to_current_night(store, req)
+                and _fold_name(req.get("singer_name")) == folded
+                and req.get("edit_token")
+                and (req.get("status") or "") not in ("cancelled", "rejected")):
+            items.append({"id": req["id"], "edit_token": req["edit_token"]})
+    return items
+
+
+@sing_bp.route("/link-code", methods=["GET"])
+def link_code():
+    """This phone's code for the host to link it to a singer ("Link a phone" in
+    the KJ UI), and — once the host has — who it is now, with that singer's
+    requests' edit tokens so Cancel/Change work from this phone too.
+
+    ``{code, linked: null | {name, items: [{id, edit_token}]}}``.
+    """
+    store = getattr(current_app, "sing_store", None)
+    if store is None:
+        return jsonify({"error": "not_configured"}), 503
+    token = _extract_token()
+    if not token or not _is_token_valid(store, token):
+        return jsonify({"error": "not_open"}), 403
+    device_id = str(request.args.get("device_id") or "").strip()[:64]
+    if not device_id:
+        return jsonify({"error": "device_id is required"}), 400
+    try:
+        code = store.link_code_for(device_id)
+        alias = store.get_alias_row(device_id)
+    except Exception:
+        current_app.logger.exception("link-code failed")
+        return jsonify({"error": "unavailable"}), 503
+    linked = None
+    # Only a link the host made tonight: aliases outlive the night, and a phone
+    # linked to last week's "Mike" must not get tonight's Mike's edit tokens.
+    night = store.get_night_started_at() or ""
+    if alias and alias[1] == "kj" and night and (alias[2] or "") >= night:
+        try:
+            items = _own_request_items(store, token, alias[0])
+        except Exception:
+            items = []
+        linked = {"name": alias[0], "items": items}
+    return jsonify({"code": code, "linked": linked})
+
+
 # --- Response shaping ----------------------------------------------------
 
 def _build_now_playing(rotation):

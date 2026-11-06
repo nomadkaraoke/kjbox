@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Adını {name} olarak değiştirmek istiyor musun?",
     "renameConfirmBody": "Bu geceki şarkıların {old} yerine {name} adı altında listelenecek. Eğer {name} bir arkadaşınsa, bunun yerine onun için şarkı iste.",
     "renameConfirmFriend": "🎤 {name} bir arkadaşım: onun için şarkı iste",
-    "renameConfirmYes": "Evet, ben {name}: adımı değiştir"
+    "renameConfirmYes": "Evet, ben {name}: adımı değiştir",
+    "switchShort": "🔄 Şarkıcı değiştir",
+    "switchConfirm": "Bu telefonda başka bir şarkıcıya geçilsin mi? {name} adlı kişinin şarkıları bu akşamki listede kalır, ancak bu telefon artık onları göstermez."
   },
   "search": {
     "title": "Şarkını seç",
@@ -501,7 +503,8 @@
     "makeDetails": "Video durumu",
     "stepSent": "Gönderildi",
     "stepMaking": "Yapılıyor",
-    "stepReady": "Söylemeye hazır"
+    "stepReady": "Söylemeye hazır",
+    "phoneCode": "Telefon kodu: {code} · Şarkıların görünmüyor mu? Bu kodu sunucuya göster, bu telefonu seninle bağlasın."
   },
   "notify": {
     "heading": "🔔 Sıran geldiğinde",
@@ -658,6 +661,7 @@
     "explainer": "Bu gece söylediğin şarkıları Nomad Karaoke hesabına kaydedeceğiz; böylece uygulama geçmişini gösterebilir ve sana şarkı önerebilir.",
     "saving": "Bu gecenin şarkıları {email} hesabına kaydediliyor",
     "stop": "Kaydetmeyi durdur",
-    "failed": "Şarkılarını şu anda kaydedemedik. Lütfen tekrar dene."
+    "failed": "Şarkılarını şu anda kaydedemedik. Lütfen tekrar dene.",
+    "signOutEmail": "E-postadan çıkış yap"
   }
 }

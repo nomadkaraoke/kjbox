@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Je naam wijzigen naar {name}?",
     "renameConfirmBody": "Je nummers van vanavond komen op naam van {name} te staan in plaats van {old}. Als {name} een vriend(in) is, vraag dan een nummer voor hen aan.",
     "renameConfirmFriend": "🎤 {name} is een vriend(in): vraag een nummer voor hen aan",
-    "renameConfirmYes": "Ja, ik ben {name}: wijzig mijn naam"
+    "renameConfirmYes": "Ja, ik ben {name}: wijzig mijn naam",
+    "switchShort": "🔄 Wissel van zanger",
+    "switchConfirm": "Overschakelen naar een andere zanger op deze telefoon? De nummers van {name} blijven op de lijst van vanavond, maar deze telefoon toont ze niet meer."
   },
   "search": {
     "title": "Kies je nummer",
@@ -501,7 +503,8 @@
     "makeDetails": "Videovoortgang",
     "stepSent": "Verstuurd",
     "stepMaking": "Wordt gemaakt",
-    "stepReady": "Klaar om te zingen"
+    "stepReady": "Klaar om te zingen",
+    "phoneCode": "Telefooncode: {code} · Missen er nummers? Laat deze code aan de host zien, dan koppelt die deze telefoon aan jou."
   },
   "notify": {
     "heading": "🔔 Als je aan de beurt bent",
@@ -658,6 +661,7 @@
     "explainer": "We slaan de nummers die je vanavond zingt op in je Nomad Karaoke-account, zodat de app je geschiedenis kan tonen en nummers kan aanbevelen.",
     "saving": "Nummers van vanavond worden opgeslagen op {email}",
     "stop": "Stoppen met opslaan",
-    "failed": "Het is niet gelukt om je nummers op te slaan. Probeer het opnieuw."
+    "failed": "Het is niet gelukt om je nummers op te slaan. Probeer het opnieuw.",
+    "signOutEmail": "Afmelden bij e-mail"
   }
 }

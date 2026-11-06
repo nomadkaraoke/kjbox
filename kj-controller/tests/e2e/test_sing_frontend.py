@@ -1662,3 +1662,48 @@ class TestIdentityClaim:
     def test_new_singer_goes_to_search(self, page, live_server, live_token):
         self._fresh(page, live_server, live_token, {"matched": False}, [])
         expect(page.locator('input[type="search"]')).to_be_visible()
+
+
+class TestSwitchSingerAndPhoneCode:
+    """Live 2026-11-05: the host couldn't find how to switch a singer off a phone,
+    and had no way to link a singer's new (private) tab from the KJ screen."""
+
+    def test_switch_link_on_search_asks_then_starts_fresh(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Alanna M")
+        page.evaluate("() => { window.__sing_state.step = 'search'; window.__sing_render(); }")
+        page.evaluate("localStorage.setItem('sing_my_request_ids', JSON.stringify({token: 'x', ids: [1]}))")
+        link = page.locator('[data-testid="switch-singer"]')
+        expect(link).to_be_visible()
+        page.once("dialog", lambda d: d.dismiss())
+        link.click()
+        expect(page.locator('input[type="search"]')).to_be_visible()   # cancelled: nothing changed
+        page.once("dialog", lambda d: d.accept())
+        link.click()
+        expect(page.get_by_label("First name + last initial")).to_have_value("")
+        assert page.evaluate("localStorage.getItem('sing_name')") == ""
+        assert page.evaluate("localStorage.getItem('sing_my_request_ids')") is None
+
+    def test_my_songs_shows_switch_link_and_phone_code(self, page, live_server, live_token):
+        _login(page, live_server, live_token, name="Alanna M")
+        page.evaluate("() => { window.__sing_state.step = 'done'; window.__sing_render(); }")
+        expect(page.locator('.done-identity [data-testid="switch-singer"]')).to_be_visible()
+        code_line = page.locator('[data-testid="phone-code"]')
+        expect(code_line).to_contain_text(re.compile(r"Phone code: \d{4}"))
+
+    def test_host_link_renames_this_phone(self, page, live_server, live_token):
+        import urllib.request as _ur
+        # A fresh tab with no name, on My songs.
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate("() => { window.__sing_state.name = ''; window.__sing_state.step = 'done'; window.__sing_render(); }")
+        code_line = page.locator('[data-testid="phone-code"]')
+        expect(code_line).to_contain_text(re.compile(r"\d{4}"))
+        code = re.search(r"(\d{4})", code_line.inner_text()).group(1)
+        # The KJ links it to an existing singer.
+        req = _ur.Request(f"{live_server}/rotation/singer/link-phone",
+                          data=json.dumps({"name": "Linked L", "code": code}).encode(),
+                          headers={"Content-Type": "application/json"}, method="POST")
+        with _ur.urlopen(req) as r:
+            assert r.status == 200
+        # Within a poll the phone knows who it is.
+        expect(page.locator(".done-identity strong")).to_have_text("Linked L", timeout=8000)
+        assert page.evaluate("localStorage.getItem('sing_name')") == "Linked L"

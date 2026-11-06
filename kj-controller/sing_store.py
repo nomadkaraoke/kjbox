@@ -184,6 +184,15 @@ class SingStore:
                 updated_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
 
+            -- Phone link codes (2026-11-05): a short per-night code the singer
+            -- page shows on My songs, so the KJ can link that phone to a
+            -- singer from the KJ UI ("Link a phone") even if it never submitted.
+            CREATE TABLE IF NOT EXISTS device_link_codes (
+                code       TEXT PRIMARY KEY,
+                device_id  TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
+
             -- Per-singer social-media photo/video consent (2026-09-24). Keyed
             -- on the folded singer name (rotation identity is the name string)
             -- and read NIGHT-SCOPED (updated_at >= night_started_at) so a
@@ -1626,6 +1635,59 @@ class SingStore:
     # ------------------------------------------------------------------
     # Singer aliases — device_id → canonical display name
     # ------------------------------------------------------------------
+
+    def link_code_for(self, device_id):
+        """This device's phone link code for tonight (4 digits), minting one if
+        needed. Codes from earlier nights are dropped. None on blank input or
+        when no night has started."""
+        device_id = (device_id or "").strip()
+        night = self.get_night_started_at()
+        if not device_id or not night:
+            return None
+        conn = self._get_conn()
+        conn.execute("DELETE FROM device_link_codes WHERE created_at < ?", (night,))
+        row = conn.execute(
+            "SELECT code FROM device_link_codes WHERE device_id = ?", (device_id,)
+        ).fetchone()
+        if row:
+            conn.commit()
+            return row[0]
+        for _ in range(50):
+            code = f"{secrets.randbelow(9000) + 1000}"
+            try:
+                conn.execute(
+                    "INSERT INTO device_link_codes (code, device_id) VALUES (?, ?)",
+                    (code, device_id),
+                )
+                conn.commit()
+                return code
+            except sqlite3.IntegrityError:
+                continue
+        conn.commit()
+        return None
+
+    def device_for_link_code(self, code):
+        """The device a tonight's link code belongs to, or None."""
+        code = re.sub(r"\D", "", str(code or ""))
+        night = self.get_night_started_at()
+        if not code or not night:
+            return None
+        row = self._get_conn().execute(
+            "SELECT device_id FROM device_link_codes WHERE code = ? AND created_at >= ?",
+            (code, night),
+        ).fetchone()
+        return row[0] if row else None
+
+    def get_alias_row(self, device_id):
+        """(canonical_name, origin, updated_at) for a device, or None."""
+        device_id = (device_id or "").strip()
+        if not device_id:
+            return None
+        row = self._get_conn().execute(
+            "SELECT canonical_name, origin, updated_at FROM singer_aliases WHERE device_id = ?",
+            (device_id,),
+        ).fetchone()
+        return (row[0], row[1], row[2]) if row else None
 
     def get_alias(self, device_id):
         """Return the canonical name a device is mapped to, or None.

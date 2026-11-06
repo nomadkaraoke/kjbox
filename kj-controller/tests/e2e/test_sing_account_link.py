@@ -170,7 +170,7 @@ class TestSaveTonightsSongs:
         main = page.locator('[data-testid="save-songs-main"]')
         expect(main.locator('[data-testid="save-songs-link"]')).to_have_text(
             f"Save tonight's songs to {EMAIL}")
-        expect(main.locator('[data-testid="save-songs-logout"]')).to_have_text("Log out")
+        expect(main.locator('[data-testid="save-songs-logout"]')).to_have_text("Sign out of email")
 
     def test_log_out_signs_out_and_offers_sign_in(self, page, live_server, live_token):
         calls = _fake_account(page, email=EMAIL)

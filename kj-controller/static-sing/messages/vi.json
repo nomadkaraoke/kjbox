@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Đổi tên của bạn thành {name}?",
     "renameConfirmBody": "Các bài hát của bạn tối nay sẽ được đổi sang tên {name} thay vì {old}. Nếu {name} là một người bạn, hãy chọn yêu cầu bài hát cho họ.",
     "renameConfirmFriend": "🎤 {name} là bạn của tôi: yêu cầu bài hát cho họ",
-    "renameConfirmYes": "Đúng, tôi là {name}: đổi tên tôi"
+    "renameConfirmYes": "Đúng, tôi là {name}: đổi tên tôi",
+    "switchShort": "🔄 Đổi người hát",
+    "switchConfirm": "Chuyển sang ca sĩ khác trên điện thoại này? Các bài của {name} vẫn nằm trong danh sách tối nay, nhưng điện thoại này sẽ không hiển thị chúng nữa."
   },
   "search": {
     "title": "Chọn bài của bạn",
@@ -501,7 +503,8 @@
     "makeDetails": "Tiến trình tạo video",
     "stepSent": "Đã gửi",
     "stepMaking": "Đang tạo",
-    "stepReady": "Sẵn sàng lên mic"
+    "stepReady": "Sẵn sàng lên mic",
+    "phoneCode": "Mã điện thoại: {code} · Thiếu bài hát? Đưa mã này cho người dẫn chương trình để họ liên kết điện thoại này với bạn."
   },
   "notify": {
     "heading": "🔔 Khi đến lượt bạn",
@@ -658,6 +661,7 @@
     "explainer": "Tụi mình sẽ lưu những bài bạn hát tối nay vào tài khoản Nomad Karaoke để ứng dụng có thể hiển thị lịch sử và gợi ý bài hát cho bạn.",
     "saving": "Đang lưu các bài hát tối nay vào {email}",
     "stop": "Dừng lưu",
-    "failed": "Vừa rồi chưa lưu được bài hát của bạn. Vui lòng thử lại nhé."
+    "failed": "Vừa rồi chưa lưu được bài hát của bạn. Vui lòng thử lại nhé.",
+    "signOutEmail": "Đăng xuất email"
   }
 }

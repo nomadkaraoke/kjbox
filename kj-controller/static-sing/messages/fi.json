@@ -70,7 +70,9 @@
     "renameConfirmTitle": "Vaihdatko nimeksesi {name}?",
     "renameConfirmBody": "Tämän illan kappaleesi näkyvät nimellä {name} nimen {old} sijaan. Jos {name} on kaverisi, toivo kappale mieluummin hänelle.",
     "renameConfirmFriend": "🎤 {name} on kaveri: toivo kappale hänelle",
-    "renameConfirmYes": "Kyllä, olen {name}: vaihda nimeni"
+    "renameConfirmYes": "Kyllä, olen {name}: vaihda nimeni",
+    "switchShort": "🔄 Vaihda laulajaa",
+    "switchConfirm": "Vaihdetaanko tässä puhelimessa toiseen laulajaan? Laulajan {name} kappaleet pysyvät illan listalla, mutta tämä puhelin ei enää näytä niitä."
   },
   "search": {
     "title": "Valitse laulusi",
@@ -501,7 +503,8 @@
     "makeDetails": "Videon edistyminen",
     "stepSent": "Lähetetty",
     "stepMaking": "Työn alla",
-    "stepReady": "Valmis laulettavaksi"
+    "stepReady": "Valmis laulettavaksi",
+    "phoneCode": "Puhelinkoodi: {code} · Puuttuuko kappaleita? Näytä tämä koodi juontajalle, niin hän yhdistää tämän puhelimen sinuun."
   },
   "notify": {
     "heading": "🔔 Kun on vuorosi",
@@ -658,6 +661,7 @@
     "explainer": "Tallennamme tänä iltana laulamasi kappaleet Nomad Karaoke -tilillesi, jotta sovellus voi näyttää historiasi ja suositella kappaleita.",
     "saving": "Tallennetaan tämän illan kappaleita tilille {email}",
     "stop": "Lopeta tallentaminen",
-    "failed": "Kappaleiden tallentaminen ei juuri nyt onnistunut. Yritä uudelleen."
+    "failed": "Kappaleiden tallentaminen ei juuri nyt onnistunut. Yritä uudelleen.",
+    "signOutEmail": "Kirjaudu ulos sähköpostista"
   }
 }

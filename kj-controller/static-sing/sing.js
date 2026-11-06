@@ -652,6 +652,10 @@ function render() {
     clearInterval(state._statusPollTimer);
     state._statusPollTimer = null;
   }
+  if (_linkCodeTimer && state.step !== "done") {
+    clearInterval(_linkCodeTimer);
+    _linkCodeTimer = null;
+  }
   // "Change song" mode is only valid across the search flow it starts.
   // Clearing it on any other screen prevents an abandoned change from
   // misrouting a later brand-new request to the /change endpoint.
@@ -788,6 +792,53 @@ function editNameLink(returnStep, label) {
     "data-testid": "edit-name",
     onclick: (e) => { e.preventDefault(); enterEditName(returnStep); },
   }, label || t("mySongs.editName"));
+}
+
+// "Switch singer": a different person takes over this phone. Shown on My songs
+// and search (it used to live only at the bottom of "edit my name", where the
+// host couldn't find it at a live show, 2026-11-05).
+function switchSingerLink() {
+  return el("a", {
+    href: "#",
+    class: "switch-singer-link",
+    "data-testid": "switch-singer",
+    onclick: (e) => {
+      e.preventDefault();
+      if (state.name && !window.confirm(t("identity.switchConfirm", { name: state.name }))) return;
+      switchIdentity();
+    },
+  }, t("identity.switchShort"));
+}
+
+// Phone code: the host types it into "Link phone" on the KJ screen to make this
+// phone (a new or private tab, even one that never sent a song) show a singer's
+// songs. Polled while My songs is open so the link lands within seconds.
+let _linkCodeTimer = null;
+async function pollLinkCode(card) {
+  let d;
+  try {
+    d = await fetchJson(`${BASE}/link-code?device_id=${encodeURIComponent(DEVICE_ID)}`);
+  } catch { return; }
+  const line = card.querySelector('[data-testid="phone-code"]');
+  if (line && d && d.code) {
+    line.textContent = t("mySongs.phoneCode", { code: d.code });
+    line.hidden = false;
+  }
+  if (d && d.linked) applyHostLink(d.linked);
+}
+
+function applyHostLink(linked) {
+  let changed = false;
+  if (linked.name && linked.name !== state.name) {
+    state.name = linked.name;
+    LS.set("sing_name", linked.name);
+    changed = true;
+  }
+  const known = new Set(readMyRequestIds(TOKEN).map(String));
+  for (const it of linked.items || []) {
+    if (!known.has(String(it.id))) { rememberRequestId(TOKEN, it.id, it.edit_token); changed = true; }
+  }
+  if (changed && state.step === "done") render();
 }
 
 // --- Views -----------------------------------------------------------------
@@ -1343,6 +1394,8 @@ function switchIdentity() {
   state.name = state.phone = state.photoConsent = state.instagram = "";
   LS.set("sing_name", ""); LS.set("sing_phone", ""); LS.set("sing_photo_consent", "");
   LS.set("sing_instagram", "");
+  // The new person mustn't see the previous singer's songs on My songs.
+  try { localStorage.removeItem(MY_REQUESTS_KEY); } catch { /* private mode */ }
   state._identityDraft = null;
   state._identityMode = "setup";
   state._identityReturnStep = "search";
@@ -3280,7 +3333,8 @@ function renderSearch() {
     // Two clearly different doors: fix MY name vs. add a song for someone else
     // (the old lone "not you?" link was read as the latter but renamed you).
     friendBanner || state.changeRequestId ? null : el("p", { class: "hint identity-links" },
-      editNameLink("search", t("search.editMyName")), " · ", friendLink("search")),
+      editNameLink("search", t("search.editMyName")), " · ", friendLink("search"),
+      " · ", switchSingerLink()),
     el("input", {
       type: "search",
       placeholder: t("search.placeholder"),
@@ -4270,7 +4324,7 @@ function renderDone() {
     el("h2", {}, t("mySongs.title")),
     state.name ? el("p", { class: "hint done-identity" },
       t("mySongs.singingAs"), " ", el("strong", {}, state.name), " · ",
-      editNameLink("done")) : null,
+      editNameLink("done"), " · ", switchSingerLink()) : null,
     // "↕ Reorder songs" toggle (+ post-save notice) — filled by the poll.
     el("div", { class: "reorder-controls" }),
     state._reorderMode
@@ -4305,6 +4359,7 @@ function renderDone() {
     // (The old "Show upcoming singers" expander lived here — the dedicated
     // 📋 Rotation tab replaced it.)
     el("p", { class: "hint" }, t("mySongs.keepOpen")),
+    el("p", { class: "hint phone-code", "data-testid": "phone-code", hidden: "" }),
     // "Save tonight's songs to an account": one quiet line at the bottom —
     // most singers don't know or care what a Nomad Karaoke account is, so it
     // mustn't take the top of the screen (Andrew, 2026-10-29). Hidden until
@@ -4317,6 +4372,13 @@ function renderDone() {
   // refresh inside it is still async.
   setTimeout(maybeShowPushPrompt, 0);
   pollMyRequests(card);
+  pollLinkCode(card);
+  if (!_linkCodeTimer) {
+    _linkCodeTimer = setInterval(() => {
+      const c = root.querySelector(".sing-card");
+      if (c && state.step === "done") pollLinkCode(c);
+    }, 5000);
+  }
   loadSaveSongs();
   return card;
 }
@@ -4397,7 +4459,7 @@ function _saveSongsLogOutButton(a) {
   return el("button", {
     class: "btn link", "data-testid": "save-songs-logout",
     disabled: a.busy ? "disabled" : null, onclick: saveSongsLogOut,
-  }, t("saveSongs.logOut"));
+  }, t("saveSongs.signOutEmail"));
 }
 
 // "Log out": sign this phone out of the gen account (which also stops saving

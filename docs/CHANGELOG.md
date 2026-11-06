@@ -2,6 +2,25 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-05 - KJ "Link phone" by code + an obvious "Switch singer" (v0.148.0)
+
+Andrew, same show: "we'll also need to make sure there's some way in the KJ UI for me to link phone user sessions
+/ profiles (whether they've ever submitted a song or not) ... and a way to let singers log out and switch
+profiles more obviously in the UI (I couldn't figure out how to log her out earlier)".
+
+- **Phone code:** My songs shows "Phone code: 1234". New `device_link_codes` table (one 4-digit code per device
+  per night). `GET /sing/link-code` returns it, and once the host links the phone, `linked: {name, items}`.
+  The page polls it every 5 s while My songs is open and adopts the name and edit tokens.
+- **KJ "Link phone"** button on each singer (Singers panel, next to Merge): prompts for the code and posts
+  `/rotation/singer/link-phone`, which writes a `kj`-origin device alias. Works for phones that never sent a
+  song. Only a link made tonight counts.
+- **🔄 Switch singer** link on search and My songs (it was only at the bottom of "edit my name"), with a confirm.
+  Switching now also clears the phone's stored request ids, so the next person doesn't see the previous
+  singer's songs.
+- The save-songs "Log out" button is now "Sign out of email" (it signs out of the Nomad Karaoke email account, not
+  the singer).
+- New strings translated by hand into all 32 locales: `translate.py` needs Andrew's `gcloud auth login`, and he
+  was mid-show. Worth a re-run with `--full` later.
 ## 2026-11-05 - Make-it: a visible "working" state while we find the audio (v0.147.1)
 
 On the one-screen make-it page (v0.142.0), the audio search, which can take up to ~30 s, showed only a dim

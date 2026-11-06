@@ -70,7 +70,9 @@
     "renameConfirmTitle": "将您的名字改为 {name}？",
     "renameConfirmBody": "您今晚点的歌将显示在 {name} 名下，而不是 {old}。如果 {name} 是您的朋友，请改为帮他们点歌。",
     "renameConfirmFriend": "🎤 {name} 是朋友：帮他们点歌",
-    "renameConfirmYes": "是的，我是 {name}：修改我的名字"
+    "renameConfirmYes": "是的，我是 {name}：修改我的名字",
+    "switchShort": "🔄 换个歌手",
+    "switchConfirm": "要在这部手机上切换到另一位歌手吗？{name} 的歌曲仍在今晚的列表中，但这部手机将不再显示它们。"
   },
   "search": {
     "title": "选首歌吧",
@@ -501,7 +503,8 @@
     "makeDetails": "视频制作进度",
     "stepSent": "已提交",
     "stepMaking": "制作中",
-    "stepReady": "可以开唱了"
+    "stepReady": "可以开唱了",
+    "phoneCode": "手机代码：{code} · 歌曲不见了？把这个代码给主持人看，他们会把这部手机关联到你。"
   },
   "notify": {
     "heading": "🔔 快到您的时候",
@@ -658,6 +661,7 @@
     "explainer": "我们会将你今晚演唱的歌曲保存到你的 Nomad Karaoke 账户，方便你查看历史记录和获取推荐歌曲。",
     "saving": "正在保存今晚的歌曲到 {email}",
     "stop": "停止保存",
-    "failed": "刚才未能保存你的歌曲，请重试。"
+    "failed": "刚才未能保存你的歌曲，请重试。",
+    "signOutEmail": "退出邮箱登录"
   }
 }

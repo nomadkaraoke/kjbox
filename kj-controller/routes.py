@@ -5164,6 +5164,32 @@ def merge_singers_route():
         return jsonify({"error": str(e)}), 500
 
 
+@routes_bp.route('/rotation/singer/link-phone', methods=['POST'])
+def singer_link_phone_route():
+    """Link a singer's phone to this singer, by the code on the phone's My songs.
+
+    ``{name, code}``. Works for a phone that never submitted a song (a new or
+    private browser tab): the device is aliased to ``name`` with KJ authority,
+    so its My songs lists this singer's songs and, on its next poll of
+    /sing/link-code, picks up their requests' edit tokens (Cancel/Change).
+    """
+    rotation = getattr(current_app, 'rotation', None)
+    store = getattr(current_app, 'sing_store', None)
+    if rotation is None or store is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(force=True, silent=True) or {}
+    name = str(data.get('name') or '').strip()
+    code = str(data.get('code') or '').strip()
+    if not name or not code:
+        return jsonify({"error": "name and code are required"}), 400
+    device_id = store.device_for_link_code(code)
+    if not device_id:
+        return jsonify({"error": "code_not_found",
+                        "message": "No phone has that code tonight. Ask them to open My songs and read it again."}), 404
+    store.set_alias(device_id, name, origin="kj")
+    return _singer_action_response(rotation)
+
+
 @routes_bp.route('/rotation/singer/brb', methods=['POST'])
 def singer_brb_route():
     rotation = current_app.rotation
