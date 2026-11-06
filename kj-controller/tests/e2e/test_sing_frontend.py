@@ -143,6 +143,24 @@ class TestDoneMultiSong:
         expect(page.locator('input[type="search"]')).to_be_visible()
         expect(page.locator("text=Hi Alice")).to_be_visible()
 
+    def test_request_another_without_a_name_asks_for_the_name(self, page, live_server, live_token):
+        # Live 2026-11-05: a fresh Safari private tab (no saved name) went
+        # My songs → "Request another song" → search, and every send 400'd
+        # with singer_name is required. It must get the name screen instead.
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate("localStorage.setItem('sing_name', '')")
+        page.evaluate("() => { window.__sing_state.name = ''; window.__sing_state.step = 'done'; window.__sing_render(); }")
+        page.locator('[data-testid="request-another"]').click()
+        expect(page.locator('input[type="search"]')).to_have_count(0)
+        expect(page.get_by_label("First name + last initial")).to_be_visible()
+
+    def test_search_step_without_a_name_renders_the_name_screen(self, page, live_server, live_token):
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.evaluate("() => { window.__sing_state.name = ''; window.__sing_state.step = 'search'; window.__sing_render(); }")
+        expect(page.locator('input[type="search"]')).to_have_count(0)
+        expect(page.get_by_label("First name + last initial")).to_be_visible()
+        assert page.evaluate("window.__sing_state.step") == "identity"
+
 
 class TestSearchRace:
     def _goto_search(self, page, live_server, live_token, name="Alice"):
