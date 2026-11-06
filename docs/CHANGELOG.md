@@ -2,6 +2,22 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-05 - Singer page: a new tab or phone re-joins the singer of the same name (v0.147.0)
+
+Same show: after Safari private tabs reset her again, the singer re-entered her name but My songs was empty,
+because the server only treats a phone as a singer once it has submitted a song under that name.
+
+- New `POST /sing/identity/claim {device_id, name, phone?, strict?}`. A name that exactly matches (ignoring case and accents) a
+  singer in tonight's rotation or requests aliases the device to that singer's spelling, so My songs lists
+  their songs (reorder only: the trust a phone already gets by submitting one song under the name). If the
+  phone number also matches one on that singer's request tonight, the requests' edit tokens come back too
+  (Cancel/Change). Tip claims never count.
+- The name screen calls it on Next; a singer with songs waiting lands on My songs instead of search.
+- Every page load claims again in `strict` mode, which needs the phone to match, so a name saved last week
+  never joins tonight's same-name singer.
+- Manual fix during the show (before this shipped): `singer_aliases` row device `d753a945…` → "Alanna M"
+  (origin self) written directly to `~/kjdata/rotation.db` on NomadPC, 22:56.
+
 ## 2026-11-05 - Singer page: a phone with no saved name always gets the name screen (v0.146.2)
 
 Live at tonight's show, a singer's 20 sends bounced with `singer_name is required`, shown as "Couldn't send
