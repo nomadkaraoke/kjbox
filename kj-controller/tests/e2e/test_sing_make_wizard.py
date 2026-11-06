@@ -26,7 +26,7 @@ def _json(route, body, status=200):
 
 
 def _open_wizard(page, live_server, live_token, *, email=None, results=None, fast=None, full=None,
-                 held=None, account=None):
+                 held=None, account=None, held_search=None):
     page.add_init_script("window.__SING_ARM_MS = 0;")
     _login(page, live_server, live_token)
     calls = {"send": [], "verify": [], "search": [], "check": []}
@@ -42,6 +42,9 @@ def _open_wizard(page, live_server, live_token, *, email=None, results=None, fas
 
     def search(route):
         calls["search"].append(json.loads(route.request.post_data or "{}"))
+        if held_search is not None:
+            held_search.append(route)   # the test answers it later (a slow audio search)
+            return
         _json(route, {"search_session_id": "ss-1", "results": results if results is not None else [LOSSLESS, SPOTIFY, YOUTUBE]})
 
     page.route("**/sing/make/account*", lambda r: _json(r, {"ready": True, "email": email, **(account or {})}))
@@ -107,6 +110,31 @@ class TestMakeWizard:
         note = page.locator('[data-testid="sent-banner"]')
         expect(note).to_contain_text("Sent! We're making Creep for you")
         expect(note).not_to_contain_text("on the list")
+
+    def test_slow_audio_search_shows_a_busy_indicator(self, page, live_server, live_token):
+        # Live: the audio search takes up to ~30 s and only showed a grey line,
+        # so singers thought it had stalled.
+        held = []
+        _open_wizard(page, live_server, live_token, email="mary@example.com", held_search=held)
+        ind = page.locator('[data-testid="make-searching"]')
+        expect(ind).to_be_visible()
+        expect(ind).to_have_attribute("role", "status")
+        expect(ind.locator(".sing-note")).to_have_count(4)        # the animated notes
+        expect(ind).to_contain_text("Finding the best audio")
+        send = page.locator('[data-testid="make-submit"]')
+        expect(send).to_be_disabled()
+        expect(send).to_have_attribute("aria-busy", "true")
+        expect(send.locator(".mk-spinner")).to_have_count(1)
+        for _ in range(50):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        _json(held[0], {"search_session_id": "ss-1", "results": [LOSSLESS, SPOTIFY, YOUTUBE]})
+        expect(page.locator('[data-testid="make-pick"]')).to_be_visible()
+        expect(ind).to_have_count(0)
+        expect(send).to_be_enabled()
+        expect(send.locator(".mk-spinner")).to_have_count(0)
+        expect(send).not_to_have_attribute("aria-busy", "true")
 
     def test_signed_in_device_skips_straight_to_audio(self, page, live_server, live_token):
         calls = _open_wizard(page, live_server, live_token, email="mary@example.com")

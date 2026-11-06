@@ -169,6 +169,11 @@ export function socialButtons({ el, social, holder, onToken, onError, testPrefix
 export function createMakeFlow(deps) {
   const { el, fetchJson, state, render, BASE, getDeviceId, onBack } = deps;
   const { onAccount, onSignedIn, onSignedOut } = deps;
+  // The animated "Searching…" notes from the song search (sing.js), so the
+  // ~30 s audio search never looks stuck. Plain text if the host has none.
+  const busy = (label, testid) => (deps.searchingIndicator
+    ? deps.searchingIndicator(label, testid)
+    : el("p", { class: "hint", role: "status", "data-testid": testid }, label));
   // One screen, one send: the make screen submits itself (sing.js's shared
   // submitSelection) with the extras the confirm screen used to ask for.
   const { onSubmit, submitErrorText, extrasSlot } = deps;
@@ -725,7 +730,7 @@ export function createMakeFlow(deps) {
       return out;
     }
     if (s.search.status === "searching") {
-      out.push(el("p", { class: "hint mk-searching", "data-testid": "make-searching" }, t("make.searching")));
+      out.push(busy(t("make.searching"), "make-searching"));
       return out;
     }
     if (s.search.status === "error") {
@@ -742,7 +747,7 @@ export function createMakeFlow(deps) {
       return out;
     }
     if (!s.gate) {
-      out.push(el("p", { class: "hint", "data-testid": "make-checking" }, t("make.checking")));
+      out.push(busy(t("make.checking"), "make-checking"));
       return out;
     }
     const conf = getSearchConfidence(results, s.title, s.artist);
@@ -772,7 +777,7 @@ export function createMakeFlow(deps) {
         t("make.sendingTo", { email: s.email }), " ",
         el("button", { class: "btn link", onclick: signOut }, t("make.notYou")))];
     }
-    if (s.stage === "loading") return [el("p", { class: "hint" }, t("make.loading"))];
+    if (s.stage === "loading") return [busy(t("make.loading"), "make-loading")];
     const out = [el("p", { class: "sing-empty-desc" }, t("make.sendToDesc"))];
     const socials = socialButtons({
       el, social: s.social, holder: s, onToken: socialSignIn,
@@ -827,16 +832,20 @@ export function createMakeFlow(deps) {
     const s = m();
     let label = t("make.submitCta");
     let ready = false;
-    if (s.sending) label = t("common.sending");
+    let working = false;
+    if (s.sending) { label = t("common.sending"); working = true; }
     else if (s.stage !== "audio") label = t("make.needSignIn");
-    else if (s.search.status === "searching" || (!s.gate && s.search.status === "done")) label = t("make.findingAudio");
+    else if (s.search.status === "searching" || (!s.gate && s.search.status === "done")) {
+      label = t("make.findingAudio");
+      working = true;
+    }
     else if (!effectivePick()) label = t("make.needAudio");
     else ready = true;
     return el("div", { class: "mk-submit-bar", "data-testid": "make-submit-bar" },
       el("button", {
         class: "btn primary mk-submit", "data-testid": "make-submit",
-        disabled: ready ? null : "disabled", onclick: submit,
-      }, label));
+        disabled: ready ? null : "disabled", onclick: submit, "aria-busy": working ? "true" : null,
+      }, working ? el("span", { class: "mk-spinner", "aria-hidden": "true" }) : null, label));
   }
 
   function renderStep() {

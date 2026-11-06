@@ -504,10 +504,10 @@ function el(tag, attrs = {}, ...children) {
 // (word order differs per language) instead of before/after fragments.
 // "Searching…" with bouncing, colour-cycling music notes — easy to notice, so
 // a slow search never looks broken. Screen readers get the plain text.
-function searchingIndicator(label = t("search.searching")) {
+function searchingIndicator(label = t("search.searching"), testid = "search-searching") {
   const notes = el("span", { class: "sing-searching-notes", "aria-hidden": "true" },
     ...["♪", "♫", "♬", "♩"].map((n, i) => el("span", { class: `sing-note sing-note-${i}` }, n)));
-  return el("div", { class: "sing-searching", role: "status", "data-testid": "search-searching" },
+  return el("div", { class: "sing-searching", role: "status", "data-testid": testid },
     notes, el("span", { class: "sing-searching-label" }, label));
 }
 
@@ -706,7 +706,7 @@ function back(to) {
 
 // Singer "make it" wizard (make.js) — karaoke-gen's job submission flow.
 const makeFlow = createMakeFlow({
-  el, fetchJson, state, render, BASE,
+  el, fetchJson, state, render, BASE, searchingIndicator,
   getDeviceId: () => DEVICE_ID,
   onBack: () => { state.step = "search"; render(); },
   // The make screen sends straight from there.

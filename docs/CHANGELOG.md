@@ -2,6 +2,16 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-05 - Make-it: a visible "working" state while we find the audio (v0.147.1)
+
+On the one-screen make-it page (v0.142.0), the audio search, which can take up to ~30 s, showed only a dim
+grey line of italic text, so it looked stuck.
+
+- The audio section now uses the same bouncing, colour-cycling notes as the song search ("Finding the best
+  audio for your song…"). So do the "Double-checking the song details…" and sign-in "One moment…" states.
+  Screen readers get it as `role="status"`.
+- The pinned "Finding the audio…" button shows a spinner and `aria-busy` while it waits (and while sending).
+
 ## 2026-11-05 - Singer page: a new tab or phone re-joins the singer of the same name (v0.147.0)
 
 Same show: after Safari private tabs reset her again, the singer re-entered her name but My songs was empty,
