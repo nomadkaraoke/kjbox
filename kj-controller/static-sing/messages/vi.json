@@ -381,7 +381,8 @@
     "needSignIn": "Đăng nhập ở trên để tiếp tục",
     "findingAudio": "Đang tìm bản nhạc…",
     "needAudio": "Chọn một bản thu ở trên",
-    "socialFailed": "Đăng nhập không thành công. Hãy thử lại hoặc dùng email của bạn nhé."
+    "socialFailed": "Đăng nhập không thành công. Hãy thử lại hoặc dùng email của bạn nhé.",
+    "socialStall": "Không thấy gì xảy ra? Hãy dùng email của bạn ở bên dưới."
   },
   "confirm": {
     "partnersTitle": "Hát cùng ai khác không? (không bắt buộc)",

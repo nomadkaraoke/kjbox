@@ -1942,6 +1942,8 @@ body:has(#sing-tabs:not([hidden])) .sing-make-bar {
 .mk-socials { display: flex; flex-direction: column; gap: 0.5rem; }
 .mk-google { min-height: 44px; display: flex; justify-content: center; }
 .mk-google[hidden] { display: none; }
+.mk-social-stall { margin: 0.25rem 0 0; text-align: center; font-weight: 600; }
+.mk-social-stall[hidden] { display: none; }
 .mk-social { width: 100%; min-height: 44px; border-radius: 999px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.4rem; }
 .mk-social-apple { background: #fff; color: #000; border: 1px solid #fff; }
 .mk-social-google { background: #131314; color: #e3e3e3; border: 1px solid #8e918f; }

@@ -381,7 +381,8 @@
     "needSignIn": "Log hierboven in om verder te gaan",
     "findingAudio": "Audio zoeken…",
     "needAudio": "Kies hierboven een opname",
-    "socialFailed": "Het inloggen is niet gelukt. Probeer het opnieuw of gebruik je e-mailadres."
+    "socialFailed": "Het inloggen is niet gelukt. Probeer het opnieuw of gebruik je e-mailadres.",
+    "socialStall": "Gebeurt er niets? Gebruik dan hieronder je e-mailadres."
   },
   "confirm": {
     "partnersTitle": "Zing je met iemand anders? (optioneel)",

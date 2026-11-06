@@ -381,7 +381,8 @@
     "needSignIn": "Entre acima para continuar",
     "findingAudio": "Procurando o áudio…",
     "needAudio": "Escolha uma gravação acima",
-    "socialFailed": "Não foi possível entrar. Tente novamente ou use seu e-mail."
+    "socialFailed": "Não foi possível entrar. Tente novamente ou use seu e-mail.",
+    "socialStall": "Nada acontecendo? Use seu e-mail abaixo."
   },
   "confirm": {
     "partnersTitle": "Vai cantar com mais alguém? (opcional)",

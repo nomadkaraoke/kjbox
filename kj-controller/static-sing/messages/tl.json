@@ -381,7 +381,8 @@
     "needSignIn": "Mag-sign in sa itaas para magpatuloy",
     "findingAudio": "Hinahanap ang audio…",
     "needAudio": "Pumili ng recording sa itaas",
-    "socialFailed": "Hindi gumana ang pag-sign in. Subukan ulit, o gamitin ang iyong email."
+    "socialFailed": "Hindi gumana ang pag-sign in. Subukan ulit, o gamitin ang iyong email.",
+    "socialStall": "Walang nangyayari? Gamitin na lang ang email mo sa ibaba."
   },
   "confirm": {
     "partnersTitle": "May kasama ka bang iba? (optional)",

@@ -543,7 +543,7 @@ class TestOneScreen:
     def test_one_tap_sign_in_then_audio_then_send(self, page, live_server, live_token, provider, label):
         page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
         social = []
-        page.route("**/sing/make/social*", lambda r: (social.append(json.loads(r.request.post_data)),
+        page.route("**/sing/make/social?*", lambda r: (social.append(json.loads(r.request.post_data)),
                                                       _json(r, {"email": "anya@example.com"})))
         calls = _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
         page.locator(".mk-social", has_text=label).click()
@@ -564,11 +564,43 @@ class TestOneScreen:
 
     def test_social_failure_falls_back_to_email(self, page, live_server, live_token):
         page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};")
-        page.route("**/sing/make/social*", lambda r: _json(r, {"error": "social_failed"}, 400))
+        page.route("**/sing/make/social?*", lambda r: _json(r, {"error": "social_failed"}, 400))
         _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
         page.locator(".mk-social", has_text="Continue with Google").click()
         expect(page.locator('[data-testid="make-error"]')).to_contain_text("use your email")
         expect(page.locator('[data-testid="make-email"]')).to_be_visible()
+
+    @pytest.mark.parametrize("label,provider", [("Continue with Google", "google"), ("Continue with Apple", "apple")])
+    def test_sign_in_that_never_returns_points_to_email(self, page, live_server, live_token, label, provider):
+        # Live 2026-11-05: Google/Apple taps did nothing and left no trace.
+        page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g', apple: 'a', googleHang: true, appleHang: true};"
+                             "window.__SING_SOCIAL_STALL_MS = 300;")
+        events = []
+        page.route("**/sing/make/social-event*", lambda r: (events.append(json.loads(r.request.post_data)),
+                                                            r.fulfill(status=204)))
+        _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
+        stall = page.locator('[data-testid="make-social-stall"]')
+        expect(stall).to_be_hidden()
+        page.locator(".mk-social", has_text=label).click()
+        expect(stall).to_be_visible()
+        expect(stall).to_contain_text("Use your email")
+        expect(page.locator('[data-testid="make-email"]')).to_be_visible()
+        assert [(e["provider"], e["event"]) for e in events] == [(provider, "tap"), (provider, "stall")]
+        assert events[0]["purpose"] == "make"
+
+    def test_successful_sign_in_reports_tap_and_token_without_the_hint(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_SOCIAL_STUB = {google: 'g-tok', apple: 'a-tok'};"
+                             "window.__SING_SOCIAL_STALL_MS = 300;")
+        events = []
+        page.route("**/sing/make/social-event*", lambda r: (events.append(json.loads(r.request.post_data)),
+                                                            r.fulfill(status=204)))
+        page.route("**/sing/make/social?*", lambda r: _json(r, {"email": "anya@example.com"}))
+        _open_wizard(page, live_server, live_token, account=SOCIAL_IDS)
+        page.locator(".mk-social", has_text="Continue with Apple").click()
+        expect(page.locator('[data-testid="make-signed-in"]')).to_contain_text("anya@example.com")
+        page.wait_for_timeout(600)
+        assert [(e["provider"], e["event"]) for e in events] == [("apple", "tap"), ("apple", "token")]
+        expect(page.locator('[data-testid="make-social-stall"]')).to_have_count(0)
 
     def test_send_failure_keeps_the_screen(self, page, live_server, live_token):
         _open_wizard(page, live_server, live_token, email="m@x.co")

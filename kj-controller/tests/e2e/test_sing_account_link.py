@@ -82,7 +82,7 @@ def _fake_account(page, email=None, linked=False):
         calls["social"].append(body)
         acct["email"] = "new@example.com"
         _json(route, {"email": "new@example.com"})
-    page.route("**/sing/make/social*", social)
+    page.route("**/sing/make/social?*", social)
     return calls
 
 

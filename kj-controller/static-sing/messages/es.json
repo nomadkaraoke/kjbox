@@ -381,7 +381,8 @@
     "needSignIn": "Inicia sesión arriba para continuar",
     "findingAudio": "Buscando el audio…",
     "needAudio": "Elige una grabación arriba",
-    "socialFailed": "No se pudo iniciar sesión. Inténtalo de nuevo o usa tu correo electrónico."
+    "socialFailed": "No se pudo iniciar sesión. Inténtalo de nuevo o usa tu correo electrónico.",
+    "socialStall": "¿No pasa nada? Usa tu correo aquí abajo."
   },
   "confirm": {
     "partnersTitle": "¿Cantas con alguien más? (opcional)",

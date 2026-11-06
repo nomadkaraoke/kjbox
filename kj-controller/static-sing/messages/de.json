@@ -381,7 +381,8 @@
     "needSignIn": "Melde dich oben an, um fortzufahren",
     "findingAudio": "Audio wird gesucht…",
     "needAudio": "Wähle oben eine Aufnahme aus",
-    "socialFailed": "Die Anmeldung hat leider nicht geklappt. Versuch es nochmal oder nutze deine E-Mail-Adresse."
+    "socialFailed": "Die Anmeldung hat leider nicht geklappt. Versuch es nochmal oder nutze deine E-Mail-Adresse.",
+    "socialStall": "Passiert nichts? Nutze stattdessen unten deine E-Mail."
   },
   "confirm": {
     "partnersTitle": "Singst du noch mit jemandem? (optional)",

@@ -381,7 +381,8 @@
     "needSignIn": "Log ind ovenfor for at fortsætte",
     "findingAudio": "Finder lyden…",
     "needAudio": "Vælg en optagelse ovenfor",
-    "socialFailed": "Login mislykkedes. Prøv igen, eller brug din e-mail."
+    "socialFailed": "Login mislykkedes. Prøv igen, eller brug din e-mail.",
+    "socialStall": "Sker der ikke noget? Brug din e-mail herunder i stedet."
   },
   "confirm": {
     "partnersTitle": "Synger du med andre? (valgfrit)",

@@ -381,7 +381,8 @@
     "needSignIn": "Connecte-toi ci-dessus pour continuer",
     "findingAudio": "Recherche de l'audio…",
     "needAudio": "Choisis un enregistrement ci-dessus",
-    "socialFailed": "La connexion n'a pas fonctionné. Réessaie ou utilise ton e-mail."
+    "socialFailed": "La connexion n'a pas fonctionné. Réessaie ou utilise ton e-mail.",
+    "socialStall": "Rien ne se passe ? Utilisez plutôt votre e-mail ci-dessous."
   },
   "confirm": {
     "partnersTitle": "Tu chantes avec quelqu'un d'autre ? (facultatif)",

@@ -381,7 +381,8 @@
     "needSignIn": "Masuk di atas untuk lanjut",
     "findingAudio": "Mencari audio…",
     "needAudio": "Pilih rekaman di atas",
-    "socialFailed": "Gagal masuk. Coba lagi, atau gunakan emailmu."
+    "socialFailed": "Gagal masuk. Coba lagi, atau gunakan emailmu.",
+    "socialStall": "Tidak ada yang terjadi? Pakai email kamu di bawah saja."
   },
   "confirm": {
     "partnersTitle": "Nyanyi bareng orang lain? (opsional)",

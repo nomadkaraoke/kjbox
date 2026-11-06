@@ -381,7 +381,8 @@
     "needSignIn": "A folytatáshoz jelentkezz be fent",
     "findingAudio": "Zenei alap keresése…",
     "needAudio": "Válassz ki fent egy verziót",
-    "socialFailed": "A bejelentkezés nem sikerült. Próbáld újra, vagy használd az e-mail-címedet."
+    "socialFailed": "A bejelentkezés nem sikerült. Próbáld újra, vagy használd az e-mail-címedet.",
+    "socialStall": "Nem történik semmi? Használd inkább lent az e-mail-címedet."
   },
   "confirm": {
     "partnersTitle": "Énekelsz még valakivel? (opcionális)",

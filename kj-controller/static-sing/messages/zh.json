@@ -381,7 +381,8 @@
     "needSignIn": "请在上方登录以继续",
     "findingAudio": "正在寻找音频…",
     "needAudio": "请在上方选择一个版本",
-    "socialFailed": "登录失败。请重试，或改用邮箱。"
+    "socialFailed": "登录失败。请重试，或改用邮箱。",
+    "socialStall": "没有反应？请改用下方的邮箱。"
   },
   "confirm": {
     "partnersTitle": "和朋友一起唱？（选填）",

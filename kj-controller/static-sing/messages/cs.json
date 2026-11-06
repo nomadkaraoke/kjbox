@@ -381,7 +381,8 @@
     "needSignIn": "Pro pokračování se výše přihlas",
     "findingAudio": "Hledáme zvuk…",
     "needAudio": "Vyber nahrávku výše",
-    "socialFailed": "Přihlášení se nepovedlo. Zkus to znovu, nebo použij e-mail."
+    "socialFailed": "Přihlášení se nepovedlo. Zkus to znovu, nebo použij e-mail.",
+    "socialStall": "Nic se neděje? Použijte raději svůj e-mail níže."
   },
   "confirm": {
     "partnersTitle": "Zpíváš ještě s někým? (volitelné)",

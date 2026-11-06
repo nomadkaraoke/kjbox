@@ -381,7 +381,8 @@
     "needSignIn": "Devam etmek için yukarıdan giriş yap",
     "findingAudio": "Ses aranıyor…",
     "needAudio": "Yukarıdan bir kayıt seç",
-    "socialFailed": "Giriş yapılamadı. Tekrar dene veya e-postanı kullan."
+    "socialFailed": "Giriş yapılamadı. Tekrar dene veya e-postanı kullan.",
+    "socialStall": "Hiçbir şey olmuyor mu? Bunun yerine aşağıdaki e-postanı kullan."
   },
   "confirm": {
     "partnersTitle": "Başka biriyle mi söylüyorsun? (isteğe bağlı)",
