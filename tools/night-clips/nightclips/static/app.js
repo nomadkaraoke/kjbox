@@ -274,7 +274,44 @@
     else if (!unc.length) ul.append(h('li', { class: 'ok' }, `✓ All ${S.consenting.length} consenting singers covered`));
     else unc.forEach((n) => ul.append(h('li', {}, n)));
 
+    const ps = $('per-singer');
+    ps.replaceChildren();
+    const counts = clipsPerSinger();
+    if (!counts.length) ps.append(h('li', { class: 'muted' }, 'No clips selected.'));
+    else counts.forEach((r) => ps.append(h('li', {},
+      h('span', { class: 'cnt' }, `${r.n}×`), ' ', r.name,
+      r.handle ? h('span', { class: 'muted' }, ` @${r.handle}`) : '')));
+
     updateCapCount();
+  }
+
+  // How many selected clips each performer appears in (a duet counts for both).
+  // "Other" clips count under their label. Most clips first, then show order.
+  function clipsPerSinger() {
+    const clips = byId();
+    const rows = new Map();
+    const bump = (key, name, handle) => {
+      const r = rows.get(key) || { name, handle: '', n: 0, order: rows.size };
+      r.n += 1;
+      if (handle && !r.handle) r.handle = handle;
+      rows.set(key, r);
+    };
+    for (const id of selected) {
+      const c = clips[id];
+      const s = songOf(c);
+      if (s) {
+        const seen = new Set();
+        s.performers.forEach((p) => {
+          const key = p.name.trim().toLowerCase().replace(/\s+/g, ' ');
+          if (seen.has(key)) return;
+          seen.add(key);
+          bump(key, p.name, (p.instagram || '').replace(/^@/, ''));
+        });
+      } else if (c && c.note) {
+        bump(`other:${c.note}`, `✎ ${c.note}`, '');
+      }
+    }
+    return [...rows.values()].sort((a, b) => b.n - a.n || a.order - b.order);
   }
 
   // Client-side mirror of select.uncovered_performers so it updates instantly.

@@ -69,6 +69,7 @@ On the review page:
 - **Clips over a minute** get a start slider (0.5s steps). Play shows exactly the chosen 59s window. A cut from the start of the clip is a
   quick stream copy; a cut from a later start is re-encoded (a few seconds per clip) so it matches the preview exactly.
 - **Singers not yet covered** lists the consenting singers who have a clip but none selected.
+- **Clips per singer** counts how many selected clips each singer is in (a duet counts for both), most first, with their @handle. "Other" clips count under their label.
 - The **Caption** follows the selection until you edit it by hand. **Regenerate** resets it.
 - **Save draft** writes `~/.night-clips/<night>/draft.json`. A rerun restores it.
 - **Publish to Instagram…** saves the draft and launches the publisher (see below). Instagram

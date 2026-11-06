@@ -118,6 +118,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .order .empty { color: var(--muted); cursor: default; display: block; }
 
 .uncovered { margin: 0; padding-left: 18px; font-size: 0.88em; }
+.per-singer { margin: 0; padding: 0; list-style: none; font-size: 0.88em; }
+.per-singer li { padding: 1px 0; }
+.per-singer .cnt { display: inline-block; min-width: 2.2em; font-variant-numeric: tabular-nums; font-weight: 600; }
 .uncovered .ok { color: var(--green); list-style: none; margin-left: -18px; }
 
 textarea {
