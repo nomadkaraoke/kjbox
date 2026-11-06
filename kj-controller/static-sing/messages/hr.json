@@ -381,7 +381,8 @@
     "needSignIn": "Prijavi se iznad za nastavak",
     "findingAudio": "Tražimo snimku…",
     "needAudio": "Odaberi snimku iznad",
-    "socialFailed": "Prijava nije uspjela. Pokušaj ponovno ili unesi e-poštu."
+    "socialFailed": "Prijava nije uspjela. Pokušaj ponovno ili unesi e-poštu.",
+    "socialStall": "Ništa se ne događa? Umjesto toga upotrijebite svoju e-poštu ispod."
   },
   "confirm": {
     "partnersTitle": "Pjevaš li s još nekim? (opcionalno)",

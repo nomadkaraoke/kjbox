@@ -381,7 +381,8 @@
     "needSignIn": "Zaloguj się powyżej, aby kontynuować",
     "findingAudio": "Szukamy audio…",
     "needAudio": "Wybierz nagranie powyżej",
-    "socialFailed": "Logowanie się nie powiodło. Spróbuj ponownie lub użyj e-maila."
+    "socialFailed": "Logowanie się nie powiodło. Spróbuj ponownie lub użyj e-maila.",
+    "socialStall": "Nic się nie dzieje? Użyj zamiast tego swojego e-maila poniżej."
   },
   "confirm": {
     "partnersTitle": "Śpiewasz z kimś jeszcze? (opcjonalnie)",

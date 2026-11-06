@@ -381,7 +381,8 @@
     "needSignIn": "Logga in ovan för att fortsätta",
     "findingAudio": "Letar efter ljudspåret…",
     "needAudio": "Välj en inspelning ovan",
-    "socialFailed": "Inloggningen fungerade inte. Försök igen eller använd din e-postadress."
+    "socialFailed": "Inloggningen fungerade inte. Försök igen eller använd din e-postadress.",
+    "socialStall": "Händer inget? Använd din e-post nedan i stället."
   },
   "confirm": {
     "partnersTitle": "Sjunger du med någon annan? (valfritt)",

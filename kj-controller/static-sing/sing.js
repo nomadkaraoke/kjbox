@@ -4577,6 +4577,8 @@ function _saveSongsForm(a) {
   const socials = socialButtons({
     el, social: a.social, holder: a, onToken: saveSongsSocial, testPrefix: "save-songs",
     onError: () => { a.err = t("make.socialFailed"); paintSaveSongs(); },
+    report: (provider, event, detail) =>
+      _saveSongsPost("make/social-event", { provider, event, detail, purpose: "save" }).catch(() => {}),
   });
   return el("div", { class: "save-songs-form" },
     socials,

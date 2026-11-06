@@ -300,6 +300,33 @@ def make_verify_code():
     return jsonify({"email": email})
 
 
+_SOCIAL_EVENTS = frozenset({"tap", "token", "no_token", "closed", "error", "script_failed", "stall"})
+
+
+@sing_bp.route("/make/social-event", methods=["POST"])
+@require_token
+def make_social_event():
+    """What happened on the phone after a Google / Apple tap, for the action log.
+
+    Live 2026-11-05 a singer's taps did nothing and left no trace: the popup
+    never returned and nothing reached the box. The page now reports each step
+    (tap, token, closed, error, script_failed, stall) so the next one is
+    debuggable. Body ``{device_id, provider, event, detail?, purpose?}``;
+    always 204 (a log line, never a user-facing error).
+    """
+    data, device_id = _body()
+    if _rate_limited(device_id, bucket="social_event", window=60, per_ip=120, per_device=30):
+        return ("", 204)
+    provider = str(data.get("provider") or "")
+    event = str(data.get("event") or "")
+    if provider in ("google", "apple") and event in _SOCIAL_EVENTS:
+        current_app.logger.info(
+            "make social: %s %s device=%s purpose=%s detail=%s", provider, event,
+            device_id[:8], str(data.get("purpose") or "make")[:8],
+            str(data.get("detail") or "")[:120])
+    return ("", 204)
+
+
 @sing_bp.route("/make/social", methods=["POST"])
 @require_token
 def make_social():

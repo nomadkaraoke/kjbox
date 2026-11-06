@@ -381,7 +381,8 @@
     "needSignIn": "Accedi qui sopra per continuare",
     "findingAudio": "Ricerca dell'audio in corso…",
     "needAudio": "Scegli una registrazione qui sopra",
-    "socialFailed": "Accesso non riuscito. Riprova o usa la tua email."
+    "socialFailed": "Accesso non riuscito. Riprova o usa la tua email.",
+    "socialStall": "Non succede niente? Usa invece la tua email qui sotto."
   },
   "confirm": {
     "partnersTitle": "Canti con qualcun altro? (opzionale)",

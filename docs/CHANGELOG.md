@@ -2,6 +2,20 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-06 - Google/Apple sign-in: a fallback when it never comes back, and every step logged (v0.149.0)
+
+Live 2026-11-05 a singer's Google and Apple taps on the make-it screen "did nothing" (likely a Safari private
+tab), she had no way forward, and nothing reached the box to say why.
+
+- **Fallback:** each Google/Apple tap starts a 6 s watch. If no sign-in has come back, "Nothing happening? Use your
+  email below instead." appears under the buttons (make-it screen and "Save tonight's songs"). A successful sign-in
+  or an error clears it. The watch state lives on the screen's holder, so it survives re-renders.
+- **Logging:** new `POST /sing/make/social-event {provider, event, detail, purpose}` (always 204, INFO log
+  `make social: <provider> <event> device=<8> purpose=... detail=...`, and in the action log). Events: tap, token,
+  no_token, closed, error (Apple's error code), script_failed, stall (with page visibility). Google's button is a
+  cross-origin iframe, so its tap is detected when the window blurs with that iframe focused.
+- New string `make.socialStall`, hand-translated into 32 locales (re-run `translate.py --full` later).
+
 ## 2026-11-05 - KJ "Link phone" by code + an obvious "Switch singer" (v0.148.0)
 
 Andrew, same show: "we'll also need to make sure there's some way in the KJ UI for me to link phone user sessions

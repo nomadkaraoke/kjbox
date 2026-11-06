@@ -104,11 +104,21 @@ const onApplePlatform = () => /iPhone|iPad|iPod|Macintosh/.test(navigator.userAg
 // node (an iframe) across re-renders so it isn't rebuilt on every render.
 // onToken(provider, idToken) signs in; onError() reports a failed popup.
 
-async function signInWithApple(clientId, onToken, onError) {
+async function signInWithApple(clientId, onToken, onError, w) {
+  w.tapped("apple");
   try {
     const stub = window.__SING_SOCIAL_STUB;
-    if (stub) return onToken("apple", stub.apple);
-    await loadScript(APPLE_SRC);
+    if (stub) {
+      if (stub.appleHang) return;   // tests: a popup that never comes back
+      return onToken("apple", stub.apple);
+    }
+    try {
+      await loadScript(APPLE_SRC);
+    } catch {
+      w.report("apple", "script_failed");
+      w.settle();
+      return onError();
+    }
     window.AppleID.auth.init({
       clientId, scope: "email", usePopup: true,
       redirectURI: `${window.location.origin}/`,
@@ -116,20 +126,40 @@ async function signInWithApple(clientId, onToken, onError) {
     const r = await window.AppleID.auth.signIn();
     await onToken("apple", r?.authorization?.id_token);
   } catch (e) {
+    const code = (e && (e.error || e.message)) || "";
     // Closing the popup is not an error worth shouting about.
-    if (e && e.error === "popup_closed_by_user") return;
+    if (code === "popup_closed_by_user") { w.report("apple", "closed"); w.settle(); return; }
+    w.report("apple", "error", String(code));
+    w.settle();
     onError();
   }
 }
 
-function googleButton({ el, social, holder, onToken, testPrefix }) {
+// Google's button is a cross-origin iframe, so a tap on it never reaches our
+// handlers. The window blurring with that iframe focused is the tell.
+let _onGoogleIframeTap = null;
+let _blurHooked = false;
+function hookGoogleTap(fn) {
+  _onGoogleIframeTap = fn;
+  if (_blurHooked) return;
+  _blurHooked = true;
+  window.addEventListener("blur", () => {
+    setTimeout(() => {
+      const a = document.activeElement;
+      if (a && a.tagName === "IFRAME" && a.closest(".mk-google") && _onGoogleIframeTap) _onGoogleIframeTap();
+    }, 0);
+  });
+}
+
+function googleButton({ el, social, holder, onToken, testPrefix, w }) {
   if (holder.googleNode) return holder.googleNode;
   const node = el("div", { class: "mk-google", "data-testid": `${testPrefix}-google` });
   holder.googleNode = node;
   const stub = window.__SING_SOCIAL_STUB;
   if (stub) {
     node.appendChild(el("button", { class: "btn mk-social mk-social-google", type: "button",
-      onclick: () => onToken("google", stub.google) }, t("make.continueGoogle")));
+      onclick: () => { w.tapped("google"); if (!stub.googleHang) onToken("google", stub.google); } },
+      t("make.continueGoogle")));
     return node;
   }
   loadScript(GSI_SRC).then(() => {
@@ -140,28 +170,73 @@ function googleButton({ el, social, holder, onToken, testPrefix }) {
     gid.renderButton(node, { type: "standard", theme: "filled_black", size: "large", shape: "pill",
                              text: "continue_with", logo_alignment: "center", locale: getLocale(),
                              width: Math.min(400, node.clientWidth || 320) });
-  }).catch(() => { node.hidden = true; });   // blocked / offline: email still works
+  }).catch(() => {   // blocked / offline: email still works
+    node.hidden = true;
+    w.report("google", "script_failed");
+  });
   return node;
 }
 
-function appleButton({ el, social, onToken, onError, testPrefix }) {
+function appleButton({ el, social, onToken, onError, testPrefix, w }) {
   const btn = el("button", { class: "btn mk-social mk-social-apple", type: "button",
     "data-testid": `${testPrefix}-apple`,
-    onclick: () => signInWithApple(social.apple, onToken, onError) });
+    onclick: () => signInWithApple(social.apple, onToken, onError, w) });
   // Apple's logo as inline SVG (the  glyph only exists in Apple's own fonts).
   btn.innerHTML = APPLE_LOGO_SVG;
   btn.appendChild(document.createTextNode(` ${t("make.continueApple")}`));
   return btn;
 }
 
-export function socialButtons({ el, social, holder, onToken, onError, testPrefix = "make" }) {
+// A tap whose sign-in hasn't come back after this long shows "Nothing
+// happening? Use your email below". Live 2026-11-05 a singer's taps did
+// nothing at all (likely a Safari private tab) and she had no way forward.
+const SOCIAL_STALL_MS = 6000;
+const socialStallMs = () => (typeof window.__SING_SOCIAL_STALL_MS === "number"
+  ? window.__SING_SOCIAL_STALL_MS : SOCIAL_STALL_MS);
+
+// `report(provider, event, detail)` sends each step to the box's action log
+// (tap, token, no_token, closed, error, script_failed, stall).
+export function socialButtons({ el, social, holder, onToken, onError, report = () => {}, testPrefix = "make" }) {
   if (!socialHostOk() || !social) return null;
-  const opts = { el, social, holder, onToken, onError, testPrefix };
+  // Watchdog state lives on `holder`, so a re-render (the singer typing their
+  // email) keeps the timer and the hint.
+  const hint = el("p", { class: "hint mk-social-stall", role: "status",
+    "data-testid": `${testPrefix}-social-stall` }, t("make.socialStall"));
+  hint.hidden = !holder.socialStall;
+  holder.stallHint = hint;
+  const settle = () => {
+    clearTimeout(holder.stallTimer);
+    holder.stallTimer = null;
+    holder.socialStall = false;
+    if (holder.stallHint) holder.stallHint.hidden = true;
+  };
+  const w = {
+    report: (provider, event, detail) => { try { report(provider, event, detail || ""); } catch { /* best-effort */ } },
+    settle,
+    tapped: (provider) => {
+      w.report(provider, "tap");
+      clearTimeout(holder.stallTimer);
+      holder.stallTimer = setTimeout(() => {
+        holder.stallTimer = null;
+        holder.socialStall = true;
+        if (holder.stallHint) holder.stallHint.hidden = false;
+        w.report(provider, "stall", document.visibilityState);
+      }, socialStallMs());
+    },
+  };
+  const token = (provider, idToken) => {
+    settle();
+    w.report(provider, idToken ? "token" : "no_token");
+    return onToken(provider, idToken);
+  };
+  const opts = { el, social, holder, onToken: token, onError, testPrefix, w };
   const google = social.google ? googleButton(opts) : null;
   const apple = social.apple ? appleButton(opts) : null;
   if (!google && !apple) return null;
+  if (google) hookGoogleTap(() => w.tapped("google"));
   if (apple && !window.__SING_SOCIAL_STUB) loadScript(APPLE_SRC).catch(() => {});   // so the tap opens the popup at once
-  return el("div", { class: "mk-socials" }, ...(onApplePlatform() ? [apple, google] : [google, apple]));
+  return el("div", { class: "mk-socials" },
+    ...(onApplePlatform() ? [apple, google] : [google, apple]), hint);
 }
 
 // --- Wizard ------------------------------------------------------------------
@@ -782,6 +857,7 @@ export function createMakeFlow(deps) {
     const socials = socialButtons({
       el, social: s.social, holder: s, onToken: socialSignIn,
       onError: () => { s.err = t("make.socialFailed"); rerender(); },
+      report: (provider, event, detail) => api("social-event", { provider, event, detail, purpose: "make" }).catch(() => {}),
     });
     if (socials) {
       out.push(socials);

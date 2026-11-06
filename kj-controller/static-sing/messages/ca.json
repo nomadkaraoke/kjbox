@@ -381,7 +381,8 @@
     "needSignIn": "Inicia sessió a dalt per continuar",
     "findingAudio": "Buscant l'àudio…",
     "needAudio": "Tria un enregistrament de dalt",
-    "socialFailed": "No s'ha pogut iniciar sessió. Torna-ho a provar o fes servir el teu correu electrònic."
+    "socialFailed": "No s'ha pogut iniciar sessió. Torna-ho a provar o fes servir el teu correu electrònic.",
+    "socialStall": "No passa res? Fes servir el teu correu a sota."
   },
   "confirm": {
     "partnersTitle": "Cantes amb algú més? (opcional)",

@@ -381,7 +381,8 @@
     "needSignIn": "Kirjaudu sisään yltä jatkaaksesi",
     "findingAudio": "Etsitään ääniraitaa…",
     "needAudio": "Valitse versio yltä",
-    "socialFailed": "Kirjautuminen ei onnistunut. Yritä uudelleen tai käytä sähköpostia."
+    "socialFailed": "Kirjautuminen ei onnistunut. Yritä uudelleen tai käytä sähköpostia.",
+    "socialStall": "Eikö mitään tapahdu? Käytä sen sijaan sähköpostiasi alla."
   },
   "confirm": {
     "partnersTitle": "Laulatko jonkun muun kanssa? (valinnainen)",

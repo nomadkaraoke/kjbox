@@ -381,7 +381,8 @@
     "needSignIn": "Logg inn ovenfor for å fortsette",
     "findingAudio": "Finner lyden…",
     "needAudio": "Velg et opptak ovenfor",
-    "socialFailed": "Innloggingen fungerte ikke. Prøv igjen, eller bruk e-post."
+    "socialFailed": "Innloggingen fungerte ikke. Prøv igjen, eller bruk e-post.",
+    "socialStall": "Skjer det ingenting? Bruk e-posten din nedenfor i stedet."
   },
   "confirm": {
     "partnersTitle": "Synger du med noen andre? (valgfritt)",

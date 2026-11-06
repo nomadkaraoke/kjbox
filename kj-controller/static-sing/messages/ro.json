@@ -381,7 +381,8 @@
     "needSignIn": "Conectează-te mai sus pentru a continua",
     "findingAudio": "Căutăm varianta audio…",
     "needAudio": "Alege o înregistrare de mai sus",
-    "socialFailed": "Conectarea nu a funcționat. Încearcă din nou sau folosește adresa de email."
+    "socialFailed": "Conectarea nu a funcționat. Încearcă din nou sau folosește adresa de email.",
+    "socialStall": "Nu se întâmplă nimic? Folosește mai jos adresa ta de e-mail."
   },
   "confirm": {
     "partnersTitle": "Mai cânți cu cineva? (opțional)",

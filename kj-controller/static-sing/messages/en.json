@@ -381,7 +381,8 @@
     "needSignIn": "Sign in above to continue",
     "findingAudio": "Finding the audio…",
     "needAudio": "Pick a recording above",
-    "socialFailed": "That sign-in didn't work. Try again, or use your email."
+    "socialFailed": "That sign-in didn't work. Try again, or use your email.",
+    "socialStall": "Nothing happening? Use your email below instead."
   },
   "confirm": {
     "partnersTitle": "Singing with anyone else? (optional)",
