@@ -2,6 +2,13 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-06 - Google sign-in tap detected via Google's own click_listener (v0.149.1)
+
+A test against production after v0.149.0 found the window-blur check misses some Google taps. The Google button now
+also passes GIS `renderButton`'s documented `click_listener`, and the blur check stays as a backup. A tap seen by
+both within 1.5 s counts once. Verified in Chromium against the live page: one `tap` event, popup opened, then
+`stall` and the email hint.
+
 ## 2026-11-06 - Google/Apple sign-in: a fallback when it never comes back, and every step logged (v0.149.0)
 
 Live 2026-11-05 a singer's Google and Apple taps on the make-it screen "did nothing" (likely a Safari private
