@@ -63,6 +63,12 @@ On the review page:
   Carousel panel, or with ↑ ↓.
 - On a flagged clip, use the dropdown to reassign it to an adjacent song, or to "not a
   performance". Its consent is re-evaluated straight away.
+- **Wrong singer on a clip?** Click ✎ next to the singers (on the card or the Carousel row) and type
+  who is really in it, separated by `&`. Consent follows the people you type: someone who sang that
+  night brings their own answer and handle, someone who said no takes the clip out, and anyone else is
+  consent unknown (you confirm before publishing) and gets their `[handles]` handle if there is one.
+  Empty goes back to the logged singers; changing the clip's song also resets it. Saved in the draft.
+  Click **Regenerate** afterwards if you've edited the caption.
 - **Other (not singing)**: the dropdown on any clip has "✎ Other…". Write a label (e.g. "Costume contest winners 🏆")
   and the clip becomes selectable regardless of consent data (your call), with the label as its caption line.
   Other clips are never pre-selected and must have a label to publish.

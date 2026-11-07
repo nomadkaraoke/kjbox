@@ -139,3 +139,5 @@ textarea:focus { border-color: var(--pink); outline: none; }
 .card .trim { margin-top: 8px; font-size: 12px; }
 .card .trim input[type=range] { width: 100%; }
 .card .trim .muted { font-size: 11px; margin-top: 2px; }
+.edit-perf { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 0.95em; padding: 0 4px; }
+.edit-perf:hover { color: inherit; }

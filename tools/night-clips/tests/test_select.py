@@ -176,3 +176,20 @@ def test_apply_handle_overrides_only_fills_consenting_without_handle():
     assert sel.render_caption("2026-10-08", [{"song_idx": 0}], songs, DEFAULTS["caption"]).splitlines()[2] == (
         "@davethevoice & @mija — A"
     )
+
+
+def test_split_names():
+    assert sel.split_names(" Ana &  Plant, Ezgi + ana / ") == ["Ana", "Plant", "Ezgi"]
+    assert sel.split_names("") == []
+
+
+def test_caption_and_counts_follow_edited_performers():
+    songs = [{"song": "A", "postable": True, "performers": [{"name": "Logged", "consent": "yes", "instagram": "logged"}]}]
+    a = {"id": "a", "song_idx": 0, "start": "1", "local": True, "status": "eligible", "performers": None}
+    b = {**a, "id": "b", "start": "2",
+         "performers": [{"name": "Real", "consent": "yes", "instagram": "real.one"}]}
+    cap = sel.render_caption("2026-10-08", [a, b], songs, DEFAULTS["caption"])
+    assert "@logged — A" in cap and "@real.one — A" in cap
+    assert sel.item_status(b, songs) == "eligible"
+    assert sel.item_status({**b, "performers": [{"name": "X", "consent": "unknown"}]}, songs) == "unknown"
+    assert list(sel.consenting_performers([a, b], songs)) == ["logged", "real"]
