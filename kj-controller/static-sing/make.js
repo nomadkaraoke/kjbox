@@ -494,7 +494,15 @@ export function createMakeFlow(deps) {
     const s = m();
     s.verdict = v;
     if (v.kind === "cosmetic" && v.confident) applyCorrection(v.canonical_artist, v.canonical_title, false);
-    else if (v.kind === "content" && v.confident) applyCorrection(v.canonical_artist, v.canonical_title, tier >= WEAK_TIER);
+    else if (v.kind === "content" && v.confident) {
+      // A different song. Only weak audio results (tier 3) back the typo theory, and then the
+      // audio is searched again for the corrected song. Good results for what was typed mean
+      // the typed song exists, so the correction is only offered. Live 2026-11-05: Spotify had
+      // "Cole Phillips — Roll of Dice" at score 1.0, the AI said "Roll of the Dice", and the job
+      // got the wrong title on the right audio (applied without a new search).
+      if (tier >= WEAK_TIER) applyCorrection(v.canonical_artist, v.canonical_title, true);
+      else offerVerdict(v);
+    }
   }
 
   // A correction shown as "Did you mean…?" instead of applied.
@@ -535,6 +543,10 @@ export function createMakeFlow(deps) {
     } else {
       s.artist = s.verdict.canonical_artist; s.title = s.verdict.canonical_title; s.correctionActive = true;
     }
+    // A content correction names a different song, so its audio results are for that song.
+    // Search again for the song now shown (no judge: the singer chose it), so the title and the
+    // audio can never disagree. A formatting tidy is the same song: its results still apply.
+    if (s.verdict.kind === "content") return beginSearch({ judge: false });
     rerender();
   }
 
