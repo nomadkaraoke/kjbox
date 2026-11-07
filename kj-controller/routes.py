@@ -3,6 +3,7 @@
 import concurrent.futures
 import glob
 import json
+import logging
 import os
 import queue
 import random
@@ -4430,6 +4431,100 @@ def use_quick_version():
     entries = rotation.get_rotation()
     _decorate_rotation_entries(entries, rotation)
     return jsonify({"success": True, "entry": entry, "entries": entries})
+
+
+def _quick_lyrics_target(rotation, entry_id):
+    """(entry, quick_record) for an entry whose gen quick version is on the box.
+
+    Raises ValueError with a KJ-readable message otherwise."""
+    if not isinstance(entry_id, int) or isinstance(entry_id, bool) or entry_id < 1:
+        raise ValueError("id must be a positive integer")
+    entry = rotation.store.get_entry(entry_id)
+    if entry is None:
+        raise ValueError(f"Entry {entry_id} not found")
+    rec = rotation.store.get_quick_version(entry.get("gen_job_id")) if entry.get("gen_job_id") else None
+    path = (rec or {}).get("file_path")
+    if not rec or rec.get("status") not in ("ready", "chosen") or not path:
+        raise ValueError("This entry has no quick version on the box")
+    if not os.path.isfile(path):
+        raise ValueError("Quick version file is missing")
+    return entry, rec
+
+
+@routes_bp.route('/rotation/quick-lyrics/search', methods=['GET'])
+def quick_lyrics_search():
+    """KJ: search LRCLIB for lyrics to put on a quick version gen made without any.
+
+    ``?id=<entry>`` (required) and optional ``q`` (defaults to the entry's artist
+    + title with "(Live ...)"-style decorations stripped). Also returns the
+    video's duration so the UI can warn when a synced result's timing is from a
+    different-length recording."""
+    import quick_lyrics
+    rotation = getattr(current_app, 'rotation', None)
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    try:
+        entry, rec = _quick_lyrics_target(rotation, request.args.get('id', type=int))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    artist, title = quick_lyrics.artist_title_from_path(rec["file_path"])
+    query = (request.args.get('q') or '').strip()[:200] or quick_lyrics.default_query(artist, title)
+    try:
+        duration = round(quick_lyrics.probe_duration(rec["file_path"]), 1)
+    except Exception:
+        duration = None
+    try:
+        results = quick_lyrics.search_lrclib(query)
+        error = None
+    except Exception as e:
+        logging.getLogger(__name__).warning("LRCLIB search failed for %r: %s", query, e)
+        results, error = [], "Couldn't reach the lyrics search (LRCLIB). You can still paste lyrics."
+    return jsonify({"query": query, "artist": artist, "title": title,
+                    "video_duration": duration, "lyrics_tier": rec.get("lyrics_tier"),
+                    "file_path": rec["file_path"], "results": results, "error": error})
+
+
+@routes_bp.route('/rotation/quick-lyrics', methods=['POST'])
+def quick_lyrics_apply():
+    """KJ: re-render an entry's quick version with lyrics they found or pasted.
+
+    Body ``{id, lyrics, use_timing}``. Only the video track is re-rendered (the
+    audio is copied), and the file is replaced in place. A player that already
+    has the old file open keeps playing it — the KJ re-plays to see the lyrics."""
+    import quick_lyrics
+    rotation = getattr(current_app, 'rotation', None)
+    if rotation is None:
+        return jsonify({"error": "Rotation not configured"}), 503
+    data = request.get_json(silent=True) or {}
+    try:
+        entry, rec = _quick_lyrics_target(rotation, data.get('id'))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    try:
+        lyrics = quick_lyrics.parse_lyrics(data.get('lyrics') if isinstance(data.get('lyrics'), str) else '')
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    artist, title = quick_lyrics.artist_title_from_path(rec["file_path"])
+    try:
+        result = quick_lyrics.rerender_quick_video(
+            rec["file_path"], lyrics, artist, title,
+            use_timing=bool(data.get('use_timing', True)))
+    except quick_lyrics.RenderBusy as e:
+        return jsonify({"error": str(e)}), 409
+    except Exception as e:
+        logging.getLogger(__name__).error("Quick lyrics re-render failed for entry %s: %s", entry["id"], e)
+        return jsonify({"error": f"Re-render failed: {e}"}), 500
+    rotation.store.upsert_quick_version(entry["gen_job_id"], lyrics_tier=result["lyrics_tier"])
+    log_message(f"Quick version lyrics added ({result['lyrics_tier']}, {result['line_count']} lines): "
+                f"{os.path.basename(rec['file_path'])}", current_app.kj_config)
+    try:
+        rotation.notify_changed()
+    except Exception as e:
+        logging.getLogger(__name__).warning("Rotation refresh after quick lyrics failed: %s", e)
+    entries = rotation.get_rotation()
+    _decorate_rotation_entries(entries, rotation)
+    return jsonify({"success": True, **result, "file_path": rec["file_path"],
+                    "entry_id": entry["id"], "entries": entries})
 
 
 @routes_bp.route('/rotation/unlink', methods=['POST'])

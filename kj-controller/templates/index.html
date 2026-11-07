@@ -53,6 +53,9 @@
                         <span class="np-filename" id="np-filename" title="File currently playing"></span>
                         <span class="np-filetype" id="np-filetype" title="File type"></span>
                         <span class="np-renderer-badge" id="np-renderer-badge" title="Active karaoke renderer &mdash; change in AV Output modal"></span>
+                        <button type="button" class="np-no-lyrics-btn hidden" id="np-no-lyrics-btn"
+                                onclick="openQuickLyricsForPlaying()"
+                                title="gen couldn't find lyrics for this quick version, so the screen only says &quot;lyrics unavailable&quot;. Click to search for lyrics or paste them in.">&#9888; No lyrics &mdash; add them</button>
                         <span class="np-time-wrap"><span id="np-time">0:00</span> / <span id="np-length">0:00</span></span>
                         <div class="np-pitch-group" id="np-pitch-group">
                             <span class="np-pitch-label">Pitch</span>
@@ -1413,6 +1416,34 @@
             <div class="note-modal-actions">
                 <button id="noteCancelBtn" onclick="closeNoteModal()">Cancel</button>
                 <button id="noteSaveBtn" onclick="saveNote()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick version lyrics: search / paste lyrics for a quick draft gen made without any -->
+    <div id="quick-lyrics-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeQuickLyricsModal()">
+        <div class="modal-content quick-lyrics-modal-content" role="dialog" aria-modal="true" aria-labelledby="quick-lyrics-title">
+            <div class="modal-header">
+                <h3 id="quick-lyrics-title">Add lyrics to the quick version</h3>
+                <button class="modal-close" onclick="closeQuickLyricsModal()" title="Close">&times;</button>
+            </div>
+            <p class="ql-intro" id="ql-intro"></p>
+            <form class="ql-search-row" onsubmit="event.preventDefault(); quickLyricsSearch();">
+                <input type="text" id="ql-query" placeholder="Artist and song title" autocomplete="off">
+                <button type="submit" id="ql-search-btn">Search</button>
+            </form>
+            <div class="ql-results" id="ql-results"></div>
+            <label class="ql-text-label">Lyrics
+                <textarea id="ql-text" rows="9" oninput="quickLyricsTextChanged()"
+                          placeholder="Pick a result above, or paste lyrics here. Plain text scrolls at a steady pace; LRC lines with [mm:ss.xx] timestamps scroll in time."></textarea>
+            </label>
+            <label class="ql-timing"><input type="checkbox" id="ql-use-timing" onchange="this.dataset.touched='1'"> Use the line timing from these lyrics</label>
+            <div class="ql-note" id="ql-timing-note"></div>
+            <div class="ql-status" id="ql-status" role="status"></div>
+            <div class="ql-actions">
+                <button type="button" onclick="closeQuickLyricsModal()" id="ql-close-btn">Cancel</button>
+                <button type="button" class="hidden" id="ql-replay-btn" onclick="quickLyricsReplay()">Play it again from the start</button>
+                <button type="button" class="btn-primary" id="ql-apply-btn" onclick="quickLyricsApply()">Re-render with these lyrics</button>
             </div>
         </div>
     </div>
