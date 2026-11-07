@@ -2,6 +2,21 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-06 - KJ: add lyrics to a quick version gen made without any (v0.150.0)
+
+Live show, 2026-11-06 01:24: Sombr "My Body Isn't Ready (Orchestral Version Live From Sound City)" played
+with audio but nothing on screen. gen's quick version had found no lyrics (its LRCLIB lookup uses the exact
+decorated title), so the draft only said "(lyrics unavailable)" (`lyrics_tier = none`). LRCLIB has synced
+lyrics for the plain title.
+
+- Rotation rows with a lyric-less quick version show **⚠ NO LYRICS**. Now Playing shows **⚠ No lyrics, add them**
+  while that file plays.
+- The modal auto-searches LRCLIB with the cleaned title, flags whether each synced result's length matches the
+  video, and accepts pasted plain text or LRC.
+- The box re-renders only the video track (fastgen crawl, audio copied) in place in a few seconds, then offers to
+  play the song again.
+- New: `kj-controller/quick_lyrics.py`, `GET /rotation/quick-lyrics/search`, `POST /rotation/quick-lyrics`.
+
 ## 2026-11-06 - Singer page: pipeline translations for the five strings added on 2026-11-05 (v0.149.2)
 
 The strings added mid-show (`identity.switchShort`, `identity.switchConfirm`, `mySongs.phoneCode`,
