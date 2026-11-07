@@ -288,3 +288,67 @@ def test_facebook_launch_failure_is_reported_without_failing_instagram(served):
     code, res = post(base + "/api/publish", {"selected": state.selected[:1], "caption": "c", "facebook": True})
     assert code == 200 and res["ok"] and len(published) == 1
     assert res["facebook"]["started"] is False and "no chromium" in res["facebook"]["error"]
+
+
+def _performers_by_consent(state):
+    """{consent: performer name} from tonight's songs, first seen."""
+    out = {}
+    for s in state.songs:
+        for p in s["performers"]:
+            out.setdefault(p["consent"], p["name"])
+    return out
+
+
+def _eligible_selected(state):
+    return next(state.by_id[i] for i in state.selected if state.by_id[i]["status"] == "eligible")
+
+
+def test_edit_performers_to_someone_new_is_consent_unknown_and_tagged_from_handles(served):
+    base, state, *_ = served
+    state.cfg = {**state.cfg, "handles": {"zed q": "zed.sings"}}
+    it = _eligible_selected(state)
+    code, res = post(base + "/api/performers", {"clip_id": it["id"], "names": "Zed Q"})
+    assert code == 200
+    clip = next(c for c in res["state"]["clips"] if c["id"] == it["id"])
+    assert clip["status"] == "unknown" and clip["reviewed"]
+    assert clip["performers"] == [{"name": "Zed Q", "consent": "unknown", "reason": "edited", "instagram": "zed.sings"}]
+    assert it["id"] in state.selected  # unknown stays selected; publish asks to confirm
+    assert "@zed.sings" in state.default_caption([it["id"]])
+    assert any("consent unknown" in e for e in state.validate_selection([it["id"]], allow_unknown=False))
+
+
+def test_edit_performers_uses_tonights_consent(served):
+    base, state, *_ = served
+    names = _performers_by_consent(state)
+    it = _eligible_selected(state)
+    post(base + "/api/performers", {"clip_id": it["id"], "names": names["no"]})
+    assert it["status"] == "excluded" and it["id"] not in state.selected
+    post(base + "/api/performers", {"clip_id": it["id"], "names": f"{names['yes']} & {names['yes'].upper()}"})
+    assert it["status"] == "eligible" and [p["name"] for p in it["performers"]] == [names["yes"]]
+
+
+def test_edit_performers_empty_or_same_goes_back_to_log_and_reassign_clears(served):
+    base, state, *_ = served
+    it = _eligible_selected(state)
+    logged = " & ".join(p["name"] for p in state.songs[it["song_idx"]]["performers"])
+    post(base + "/api/performers", {"clip_id": it["id"], "names": "Zed Q"})
+    post(base + "/api/performers", {"clip_id": it["id"], "names": ""})
+    assert it["performers"] is None and it["status"] == "eligible"
+    post(base + "/api/performers", {"clip_id": it["id"], "names": logged.lower()})
+    assert it["performers"] is None
+    post(base + "/api/performers", {"clip_id": it["id"], "names": "Zed Q"})
+    post(base + "/api/reassign", {"clip_id": it["id"], "song_idx": it["song_idx"]})
+    assert it["performers"] is None
+
+
+def test_edit_performers_needs_a_song_and_survives_draft_reload(served):
+    base, state, _, _ = served
+    code, _res = post(base + "/api/performers", {"clip_id": _unassigned(state)["id"], "names": "Zed Q"})
+    assert code == 400
+    it = _eligible_selected(state)
+    post(base + "/api/performers", {"clip_id": it["id"], "names": "Zed Q, Ana"})
+    post(base + "/api/draft", {"selected": [it["id"]], "caption": "c"})
+    it["performers"] = None
+    state._restatus(it)
+    assert state.load_draft()
+    assert [p["name"] for p in it["performers"]] == ["Zed Q", "Ana"] and it["status"] == "unknown"

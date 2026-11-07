@@ -7,6 +7,7 @@ Routes:
   GET  /thumbs/<clip_id>    jpg thumbnail
   POST /api/reassign        {clip_id, song_idx|null}
   POST /api/note            {clip_id, note}            label for an "Other" clip (becomes a caption line)
+  POST /api/performers     {clip_id, names}           who is really in the clip ("A & B"; "" = back to the log)
   POST /api/trim            {clip_id, start}           where the <=59s cut of a long clip begins
   POST /api/caption         {selected:[ids]} -> {caption} (regenerated from the template)
   POST /api/draft           {selected, caption}            -> saves draft.json
@@ -91,6 +92,7 @@ class ReviewState:
                     "custom": False,
                     "note": "",
                     "trim_start": 0.0,
+                    "performers": None,  # hand-edited names (resolved dicts), None = as logged
                 }
             )
             self._restatus(self.items[-1])
@@ -113,8 +115,27 @@ class ReviewState:
         return self.work_dir / "posted.json"
 
     def _restatus(self, item: dict) -> None:
-        idx = item["song_idx"]
-        item["status"] = sel.song_status(None if idx is None else self.songs[idx], item.get("custom", False))
+        item["status"] = sel.item_status(item, self.songs)
+
+    def resolve_performers(self, names: list[str]) -> list[dict]:
+        """Names -> performer dicts. Someone who sang tonight brings their own consent and
+        handle; anyone else is consent-unknown, with a ``[handles]`` handle if there is one."""
+        tonight: dict[str, dict] = {}
+        for song in self.songs:
+            for p in song.get("performers") or []:
+                cur = tonight.get(sel.name_key(p["name"]))
+                if cur is None or (p.get("consent") == "no") or (cur.get("consent") != "yes" and p.get("consent") == "yes"):
+                    tonight[sel.name_key(p["name"])] = p
+        handles = self.cfg.get("handles") or {}
+        out = []
+        for n in names:
+            p = tonight.get(sel.name_key(n))
+            if p:
+                out.append({**p, "name": n})
+            else:
+                out.append({"name": n, "consent": "unknown", "reason": "edited",
+                            "instagram": handles.get(sel.name_key(n))})
+        return out
 
     def default_caption(self, selected: list[str]) -> str:
         items = [self.by_id[i] for i in selected if i in self.by_id] if hasattr(self, "by_id") else []
@@ -143,6 +164,9 @@ class ReviewState:
                     it["reviewed"] = bool(a.get("reviewed"))
                     it["custom"] = bool(a.get("custom")) and idx is None
                     it["note"] = str(a.get("note") or "")
+                    names = a.get("performers")
+                    it["performers"] = (self.resolve_performers([str(x) for x in names])
+                                        if isinstance(names, list) and names and idx is not None else None)
                     self._restatus(it)
                 try:
                     it["trim_start"] = self._clamp_start(it, float(a.get("trim_start") or 0.0))
@@ -172,10 +196,11 @@ class ReviewState:
                 "caption": self.caption,
                 "assignments": {
                     i["id"]: {"song_idx": i["song_idx"], "reviewed": i["reviewed"],
-                              "custom": i["custom"], "note": i["note"], "trim_start": i["trim_start"]}
+                              "custom": i["custom"], "note": i["note"], "trim_start": i["trim_start"],
+                              "performers": None if i["performers"] is None else [p["name"] for p in i["performers"]]}
                     for i in self.items
                     if i["song_idx"] != i["auto_song_idx"] or i["reviewed"] or i["custom"] or i["note"]
-                    or i["trim_start"]
+                    or i["trim_start"] or i["performers"] is not None
                 },
             }
             tmp = self.draft_path.with_suffix(".tmp")
@@ -195,6 +220,25 @@ class ReviewState:
                 if song_idx is not None and song_idx not in it["candidates"]:
                     raise ValueError("song is not adjacent to this clip")
                 it["song_idx"], it["custom"] = song_idx, False
+            it["reviewed"] = True
+            it["performers"] = None  # edited names belonged to the old song
+            self._restatus(it)
+            if clip_id in self.selected and not sel.is_selectable(it, allow_unknown=True):
+                self.selected.remove(clip_id)
+            return it
+
+    def set_performers(self, clip_id: str, text: str) -> dict:
+        """Hand-correct who is in a clip. Empty text goes back to the logged singers."""
+        with self.lock:
+            it = self.by_id.get(clip_id)
+            if not it:
+                raise ValueError("unknown clip")
+            if it["song_idx"] is None:
+                raise ValueError("pick the song first; only song clips have singers")
+            names = sel.split_names(text)
+            logged = [p["name"] for p in self.songs[it["song_idx"]]["performers"]]
+            same = [sel.name_key(n) for n in names] == [sel.name_key(n) for n in logged]
+            it["performers"] = None if (not names or same) else self.resolve_performers(names)
             it["reviewed"] = True
             self._restatus(it)
             if clip_id in self.selected and not sel.is_selectable(it, allow_unknown=True):
@@ -476,6 +520,9 @@ def make_handler(state: ReviewState):
                     return self._json({"ok": True, "state": state.to_json()})
                 if path == "/api/note":
                     state.set_note(str(body.get("clip_id")), str(body.get("note") or ""))
+                    return self._json({"ok": True, "state": state.to_json()})
+                if path == "/api/performers":
+                    state.set_performers(str(body.get("clip_id")), str(body.get("names") or ""))
                     return self._json({"ok": True, "state": state.to_json()})
                 if path == "/api/trim":
                     state.set_trim_start(str(body.get("clip_id")), float(body.get("start") or 0))
