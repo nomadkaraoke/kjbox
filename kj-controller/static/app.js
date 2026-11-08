@@ -1890,6 +1890,7 @@ async function updateStatus() {
 
             // Track current playing path for delete protection (#6)
             currentPlayingPath = data.current_playing_path || null;
+            updateNoLyricsButton();
 
             totalVideoLength = data.length || 0;
             const seekSlider = document.getElementById('seek-slider');
@@ -6642,6 +6643,203 @@ async function useQuickVersion(entry) {
     }
 }
 
+// --- Quick version lyrics (gen found none → KJ searches LRCLIB or pastes) ---
+
+let _qlEntry = null;          // rotation entry the modal is fixing
+let _qlVideoDuration = null;  // seconds, of the quick video
+let _qlFilePath = null;
+const QL_TIMING_TOLERANCE_S = 4;
+
+function quickHasNoLyrics(entry) {
+    const q = entry && entry.quick;
+    return !!(q && q.lyrics_tier === 'none' && (q.state === 'ready' || q.state === 'chosen'));
+}
+
+function _playingNoLyricsEntry() {
+    if (!currentPlayingPath || !Array.isArray(rotationData)) return null;
+    return rotationData.find(e => e.file_path === currentPlayingPath && quickHasNoLyrics(e)) || null;
+}
+
+function updateNoLyricsButton() {
+    const btn = document.getElementById('np-no-lyrics-btn');
+    if (btn) btn.classList.toggle('hidden', !_playingNoLyricsEntry());
+}
+
+function openQuickLyricsForPlaying() {
+    const entry = _playingNoLyricsEntry();
+    if (entry) openQuickLyricsModal(entry);
+}
+
+function _qlFmt(sec) {
+    if (sec == null || isNaN(sec)) return '?';
+    const s = Math.round(sec);
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+function _qlStatus(text, kind) {
+    const el = document.getElementById('ql-status');
+    el.textContent = text || '';
+    el.className = 'ql-status' + (kind ? ' ql-status-' + kind : '');
+}
+
+function openQuickLyricsModal(entry) {
+    _qlEntry = entry;
+    _qlVideoDuration = null;
+    _qlFilePath = null;
+    document.getElementById('ql-intro').textContent =
+        'gen couldn’t find lyrics for ' + (entry.song_artist || 'this song')
+        + ', so its quick version only says “lyrics unavailable”. Search for lyrics or paste them in, '
+        + 'and the box re-renders the video in a few seconds (the audio stays the same).';
+    document.getElementById('ql-query').value = '';
+    document.getElementById('ql-results').innerHTML = '';
+    document.getElementById('ql-text').value = '';
+    document.getElementById('ql-timing-note').textContent = '';
+    document.getElementById('ql-use-timing').dataset.touched = '';
+    document.getElementById('ql-replay-btn').classList.add('hidden');
+    document.getElementById('ql-apply-btn').disabled = false;
+    document.getElementById('ql-close-btn').textContent = 'Cancel';
+    quickLyricsTextChanged();
+    _qlStatus('');
+    document.getElementById('quick-lyrics-modal').classList.remove('hidden');
+    quickLyricsSearch(true);
+}
+
+function closeQuickLyricsModal() {
+    document.getElementById('quick-lyrics-modal').classList.add('hidden');
+    _qlEntry = null;
+}
+
+async function quickLyricsSearch(initial) {
+    if (!_qlEntry) return;
+    const entryId = _qlEntry.id;
+    const q = initial ? '' : document.getElementById('ql-query').value.trim();
+    const box = document.getElementById('ql-results');
+    box.innerHTML = '<div class="ql-empty">Searching LRCLIB…</div>';
+    try {
+        const resp = await fetch('/rotation/quick-lyrics/search?id=' + encodeURIComponent(entryId)
+            + (q ? '&q=' + encodeURIComponent(q) : ''));
+        const data = await resp.json();
+        if (!_qlEntry || _qlEntry.id !== entryId) return;  // modal closed/reopened meanwhile
+        if (!resp.ok) throw new Error(data.error || resp.statusText);
+        _qlVideoDuration = data.video_duration;
+        _qlFilePath = data.file_path;
+        if (initial) document.getElementById('ql-query').value = data.query || '';
+        renderQuickLyricsResults(data.results || [], data.error);
+    } catch (err) {
+        box.innerHTML = '';
+        const div = document.createElement('div');
+        div.className = 'ql-empty';
+        div.textContent = 'Search failed: ' + err.message + ' — you can still paste lyrics below.';
+        box.appendChild(div);
+    }
+}
+
+function renderQuickLyricsResults(results, error) {
+    const box = document.getElementById('ql-results');
+    box.innerHTML = '';
+    if (error || !results.length) {
+        const div = document.createElement('div');
+        div.className = 'ql-empty';
+        div.textContent = error || 'No lyrics found. Try a different search (e.g. just the song title), or paste lyrics below.';
+        box.appendChild(div);
+        return;
+    }
+    results.forEach(r => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'ql-result';
+        const diff = (r.duration != null && _qlVideoDuration != null) ? Math.abs(r.duration - _qlVideoDuration) : null;
+        const head = document.createElement('div');
+        head.className = 'ql-result-head';
+        head.textContent = (r.artist || '?') + ' — ' + (r.title || '?');
+        const meta = document.createElement('div');
+        meta.className = 'ql-result-meta';
+        let m = (r.synced ? 'Synced' : 'Plain text') + ' · ' + _qlFmt(r.duration);
+        if (r.synced && diff != null) {
+            m += diff <= QL_TIMING_TOLERANCE_S ? ' (matches this video)' : ' (this video is ' + _qlFmt(_qlVideoDuration) + ')';
+        }
+        if (r.album && r.album !== r.title) m += ' · ' + r.album;
+        meta.textContent = m;
+        const prev = document.createElement('div');
+        prev.className = 'ql-result-preview';
+        prev.textContent = r.preview || '';
+        row.append(head, meta, prev);
+        row.onclick = () => pickQuickLyricsResult(r, row);
+        box.appendChild(row);
+    });
+}
+
+function pickQuickLyricsResult(r, row) {
+    document.querySelectorAll('#ql-results .ql-result').forEach(el => el.classList.remove('ql-result-picked'));
+    row.classList.add('ql-result-picked');
+    document.getElementById('ql-text').value = r.lyrics || '';
+    const diff = (r.duration != null && _qlVideoDuration != null) ? Math.abs(r.duration - _qlVideoDuration) : null;
+    quickLyricsTextChanged(r.synced ? (diff != null && diff <= QL_TIMING_TOLERANCE_S) : false, r, diff);
+}
+
+// Re-evaluate the timing checkbox for the current text. ``defaultOn`` is
+// only passed when a search result was picked.
+function quickLyricsTextChanged(defaultOn, picked, diff) {
+    const text = document.getElementById('ql-text').value;
+    const timed = /\[\d+:\d+(?:\.\d+)?\]/.test(text);
+    const cb = document.getElementById('ql-use-timing');
+    const note = document.getElementById('ql-timing-note');
+    cb.disabled = !timed;
+    if (!timed) {
+        cb.checked = false;
+        note.textContent = text.trim() ? 'No timestamps, so the lyrics will scroll at a steady pace through the song.' : '';
+        return;
+    }
+    if (defaultOn !== undefined) { cb.checked = !!defaultOn; cb.dataset.touched = ''; }
+    else if (!picked && cb.dataset.touched !== '1') cb.checked = true;
+    if (picked && diff != null && diff > QL_TIMING_TOLERANCE_S) {
+        note.textContent = 'This timing is from a ' + _qlFmt(picked.duration) + ' recording but this video is '
+            + _qlFmt(_qlVideoDuration) + ', so it’s off by default (it would drift). Tick it if it’s the same performance.';
+    } else {
+        note.textContent = '';
+    }
+}
+
+async function quickLyricsApply() {
+    if (!_qlEntry) return;
+    const text = document.getElementById('ql-text').value.trim();
+    if (!text) { _qlStatus('Pick a search result or paste lyrics first.', 'error'); return; }
+    const btn = document.getElementById('ql-apply-btn');
+    btn.disabled = true;
+    _qlStatus('Re-rendering the video…', 'busy');
+    const entryId = _qlEntry.id;
+    try {
+        const resp = await fetch('/rotation/quick-lyrics', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: entryId, lyrics: text,
+                                   use_timing: document.getElementById('ql-use-timing').checked }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || resp.statusText);
+        if (data.entries) { rotationData = data.entries; renderRotation(rotationData); }
+        _qlFilePath = data.file_path || _qlFilePath;
+        const how = data.lyrics_tier === 'synced' ? 'scrolling in time' : 'scrolling at a steady pace';
+        const playing = currentPlayingPath && currentPlayingPath === _qlFilePath;
+        _qlStatus('Done — ' + data.line_count + ' lines, ' + how + '.'
+            + (playing ? ' It’s playing now: play it again to see the lyrics.' : ''), 'ok');
+        document.getElementById('ql-replay-btn').classList.toggle('hidden', !playing);
+        document.getElementById('ql-close-btn').textContent = 'Close';
+        updateNoLyricsButton();
+    } catch (err) {
+        _qlStatus('Couldn’t add the lyrics: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function quickLyricsReplay() {
+    const entryId = _qlEntry ? _qlEntry.id : null;
+    if (!_qlFilePath) return;
+    await playMedia(_qlFilePath, entryId);
+    closeQuickLyricsModal();
+}
+
 function renderRotation(entries) {
     const list = document.getElementById('rotation-list');
     if (!list) return;
@@ -7014,6 +7212,18 @@ function renderRotation(entries) {
             prepBadge.title = 'No song file linked \u2014 use the link button to search and attach a song';
         }
         info.appendChild(prepBadge);
+        if (quickHasNoLyrics(entry)) {
+            // gen found no lyrics for the quick draft — it would only show
+            // "(lyrics unavailable)". Let the KJ search or paste some in.
+            const lyrBtn = document.createElement('button');
+            lyrBtn.type = 'button';
+            lyrBtn.className = 'rotation-prep-badge prep-quick-nolyrics';
+            lyrBtn.textContent = '\u26A0 NO LYRICS';
+            lyrBtn.title = 'gen couldn\u2019t find lyrics for this quick version, so the screen only says '
+                + '\u201Clyrics unavailable\u201D. Click to search for lyrics or paste them in.';
+            lyrBtn.onclick = (e) => { e.stopPropagation(); openQuickLyricsModal(entry); };
+            info.appendChild(lyrBtn);
+        }
         if (!entry.file_path && quick && quick.state === 'ready') {
             // gen's quick draft is on the box — the KJ can put it in now
             // (the singer is offered the same choice on their phone).
