@@ -48,6 +48,23 @@
   const hhmmss = (ts) => (ts || '').slice(11, 19);
   const fmtDur = (s) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : '');
   const songOf = (c) => (c.song_idx === null || c.song_idx === undefined ? null : S.songs[c.song_idx]);
+  // Who is in the clip: hand-edited names win over the logged song's performers.
+  const perfsOf = (c) => { const s = c && songOf(c); return s ? (c.performers || s.performers) : []; };
+
+  async function editPerformers(c) {
+    const cur = perfsOf(c).map((p) => p.name).join(' & ');
+    const logged = songOf(c).performers.map((p) => p.name).join(' & ');
+    const v = prompt(`Who is singing in this clip? Separate people with &.\nLogged as: ${logged}\nLeave empty to go back to that.`, cur);
+    if (v === null) return;
+    const res = await api('/api/performers', { clip_id: c.id, names: v });
+    if (!res.ok) return setStatus((res.errors || ['edit failed']).join('\n'), 'err');
+    const was = selected.includes(c.id);
+    applyState(res.state, { keepSelection: true });
+    await selectionChanged();  // caption + per-singer counts follow the new names
+    const now = S.clips.find((x) => x.id === c.id);
+    if (was && !selected.includes(c.id)) setStatus(`Removed from the carousel: someone in it said no.`, 'err');
+    else if (now && now.status === 'unknown') setStatus(`Consent unknown for someone in this clip; you'll be asked to confirm before publishing.`);
+  }
 
   function prettyNight(n) {
     const d = new Date(n + 'T12:00:00');
@@ -195,10 +212,13 @@
         c.offset_s !== null && c.offset_s !== undefined && c.song_idx === c.auto_song_idx
           ? ` · ${c.offset_s}s into song` : ''),
       h('div', { class: 'song' }, song ? song.song : (c.custom ? (c.note || 'Other (add a label)') : 'No song matched')),
-      song ? h('div', { class: 'performers' }, song.performers.map((p) => h('span', {
-        class: `perf ${p.consent}`, title: `${p.consent.toUpperCase()}: ${REASONS[p.reason] || p.reason}`,
+      song ? h('div', { class: 'performers' }, perfsOf(c).map((p) => h('span', {
+        class: `perf ${p.consent}`, title: `${String(p.consent).toUpperCase()}: ${REASONS[p.reason] || p.reason}`,
       }, { yes: '✓', no: '✗', unknown: '?' }[p.consent] || '?', ' ', p.name,
-      p.instagram ? ` @${p.instagram}` : ''))) : null,
+      p.instagram ? ` @${p.instagram}` : '')),
+      h('button', { class: 'edit-perf', type: 'button', title: 'Edit who is singing in this clip', 'aria-label': 'Edit singers',
+        onclick: () => editPerformers(c) }, '✎'),
+      c.performers ? h('span', { class: 'muted' }, ` (edited; logged as ${song.performers.map((p) => p.name).join(' & ')})`) : '') : null,
       h('div', { class: 'muted' }, c.custom ? 'Custom clip (non-singing)' : (STATUS_LABEL[c.status] || c.status)),
     );
 
@@ -256,10 +276,11 @@
         h('span', { class: 'n' }, i + 1),
         c.has_thumb ? h('img', { src: `/thumbs/${c.id}.jpg`, alt: '' }) : h('span'),
         h('span', { class: 'lbl', title: s ? `${s.singer} — ${s.song}` : c.filename },
-          `${hhmm(c.start)} ${s ? s.performers.map((p) => p.name).join(' & ') : (c.note || '?')}`,
+          `${hhmm(c.start)} ${s ? perfsOf(c).map((p) => p.name).join(' & ') : (c.note || '?')}`,
           isLong(c) ? ` ✂${fmtDur(c.trim_start || 0)}` : '',
           c.status === 'unknown' ? ' (?)' : ''),
         h('span', { class: 'mv' },
+          s ? h('button', { type: 'button', 'aria-label': 'Edit singers', title: 'Edit who is singing', onclick: () => editPerformers(c) }, '✎') : '',
           h('button', { type: 'button', 'aria-label': 'Move up', disabled: i === 0, onclick: () => move(i, i - 1) }, '↑'),
           h('button', { type: 'button', 'aria-label': 'Move down', disabled: i === selected.length - 1, onclick: () => move(i, i + 1) }, '↓'),
           h('button', { type: 'button', 'aria-label': 'Remove', onclick: () => toggle(c) }, '×')));
@@ -274,7 +295,44 @@
     else if (!unc.length) ul.append(h('li', { class: 'ok' }, `✓ All ${S.consenting.length} consenting singers covered`));
     else unc.forEach((n) => ul.append(h('li', {}, n)));
 
+    const ps = $('per-singer');
+    ps.replaceChildren();
+    const counts = clipsPerSinger();
+    if (!counts.length) ps.append(h('li', { class: 'muted' }, 'No clips selected.'));
+    else counts.forEach((r) => ps.append(h('li', {},
+      h('span', { class: 'cnt' }, `${r.n}×`), ' ', r.name,
+      r.handle ? h('span', { class: 'muted' }, ` @${r.handle}`) : '')));
+
     updateCapCount();
+  }
+
+  // How many selected clips each performer appears in (a duet counts for both).
+  // "Other" clips count under their label. Most clips first, then show order.
+  function clipsPerSinger() {
+    const clips = byId();
+    const rows = new Map();
+    const bump = (key, name, handle) => {
+      const r = rows.get(key) || { name, handle: '', n: 0, order: rows.size };
+      r.n += 1;
+      if (handle && !r.handle) r.handle = handle;
+      rows.set(key, r);
+    };
+    for (const id of selected) {
+      const c = clips[id];
+      const s = songOf(c);
+      if (s) {
+        const seen = new Set();
+        perfsOf(c).forEach((p) => {
+          const key = p.name.trim().toLowerCase().replace(/\s+/g, ' ');
+          if (seen.has(key)) return;
+          seen.add(key);
+          bump(key, p.name, (p.instagram || '').replace(/^@/, ''));
+        });
+      } else if (c && c.note) {
+        bump(`other:${c.note}`, `✎ ${c.note}`, '');
+      }
+    }
+    return [...rows.values()].sort((a, b) => b.n - a.n || a.order - b.order);
   }
 
   // Client-side mirror of select.uncovered_performers so it updates instantly.
@@ -282,8 +340,7 @@
     const clips = byId();
     const covered = new Set();
     for (const id of selected) {
-      const s = songOf(clips[id]);
-      if (s) s.performers.forEach((p) => covered.add(p.name.trim().toLowerCase().replace(/\s+/g, ' ')));
+      perfsOf(clips[id]).forEach((p) => covered.add(p.name.trim().toLowerCase().replace(/\s+/g, ' ')));
     }
     return S.consenting.filter((n) => !covered.has(n.trim().toLowerCase().replace(/\s+/g, ' ')));
   }
@@ -312,8 +369,7 @@
     } else {
       if (selected.length >= S.max_clips) return setStatus(`Instagram allows at most ${S.max_clips} items.`, 'err');
       if (c.status === 'unknown') {
-        const s = songOf(c);
-        const who = s ? s.performers.filter((p) => p.consent !== 'yes').map((p) => p.name).join(', ') : '?';
+        const who = perfsOf(c).filter((p) => p.consent !== 'yes').map((p) => p.name).join(', ') || '?';
         if (!confirm(`Consent is UNKNOWN for: ${who}.\n\nOnly include this if you know they're happy to be posted. Include it?`)) return;
       }
       // Keep show order by default: insert where its time fits.

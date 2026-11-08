@@ -637,3 +637,83 @@ class TestSentNote:
         note = self._send(page, live_server, live_token)
         note.locator(".sent-note-close").click()
         expect(note).to_have_count(0)
+
+
+# --- 2026-11-05 live: "Cole Phillips – Roll of Dice" was made as "Roll of the Dice" ---------
+
+COLE_SPOTIFY = {"index": 0, "provider": "Spotify", "title": "Roll of Dice", "artist": "Cole Phillips",
+                "is_lossless": False, "year": 2025, "target_file": "Roll of Dice"}
+AI_THE_DICE = {"kind": "content", "confident": True, "engine": "ai", "needs_ai": False,
+               "canonical_artist": "Cole Phillips", "canonical_title": "Roll of the Dice", "alternatives": []}
+NEEDS_AI = {"kind": "none", "confident": False, "needs_ai": True, "engine": "catalog"}
+
+
+class TestContentCorrectionNeverSplitsTitleFromAudio:
+    def test_strong_results_for_the_typed_song_only_offer_the_correction(self, page, live_server, live_token):
+        # radiohed/creep typed; the default results match it (tier 1-2), and the AI names another song.
+        calls = _open_wizard(page, live_server, live_token, email="m@x.co",
+                             fast=NEEDS_AI, full={**AI_THE_DICE, "canonical_artist": "Radiohead",
+                                                  "canonical_title": "Creep (Acoustic)"})
+        expect(page.locator('[data-testid="make-didyoumean"]')).to_contain_text("Creep (Acoustic) — Radiohead")
+        expect(page.locator(".mk-song-title")).to_have_text("creep")          # what was typed stays
+        expect(page.locator('[data-testid="make-correction"]')).to_have_count(0)
+        assert [c["title"] for c in calls["search"]] == ["creep"]              # no second search
+        # Taking the suggestion searches again for that song.
+        page.locator('[data-testid="make-didyoumean"] .mk-suggestion').first.click()
+        expect(page.locator(".mk-song-title")).to_have_text("Creep (Acoustic)")
+        assert calls["search"][-1]["title"] == "Creep (Acoustic)"
+
+    def test_weak_results_apply_the_correction_and_search_again(self, page, live_server, live_token):
+        calls = _open_wizard(page, live_server, live_token, email="m@x.co", results=[YOUTUBE],
+                             fast=NEEDS_AI, full={**AI_THE_DICE, "canonical_artist": "Radiohead",
+                                                  "canonical_title": "Creep"})
+        expect(page.locator('[data-testid="make-correction"]')).to_contain_text("Corrected to Creep — Radiohead")
+        assert calls["search"][-1] == {**calls["search"][-1], "artist": "Radiohead", "title": "Creep"}
+        n = len(calls["search"])
+        # Undo a content correction: back to the typed song, and its own audio search.
+        page.locator(".mk-undo").click()
+        expect(page.locator(".mk-song-artist")).to_have_text("radiohed")
+        expect(page.locator('[data-testid="make-pick"], [data-testid="make-fallback"]').first).to_be_visible()
+        assert len(calls["search"]) == n + 1 and calls["search"][-1]["artist"] == "radiohed"
+        assert [c["stage"] for c in calls["check"]].count("full") == 1          # no judge on the re-search
+
+
+class TestKeepWhatITypedIsTrusted:
+    def test_kept_typed_song_skips_the_ai_judge_in_the_wizard(self, page, live_server, live_token):
+        page.add_init_script("window.__SING_ARM_MS = 0;")
+        _login(page, live_server, live_token)
+        calls = {"check": [], "search": []}
+
+        def check(route):
+            body = json.loads(route.request.post_data or "{}")
+            calls["check"].append(body)
+            _json(route, AI_THE_DICE if body.get("stage") == "full" else NEEDS_AI)
+
+        page.route("**/sing/search/identify*", lambda r: _json(r, {"status": "none", "candidates": []}))
+        page.route("**/sing/search?*", lambda r: _json(r, {"songs": [], "make_requests_enabled": True,
+                                                          "simple_mode": False}))
+        page.route("**/sing/search/resolve*", lambda r: _json(r, {
+            "corrected": {"artist": "Cole Phillips", "title": "Roll of the Dice"}, "kind": "content",
+            "typed": "Roll of dice Cole Phillips", "songs": [],
+            "split": {"artist": "Cole Phillips", "title": "Roll of dice"}}))
+        page.route("**/sing/make/account*", lambda r: _json(r, {"ready": True, "email": "m@x.co"}))
+        page.route("**/sing/make/check*", check)
+        page.route("**/sing/make/search*", lambda r: (calls["search"].append(json.loads(r.request.post_data)),
+                                                      _json(r, {"search_session_id": "ss-1",
+                                                                "results": [COLE_SPOTIFY]})))
+        page.evaluate("""
+            window.__sing_state.makeRequestsEnabled = true;
+            window.__sing_state.step = 'search';
+            window.__sing_render();
+        """)
+        page.locator('input[type="search"]').fill("Roll of dice Cole Phillips")
+        expect(page.locator('[data-testid="song-missing"]')).to_contain_text("Roll of the Dice")
+        page.locator('[data-testid="song-missing"] [data-testid="search-correction-toggle"]').click()
+        page.locator('[data-testid="make-card"] button').first.click()
+        expect(page.locator('[data-testid="make-pick"]')).to_be_visible()
+        expect(page.locator('[data-testid="make-submit"]')).to_be_enabled()
+        expect(page.locator(".mk-song-title")).to_have_text("Roll of dice")
+        assert [c["stage"] for c in calls["check"]] == ["fast"]                 # no AI judge
+        assert calls["search"][0]["title"] == "Roll of dice"
+        expect(page.locator('[data-testid="make-correction"]')).to_have_count(0)
+        expect(page.locator('[data-testid="make-didyoumean"]')).to_have_count(0)

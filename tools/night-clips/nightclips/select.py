@@ -17,6 +17,7 @@ attribution can't smuggle a non-consenting singer into the draft.
 from __future__ import annotations
 
 import datetime as dt
+import re
 
 ELIGIBLE, EXCLUDED, UNKNOWN, UNASSIGNED = "eligible", "excluded", "unknown", "unassigned"
 
@@ -47,10 +48,39 @@ def is_selectable(item: dict, allow_unknown: bool = False) -> bool:
     return allow_unknown and item["status"] == UNKNOWN
 
 
-def _performer_keys(item: dict, songs: list[dict]) -> list[str]:
+def item_performers(item: dict, songs: list[dict]) -> list[dict]:
+    """Who is in this clip: the hand-edited names if any, else the logged song's performers."""
     if item.get("song_idx") is None:
         return []
-    return [name_key(p["name"]) for p in songs[item["song_idx"]]["performers"]]
+    if item.get("performers") is not None:
+        return item["performers"]
+    return songs[item["song_idx"]]["performers"]
+
+
+def item_status(item: dict, songs: list[dict]) -> str:
+    """``song_status`` for a clip, judged on its edited performers when it has them."""
+    idx = item.get("song_idx")
+    song = None if idx is None else songs[idx]
+    if song is not None and item.get("performers") is not None:
+        perfs = item["performers"]
+        song = {**song, "performers": perfs,
+                "postable": bool(perfs) and all(p.get("consent") == "yes" for p in perfs)}
+    return song_status(song, item.get("custom", False))
+
+
+def split_names(text: str) -> list[str]:
+    """"Ana & Plant, Ezgi" -> ["Ana", "Plant", "Ezgi"] (deduped, order kept)."""
+    out, seen = [], set()
+    for part in re.split(r"\s*[&,+/]\s*", text or ""):
+        name = " ".join(part.split())[:80]
+        if name and name_key(name) not in seen:
+            seen.add(name_key(name))
+            out.append(name)
+    return out
+
+
+def _performer_keys(item: dict, songs: list[dict]) -> list[str]:
+    return [name_key(p["name"]) for p in item_performers(item, songs)]
 
 
 def consenting_performers(items: list[dict], songs: list[dict]) -> dict[str, str]:
@@ -59,7 +89,7 @@ def consenting_performers(items: list[dict], songs: list[dict]) -> dict[str, str
     for it in sorted(items, key=lambda i: i["start"]):
         if it["status"] != ELIGIBLE or not it.get("local") or it.get("song_idx") is None:
             continue
-        for p in songs[it["song_idx"]]["performers"]:
+        for p in item_performers(it, songs):
             seen.setdefault(name_key(p["name"]), p["name"])
     return seen
 
@@ -134,6 +164,24 @@ def _date_vars(night: str) -> dict:
     return {"date": night, "date_pretty": f"{d.strftime('%B')} {d.day}", "weekday": d.strftime("%A")}
 
 
+def apply_handle_overrides(songs: list[dict], handles: dict[str, str]) -> int:
+    """Fill in ``instagram`` from the config's ``[handles]`` for consenting performers.
+
+    A handle the singer gave on the night wins. Performers who didn't say yes are
+    never tagged. Returns how many performers got a handle.
+    """
+    n = 0
+    for song in songs:
+        for p in song.get("performers") or []:
+            if p.get("consent") != "yes" or (p.get("instagram") or "").strip():
+                continue
+            handle = handles.get(name_key(p.get("name", "")))
+            if handle:
+                p["instagram"] = handle
+                n += 1
+    return n
+
+
 def performer_credit(p: dict) -> str:
     handle = (p.get("instagram") or "").strip().lstrip("@")
     return f"@{handle}" if handle else (p.get("name") or "").strip()
@@ -152,11 +200,13 @@ def render_caption(night: str, selected_items: list[dict], songs: list[dict], ca
                 seen.add(note)
                 lines.append(note)
             continue
-        if idx in seen:
+        perfs = item_performers(it, songs)
+        key = (idx, tuple(name_key(p["name"]) for p in perfs))
+        if key in seen:
             continue
-        seen.add(idx)
+        seen.add(key)
         song = songs[idx]
-        perf = " & ".join(performer_credit(p) for p in song["performers"] if performer_credit(p))
+        perf = " & ".join(performer_credit(p) for p in perfs if performer_credit(p))
         lines.append(caption_cfg.get("line", "{performers} — {song}").format(
             performers=perf or song.get("singer", ""), song=song.get("song", ""), **vars_
         ))

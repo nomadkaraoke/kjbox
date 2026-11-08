@@ -16,6 +16,26 @@ lyrics for the plain title.
 - The box re-renders only the video track (fastgen crawl, audio copied) in place in a few seconds, then offers to
   play the song again.
 - New: `kj-controller/quick_lyrics.py`, `GET /rotation/quick-lyrics/search`, `POST /rotation/quick-lyrics`.
+## 2026-11-06 - Make-it keeps the title the singer chose, and title and audio always match (v0.149.3)
+
+**Deploy:** frontend + test `.py` change, so auto-deploy restarts kj-controller (playback continues) and
+`sing.js?v=` / `make.js?v=` bust the cache.
+
+Seen live 2026-11-05: a singer typed "Cole Phillips – Roll of Dice", a 2025 song that isn't in any of our data. gen's
+Gemini fallback "corrected" it to "Roll of the Dice". The singer tapped "keep what I typed", but the make wizard ran
+gen's AI judge again and put the "the" back. gen job `f01c9997` got the wrong title on the right audio (Spotify
+"Roll of Dice", score 1.0).
+
+- **Keep what I typed is trusted** (`sing.js` `makeIsKeptTyped`): when the singer turned the correction down and the
+  form still holds what they typed, the wizard starts `trusted`. Only the formatting tidy runs, not the AI judge.
+- **A different-song correction never lands on the old song's audio** (`make.js` `applyFullVerdict`): with good
+  audio results for the typed title (tier 1–2), a confident `content` verdict is only offered ("Did you mean…?").
+  Before, it was applied without a new search. With weak results (tier 3) it is applied and the audio is searched
+  again, as before.
+- **Undo of a content correction searches again** for the song now shown (`toggleCorrection`). A formatting tidy is
+  the same song, so it keeps its results.
+- gen side (v0.294.0) and decide (v0.37.0): a live Spotify search confirms songs our catalogue doesn't have, and an AI
+  correction nothing can confirm is never `confident`. See `SONG-IDENTIFICATION.md` D14.
 
 ## 2026-11-06 - Singer page: pipeline translations for the five strings added on 2026-11-05 (v0.149.2)
 

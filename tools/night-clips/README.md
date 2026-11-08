@@ -63,12 +63,19 @@ On the review page:
   Carousel panel, or with ↑ ↓.
 - On a flagged clip, use the dropdown to reassign it to an adjacent song, or to "not a
   performance". Its consent is re-evaluated straight away.
+- **Wrong singer on a clip?** Click ✎ next to the singers (on the card or the Carousel row) and type
+  who is really in it, separated by `&`. Consent follows the people you type: someone who sang that
+  night brings their own answer and handle, someone who said no takes the clip out, and anyone else is
+  consent unknown (you confirm before publishing) and gets their `[handles]` handle if there is one.
+  Empty goes back to the logged singers; changing the clip's song also resets it. Saved in the draft.
+  Click **Regenerate** afterwards if you've edited the caption.
 - **Other (not singing)**: the dropdown on any clip has "✎ Other…". Write a label (e.g. "Costume contest winners 🏆")
   and the clip becomes selectable regardless of consent data (your call), with the label as its caption line.
   Other clips are never pre-selected and must have a label to publish.
 - **Clips over a minute** get a start slider (0.5s steps). Play shows exactly the chosen 59s window. A cut from the start of the clip is a
   quick stream copy; a cut from a later start is re-encoded (a few seconds per clip) so it matches the preview exactly.
 - **Singers not yet covered** lists the consenting singers who have a clip but none selected.
+- **Clips per singer** counts how many selected clips each singer is in (a duet counts for both), most first, with their @handle. "Other" clips count under their label.
 - The **Caption** follows the selection until you edit it by hand. **Regenerate** resets it.
 - **Save draft** writes `~/.night-clips/<night>/draft.json`. A rerun restores it.
 - **Publish to Instagram…** saves the draft and launches the publisher (see below). Instagram
@@ -154,7 +161,17 @@ facebook_location = ""   # search text for Facebook "Check in"; empty = skip
 header = "Thursday night karaoke 🎤 {date_pretty}"   # {date_pretty} {date} {weekday}
 line = "{performers} — {song}"                       # @handle, or the name; duets joined with " & "
 footer = "#karaoke #nomadkaraoke"
+
+[handles]                                            # regulars' handles you already know
+"Big Dave" = "davethevoice"
 ```
+
+`[handles]` fills in an Instagram handle for a singer who didn't give one in the singer UI. Names
+match the way consent does (case and extra spaces are ignored), so use the name they sign up with.
+A handle the singer gave on the night always wins, and nobody is tagged unless they said yes to
+photos. An empty `""` means no handle yet. `@name` and `instagram.com/name` links are accepted; an invalid handle stops the run with
+an error. If you change it while the review page is open, restart `night-clips` and click
+**Regenerate** on the caption.
 
 ## Files
 

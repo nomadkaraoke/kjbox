@@ -2612,7 +2612,7 @@ function renderSearch() {
       edited: (state.makeArtist || "") !== (pre.artist || "") || (state.makeTitle || "") !== (pre.title || ""),
     });
     endSearchSession();
-    return makeFlow.start(state.makeArtist, state.makeTitle, { trusted: makeIsIdentified() });
+    return makeFlow.start(state.makeArtist, state.makeTitle, { trusted: makeIsIdentified() || makeIsKeptTyped() });
   };
 
   // The make form still holds exactly the song we identified on the device
@@ -2621,6 +2621,15 @@ function renderSearch() {
     const c = correction;
     if (!c || !c.corrected || !c.active || !(c.source === "local" || c.picked)) return false;
     return (state.makeArtist || "") === c.corrected.artist && (state.makeTitle || "") === c.corrected.title;
+  }
+
+  // The singer turned a correction down ("keep what I typed") and the form still holds what
+  // they typed: the AI judge must not bring the same correction back in the make wizard.
+  // Live 2026-11-05: "Roll of dice" was kept, and the wizard's judge put "the" back again.
+  function makeIsKeptTyped() {
+    const c = correction;
+    if (!c || !c.corrected || c.active || !c.userTouched || !c.split) return false;
+    return (state.makeArtist || "") === c.split.artist && (state.makeTitle || "") === c.split.title;
   }
 
   const pickYouTube = (url) => {
