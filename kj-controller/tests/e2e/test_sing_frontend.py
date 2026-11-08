@@ -130,6 +130,7 @@ class TestDoneMultiSong:
     def test_request_another_returns_to_search(self, page, live_server, live_token):
         r1 = self._submit_one(live_server, live_token)
         page.goto(f"{live_server}/sing/?t={live_token}")
+        page.wait_for_function("!!window.__sing_state")
         page.evaluate(
             "(payload) => localStorage.setItem('sing_my_request_ids', JSON.stringify(payload))",
             {"token": live_token, "ids": [r1["id"]]},
@@ -148,6 +149,7 @@ class TestDoneMultiSong:
         # My songs → "Request another song" → search, and every send 400'd
         # with singer_name is required. It must get the name screen instead.
         page.goto(f"{live_server}/sing/?t={live_token}")
+        page.wait_for_function("!!window.__sing_state")
         page.evaluate("localStorage.setItem('sing_name', '')")
         page.evaluate("() => { window.__sing_state.name = ''; window.__sing_state.step = 'done'; window.__sing_render(); }")
         page.locator('[data-testid="request-another"]').click()
@@ -156,6 +158,7 @@ class TestDoneMultiSong:
 
     def test_search_step_without_a_name_renders_the_name_screen(self, page, live_server, live_token):
         page.goto(f"{live_server}/sing/?t={live_token}")
+        page.wait_for_function("!!window.__sing_state")
         page.evaluate("() => { window.__sing_state.name = ''; window.__sing_state.step = 'search'; window.__sing_render(); }")
         expect(page.locator('input[type="search"]')).to_have_count(0)
         expect(page.get_by_label("First name + last initial")).to_be_visible()
@@ -1694,6 +1697,7 @@ class TestSwitchSingerAndPhoneCode:
         import urllib.request as _ur
         # A fresh tab with no name, on My songs.
         page.goto(f"{live_server}/sing/?t={live_token}")
+        page.wait_for_function("!!window.__sing_state")
         page.evaluate("() => { window.__sing_state.name = ''; window.__sing_state.step = 'done'; window.__sing_render(); }")
         code_line = page.locator('[data-testid="phone-code"]')
         expect(code_line).to_contain_text(re.compile(r"\d{4}"))
