@@ -9,6 +9,10 @@ from playwright.sync_api import expect
 def _login(page, live_server, live_token, name="Alice"):
     page.goto(f"{live_server}/sing/?t={live_token}")
     expect(page.locator("#sing-root")).to_be_visible()
+    # sing.js awaits its translations before exposing its state, and the
+    # page's load event doesn't wait for that: without this, a cold message
+    # fetch makes the next evaluate hit an undefined __sing_state.
+    page.wait_for_function("!!window.__sing_state")
     page.evaluate("(n) => localStorage.setItem('sing_name', n)", name)
     page.evaluate("localStorage.setItem('sing_phone', '')")
     page.evaluate("window.__sing_state.name = localStorage.getItem('sing_name') || ''")
