@@ -499,7 +499,6 @@ def test_download_queues_item(flask_test_client, flask_app, mocker):
     for _ in range(50):
         with flask_app._download_lock:
             item = flask_app.download_queue['items'][0]
-            # Items start 'queued', then 'downloading': wait for a terminal state.
             if item['status'] not in ('queued', 'downloading'):
                 break
         time.sleep(0.05)
@@ -522,7 +521,6 @@ def test_download_failure_tracked(flask_test_client, flask_app, mocker):
     for _ in range(50):
         with flask_app._download_lock:
             item = flask_app.download_queue['items'][0]
-            # Items start 'queued', then 'downloading': wait for a terminal state.
             if item['status'] not in ('queued', 'downloading'):
                 break
         time.sleep(0.05)

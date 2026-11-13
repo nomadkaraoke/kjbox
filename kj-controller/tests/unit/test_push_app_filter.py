@@ -105,7 +105,9 @@ def test_web_sub_still_gets_all_steps(store):
     with patch("push_dispatcher.webpush",
                side_effect=lambda **kw: steps.append(json.loads(kw["data"])["data"]["step"])):
         _walk_ladder(d, entries)
-    assert steps == ["up_in_2", "up_next", "now_singing"]
+    # Sends run on the dispatcher's thread pool, so arrival order isn't fixed:
+    # the point is that a web sub gets every step.
+    assert sorted(steps) == sorted(["up_in_2", "up_next", "now_singing"])
 
 
 def test_web_decision_pushes_unchanged(store):
