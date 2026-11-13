@@ -188,3 +188,30 @@ class TestAutoReorderConfig:
     def test_rejects_non_boolean(self, client):
         resp = client.post("/rotation/requests/config", json={"auto_reorder": "true"})
         assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# GET /rotation/auto-order/explain — the KJ explainer modal's data (read-only)
+# ---------------------------------------------------------------------------
+
+def test_explain_returns_scenarios_and_live_dry_run_without_changing_anything(app, client):
+    newbie_id = _seed_veterans_then_newbie(app)
+    before_ids = [e["id"] for e in app.rotation.get_rotation()]
+    undo_before = app.rotation.history_status()
+
+    resp = client.get("/rotation/auto-order/explain")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["scenarios"] and all(s["all_ok"] for s in data["scenarios"])
+    live = data["live"]
+    assert [r["id"] for r in live["before"]] == before_ids
+    # The dry run WOULD promote the new singer…
+    assert live["after"][[r["id"] for r in live["after"]].index(newbie_id)]["delta"] > 0
+    # …but nothing was applied and no undo step was added.
+    assert [e["id"] for e in app.rotation.get_rotation()] == before_ids
+    assert app.rotation.history_status() == undo_before
+
+
+def test_explain_with_empty_rotation(client):
+    data = client.get("/rotation/auto-order/explain").get_json()
+    assert data["live"]["before"] == [] and data["live"]["after"] == []

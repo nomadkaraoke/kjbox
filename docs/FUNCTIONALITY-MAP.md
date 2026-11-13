@@ -318,6 +318,7 @@ Cross-cutting mechanics that every step relies on:
   - `/rotation/add` (R:3702): `add_entry` + optional `url_fallback`, then `maybe_auto_reorder`.
 - **Auto Order:**
   - Triggered on demand by `POST /rotation/auto-order` (R:3834), or automatically after a new entry when `auto_reorder` is on (`maybe_auto_reorder` R:3787, called from add, admin approve and sing auto-approve).
+  - Explained by the read-only KJ modal "How Auto Order works" (System → Rotation, or **?** by Reorder): `GET /rotation/auto-order/explain` → `auto_order_explain.build_explainer` (curated scenarios run with `compute_auto_order(..., trace=True)`) + a dry run of the live queue. Applies nothing.
   - `run_auto_order` (R:3757): decorates the entries (`_decorate_rotation_entries` R:3542: time estimates, songs_sung, wait pills, sms, media_meta, photo consent), then `auto_order.build_entry_views` (:169) and `compute_auto_order` (:232; rows 1–3 locked; rows 4–5 frozen except for duplicates; `Being Made` pinned to the bottom; greedy fairness/spacing/wait weave), then `RM.reorder_by_ids` (no-op with no checkpoint if unchanged).
   - **Depends on wall-clock time** (`wait_minutes` and `last_sang` come from SQLite `datetime('now','localtime')`).
 - **Priority bias:**

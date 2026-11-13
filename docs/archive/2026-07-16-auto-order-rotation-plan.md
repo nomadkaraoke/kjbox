@@ -183,7 +183,27 @@ skips entirely when the queue is already in order (no undo-stack pollution).
 **Safety:** the frozen rows 1-3 (and un-bumped 4-5) can never move because `compute_auto_order`
 never emits them out of place; the endpoint/trigger tests assert rows 1-3 are unchanged.
 
-## 13. Open items / future work
+## 13. Explaining it to KJs (v0.151.0)
+
+**System → Rotation → How Auto Order works** (also the **?** beside Reorder) opens a read-only modal backed by
+`GET /rotation/auto-order/explain`:
+
+- `compute_auto_order(entries, trace=True)` records, per row, whether it was locked, pinned (being made) or won
+  a scored contest, with every contender's term-by-term breakdown (`_score_terms`; `_score` is their sum in the
+  original order, so ordering and tie-breaks are bit-for-bit unchanged).
+- `auto_order_explain.py` holds 12 curated scenarios (invented names), each with situation / outcome / why text
+  and machine-checked claims. `tests/unit/test_auto_order_explain.py` asserts every claim. **If you retune a
+  weight and a scenario test fails, the story in the KJ guide is now wrong:** update its text and checks (or
+  rethink the change).
+- The same endpoint dry-runs the current queue ("Tonight's queue" tab) without applying anything.
+
+Behaviours the scenarios made explicit (both intended, both easy to mistake for bugs):
+- A singer's extra songs go behind everyone else's next turn, and if nobody else has more queued they sit
+  together at the bottom (back-to-back only because no one else is left). Later requests get woven between them.
+- Among people who've sung the same amount, a few minutes' longer wait is enough to swap neighbours (wait pull
+  4 pts vs stickiness 1.8 pts/row), so a "fair" queue only stays put if it's already in wait order.
+
+## 14. Open items / future work
 
 - **Group sung-count nuance:** fairness/`sung` is keyed on the whole entry (`songs_sung` =
   min across members via the existing decorator); spacing already uses individual members.

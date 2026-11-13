@@ -4225,6 +4225,33 @@ def _auto_order_response(app, checkpoint=True):
     }
 
 
+@routes_bp.route('/rotation/auto-order/explain', methods=['GET'])
+def auto_order_explain():
+    """Data for the KJ "How Auto Order works" modal (System section).
+
+    Read-only: curated example rotations run live through the real algorithm
+    (``auto_order_explain.SCENARIOS``) with per-slot score breakdowns, plus —
+    when a rotation is configured — a DRY RUN of Auto Order on the current
+    queue so the KJ can see what it would do right now and why. Nothing is
+    applied or checkpointed.
+    """
+    from auto_order import build_entry_views
+    from auto_order_explain import build_explainer, explain_entries
+
+    payload = build_explainer()
+    payload["live"] = None
+    rotation = getattr(current_app, 'rotation', None)
+    if rotation is not None:
+        try:
+            entries = rotation.get_rotation()
+            _decorate_rotation_entries(entries, rotation)
+            live, _res = explain_entries(build_entry_views(entries))
+            payload["live"] = live
+        except Exception:
+            current_app.logger.exception("auto-order explain: live dry run failed")
+    return jsonify(payload)
+
+
 @routes_bp.route('/rotation/auto-order', methods=['POST'])
 def auto_order_rotation():
     """On-demand Auto Order: reorder the visible queue for fairness + spacing.

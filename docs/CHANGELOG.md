@@ -2,6 +2,28 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-13 - KJ: "How Auto Order works" explainer (v0.151.0)
+
+**Deploy:** `.py` change, so auto-deploy restarts kj-controller (playback continues).
+
+A read-only guide to how Auto Order decides the rotation, built from the real algorithm rather than a
+drawing of it.
+
+- Open it from **System → Rotation → How Auto Order works**, the **?** next to the Rotation header's Reorder button
+  (also visible in Simple KJ mode), or "How does it decide?" under the Auto Order toggle in Requests settings.
+- **How it works:** the hard rules, how each spot is filled, every scoring term from strongest to weakest (values
+  read live from `AutoOrderConfig`), the look-ahead and wait-reset ideas, and the KJ's controls.
+- **Examples:** 12 curated rotations (invented names) run through `compute_auto_order` every time the modal opens.
+  Each shows before/after, and tapping an After row shows the exact score breakdown for every contender for that
+  spot. Each story's claims are checked live and in `tests/unit/test_auto_order_explain.py`, so a retune that
+  makes a story untrue fails the tests and flags the example in the modal.
+- **Tonight's queue:** a dry run of Auto Order on the current rotation with the same breakdowns. Nothing is
+  applied.
+- **Print / PDF** prints the guide and examples on white.
+- New: `kj-controller/auto_order_explain.py`, `static/auto_order_explain.js`,
+  `GET /rotation/auto-order/explain`, and `compute_auto_order(..., trace=True)` (ordering unchanged; `_score`
+  now sums `_score_terms`).
+
 ## 2026-11-06 - KJ: add lyrics to a quick version gen made without any (v0.150.0)
 
 Live show, 2026-11-06 01:24: Sombr "My Body Isn't Ready (Orchestral Version Live From Sound City)" played

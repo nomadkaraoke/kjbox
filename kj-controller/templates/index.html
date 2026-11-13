@@ -128,6 +128,7 @@
                         <button id="rotation-done-btn" class="rotation-done-toggle-btn" onclick="toggleRotationShowDone()" title="Show/hide entries already marked Done tonight (re-play or restore them)">&#x2713; Done</button>
                         <button class="rotation-refresh-btn" onclick="fetchRotation()" title="Refresh the rotation list from the server">Refresh</button>
                         <button class="rotation-autoorder-btn" onclick="autoOrderRotation()" title="Reorder the queue for fairness — new singers up, no one twice in a row, avoid long waits. Never touches rows 1-3.">Reorder</button>
+                        <button class="rotation-autoorder-help-btn" onclick="openAutoOrderExplainer()" title="How Auto Order decides the order (with worked examples)" aria-label="How Auto Order works">?</button>
                         <button class="rotation-add-btn" onclick="toggleRotationAddForm()" title="Add a new singer and song to the rotation queue">+ Add</button>
                         <button class="rotation-new-btn" onclick="archiveRotation()" title="Archive tonight's rotation and start fresh for a new event">New Rotation</button>
                     </div>
@@ -190,6 +191,13 @@
                         <div class="control-half" style="display:flex;align-items:flex-end;">
                             <button class="system-btn" onclick="openAvModal()">AV Output</button>
                         </div>
+                    </div>
+                </div>
+
+                <div class="system-subsection">
+                    <div class="system-subsection-label">Rotation</div>
+                    <div class="system-subsection-row">
+                        <button class="system-btn" onclick="openAutoOrderExplainer()" title="Rules, scoring and worked examples for the automatic rotation order, plus a dry run on tonight's queue">How Auto Order works</button>
                     </div>
                 </div>
 
@@ -866,6 +874,24 @@
     </div>
 
     <!-- Manage Filler Music Modal -->
+    <div id="ao-explain-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeAutoOrderExplainer()">
+        <div class="modal-content ao-modal-content" role="dialog" aria-modal="true" aria-labelledby="ao-explain-title">
+            <div class="modal-header">
+                <h3 id="ao-explain-title">How Auto Order works</h3>
+                <div class="ao-header-actions">
+                    <button class="system-btn ao-print-btn" onclick="printAutoOrderExplainer()" title="Print this guide, or save it as a PDF">Print / PDF</button>
+                    <button class="modal-close" onclick="closeAutoOrderExplainer()" title="Close">&times;</button>
+                </div>
+            </div>
+            <div class="ao-tabs" role="tablist">
+                <button class="ao-tab active" role="tab" data-tab="how" onclick="aoShowTab('how')">How it works</button>
+                <button class="ao-tab" role="tab" data-tab="examples" onclick="aoShowTab('examples')">Examples</button>
+                <button class="ao-tab" role="tab" data-tab="live" onclick="aoShowTab('live')">Tonight's queue</button>
+            </div>
+            <div id="ao-explain-body" class="ao-body"><div class="ao-muted">Loading&hellip;</div></div>
+        </div>
+    </div>
+
     <div id="filler-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeFillerModal()">
         <div class="modal-content filler-modal-content" role="dialog" aria-modal="true" aria-labelledby="filler-modal-title">
             <div class="modal-header">
@@ -1134,6 +1160,7 @@
       });
     </script>
     <script src="/static/app.js?v={{ app_version }}"></script>
+    <script src="/static/auto_order_explain.js?v={{ app_version }}"></script>
 
     <!-- VNC Preview (noVNC ES6 module) -->
     <script type="module">
@@ -1466,7 +1493,7 @@
                 </div>
                 <div class="sing-requests-row">
                     <label><input type="checkbox" id="sing-auto-reorder-toggle" onchange="toggleSingAutoReorder(this.checked)"> <strong>Auto Order the rotation</strong></label>
-                    <p class="sing-hint">Whenever a new entry is added, automatically re-run Auto Order to keep the rotation fair — new singers move up, nobody sings twice in a row, and long waits are avoided. Rows 1&ndash;3 are never touched. You can also reorder any time with the &ldquo;Auto Order&rdquo; button in the Rotation header.</p>
+                    <p class="sing-hint">Whenever a new entry is added, automatically re-run Auto Order to keep the rotation fair — new singers move up, nobody sings twice in a row, and long waits are avoided. Rows 1&ndash;3 are never touched. You can also reorder any time with the &ldquo;Reorder&rdquo; button in the Rotation header. <a href="#" onclick="openAutoOrderExplainer(); return false;">How does it decide?</a></p>
                 </div>
                 <div class="sing-requests-row">
                     <label><input type="checkbox" id="sing-accept-make-toggle" onchange="toggleSingAcceptMake(this.checked)"> <strong>Accept &ldquo;make it&rdquo; requests tonight</strong></label>
