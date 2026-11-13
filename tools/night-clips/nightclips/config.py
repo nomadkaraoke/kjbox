@@ -84,3 +84,65 @@ def _load_handles(table: dict, path: Path) -> dict[str, str]:
             raise SystemExit(f"ERROR: {path} [handles]: {name!r} = {raw!r} isn't a valid Instagram handle")
         out[" ".join(name.casefold().split())] = handle
     return out
+
+
+_HANDLE_LINE_RE = re.compile(r'^(\s*)("(?:[^"\\]|\\.)*"|\'[^\']*\'|[A-Za-z0-9_-]+)(\s*=\s*)("(?:[^"\\]|\\.)*"|\'[^\']*\')(.*)$')
+
+
+def _toml_key(name: str) -> str:
+    return '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def save_handle(path: Path, name: str, handle: str) -> None:
+    """Set ``name``'s entry in the ``[handles]`` table of ``path``, keeping every comment and line.
+
+    Updates each existing entry whose name matches (the way consent matches: case and spaces
+    ignored), or appends one at the end of the table. ``handle`` "" writes the "no handle yet"
+    placeholder. The file is re-parsed before it replaces the old one, so a bad write never lands.
+    """
+    text = path.read_text(encoding="utf-8") if path.exists() else DEFAULT_CONFIG_TOML
+    lines = text.splitlines(keepends=True)
+    key = " ".join(name.casefold().split())
+    value = '"' + handle + '"'  # normalize_handle output is [a-z0-9._] only
+    section, start, end, hit = None, None, len(lines), False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and not stripped.startswith("[["):
+            if section == "handles" and end == len(lines):
+                end = i
+            section = stripped.strip("[]").strip()
+            if section == "handles":
+                start, end = i, len(lines)
+            continue
+        if section != "handles":
+            continue
+        m = _HANDLE_LINE_RE.match(line.rstrip("\r\n"))
+        if not m:
+            continue
+        try:
+            raw_key = next(iter(tomllib.loads(f"{m.group(2)} = 1")))
+        except (tomllib.TOMLDecodeError, StopIteration):
+            continue
+        if " ".join(raw_key.casefold().split()) == key:
+            nl = line[len(line.rstrip("\r\n")):]
+            lines[i] = f"{m.group(1)}{m.group(2)}{m.group(3)}{value}{m.group(5)}{nl}"
+            hit = True
+    if not hit:
+        entry = f"{_toml_key(name)} = {value}\n"
+        if start is None:
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+            lines += ["\n", "[handles]\n", entry]
+        else:
+            # after the table's last non-blank line, so it sits with the other entries
+            at = end
+            while at - 1 > start and not lines[at - 1].strip():
+                at -= 1
+            if at > 0 and not lines[at - 1].endswith("\n"):
+                lines[at - 1] += "\n"
+            lines.insert(at, entry)
+    new = "".join(lines)
+    tomllib.loads(new)  # never write a file that won't load
+    tmp = path.with_suffix(".toml.tmp")
+    tmp.write_text(new, encoding="utf-8")
+    tmp.replace(path)

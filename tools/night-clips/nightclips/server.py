@@ -33,9 +33,11 @@ from typing import Callable
 
 from . import select as sel
 from .clips import IG_MAX_S, Clip, trim_for_instagram
+from .config import normalize_handle, save_handle
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_BODY = 1_000_000
+MIN_CUT_S = 1.0  # shortest cut the review page lets you make
 CUSTOM_IDX = -1  # reassign target meaning "Other (labelled by hand)"
 
 
@@ -92,6 +94,7 @@ class ReviewState:
                     "custom": False,
                     "note": "",
                     "trim_start": 0.0,
+                    "trim_end": None,  # None = to the clip's end (at most IG_MAX_S after trim_start)
                     "performers": None,  # hand-edited names (resolved dicts), None = as logged
                 }
             )
@@ -170,6 +173,8 @@ class ReviewState:
                     self._restatus(it)
                 try:
                     it["trim_start"] = self._clamp_start(it, float(a.get("trim_start") or 0.0))
+                    end = a.get("trim_end")
+                    it["trim_end"] = self._clamp_end(it, it["trim_start"], None if end is None else float(end))
                 except (TypeError, ValueError):
                     pass
             self.selected = [
@@ -197,10 +202,11 @@ class ReviewState:
                 "assignments": {
                     i["id"]: {"song_idx": i["song_idx"], "reviewed": i["reviewed"],
                               "custom": i["custom"], "note": i["note"], "trim_start": i["trim_start"],
+                              "trim_end": i["trim_end"],
                               "performers": None if i["performers"] is None else [p["name"] for p in i["performers"]]}
                     for i in self.items
                     if i["song_idx"] != i["auto_song_idx"] or i["reviewed"] or i["custom"] or i["note"]
-                    or i["trim_start"] or i["performers"] is not None
+                    or i["trim_start"] or i["trim_end"] is not None or i["performers"] is not None
                 },
             }
             tmp = self.draft_path.with_suffix(".tmp")
@@ -255,15 +261,71 @@ class ReviewState:
 
     def _clamp_start(self, it: dict, start: float) -> float:
         dur = it.get("duration") or 0.0
-        return round(min(max(0.0, start), max(0.0, dur - IG_MAX_S)), 1)
+        return round(min(max(0.0, start), max(0.0, dur - MIN_CUT_S)), 1)
 
-    def set_trim_start(self, clip_id: str, start: float) -> dict:
+    def _clamp_end(self, it: dict, start: float, end: float | None) -> float | None:
+        """None when the cut simply runs to the clip's end (or the 59s limit)."""
+        dur = it.get("duration") or 0.0
+        if end is None or not dur:
+            return None
+        end = round(min(max(start + MIN_CUT_S, float(end)), dur, start + IG_MAX_S), 1)
+        natural = min(dur, start + IG_MAX_S)
+        return None if end >= natural - 0.05 else end
+
+    def set_trim(self, clip_id: str, start: float, end: float | None = None) -> dict:
+        """Where the posted cut starts and ends (seconds into the clip). ``end`` None = no limit."""
         with self.lock:
             it = self.by_id.get(clip_id)
             if not it:
                 raise ValueError("unknown clip")
+            if not it.get("duration"):
+                raise ValueError("this clip's length is unknown, so it can't be cut")
             it["trim_start"] = self._clamp_start(it, start)
+            it["trim_end"] = self._clamp_end(it, it["trim_start"], end)
             return it
+
+    def set_trim_start(self, clip_id: str, start: float) -> dict:
+        return self.set_trim(clip_id, start, self.by_id[clip_id]["trim_end"] if clip_id in self.by_id else None)
+
+    # -- handles -------------------------------------------------------------
+    def set_handle(self, name: str, raw: str) -> dict:
+        """Save ``name``'s Instagram handle to the config's ``[handles]`` and use it straight away.
+
+        Empty ``raw`` forgets it. Like ``[handles]`` at startup, it only tags performers who said
+        yes; on this night the edit wins over a handle the singer typed (Andrew is looking at it).
+        """
+        name = " ".join((name or "").split())
+        if not name:
+            raise ValueError("no singer name")
+        handle = normalize_handle(raw) if (raw or "").strip() else ""
+        if handle is None:
+            raise ValueError(f"{raw!r} isn't a valid Instagram handle")
+        with self.lock:
+            if self.cfg.get("path"):
+                save_handle(Path(self.cfg["path"]), name, handle)
+            key = sel.name_key(name)
+            handles = dict(self.cfg.get("handles") or {})
+            if handle:
+                handles[key] = handle
+            else:
+                handles.pop(key, None)
+            self.cfg["handles"] = handles
+            tagged = 0
+            for song in self.songs:
+                for p in song.get("performers") or []:
+                    if sel.name_key(p.get("name", "")) != key:
+                        continue
+                    if "night_instagram" not in p:
+                        p["night_instagram"] = "" if p.get("handle_source") == "config" else (p.get("instagram") or "")
+                    if p.get("consent") != "yes":
+                        continue
+                    p["instagram"] = handle or p["night_instagram"] or None
+                    p["handle_source"] = "edited" if handle else ("night" if p["night_instagram"] else None)
+                    tagged += bool(p["instagram"])
+            for it in self.items:
+                if it["performers"] is not None and any(sel.name_key(p["name"]) == key for p in it["performers"]):
+                    it["performers"] = self.resolve_performers([p["name"] for p in it["performers"]])
+            return {"name": name, "handle": handle, "tagged": tagged}
 
     def validate_selection(self, selected: list[str], allow_unknown: bool) -> list[str]:
         errors = []
@@ -299,7 +361,7 @@ class ReviewState:
         self.save_draft(selected, caption)
         try:
             files = [self.trim(self.clips[c].path, self.clips[c].duration, self.work_dir / "trimmed",
-                               start=self.by_id[c]["trim_start"])
+                               start=self.by_id[c]["trim_start"], end=self.by_id[c]["trim_end"])
                      for c in selected]
         except RuntimeError as e:
             return {"ok": False, "errors": [str(e)]}
@@ -525,8 +587,16 @@ def make_handler(state: ReviewState):
                     state.set_performers(str(body.get("clip_id")), str(body.get("names") or ""))
                     return self._json({"ok": True, "state": state.to_json()})
                 if path == "/api/trim":
-                    state.set_trim_start(str(body.get("clip_id")), float(body.get("start") or 0))
+                    end = body.get("end")
+                    if "end" in body:
+                        state.set_trim(str(body.get("clip_id")), float(body.get("start") or 0),
+                                       None if end is None else float(end))
+                    else:
+                        state.set_trim_start(str(body.get("clip_id")), float(body.get("start") or 0))
                     return self._json({"ok": True, "state": state.to_json()})
+                if path == "/api/handle":
+                    res = state.set_handle(str(body.get("name") or ""), str(body.get("handle") or ""))
+                    return self._json({"ok": True, **res, "state": state.to_json()})
                 if path == "/api/caption":
                     return self._json({"ok": True, "caption": state.default_caption(_ids(body))})
                 if path == "/api/draft":

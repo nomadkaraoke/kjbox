@@ -217,3 +217,36 @@ def test_trim_short_clip_with_start_still_cuts(tmp_path):
     assert C.trim_for_instagram(str(src), 30.0, tmp_path / "t", runner=fake, start=5) == str(tmp_path / "t" / "a@5s.mp4")
     with pytest.raises(RuntimeError, match="past the end"):
         C.trim_for_instagram(str(src), 30.0, tmp_path / "t", runner=fake, start=30)
+
+
+def test_trim_with_end_cuts_start_to_end(tmp_path):
+    src = tmp_path / "a.mp4"
+    src.write_bytes(b"x")
+    seen = []
+
+    def fake(cmd, **kw):
+        seen.append(cmd)
+        Path(cmd[-1]).write_bytes(b"cut")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    # cut off the first 3s and keep 10s
+    out = C.trim_for_instagram(str(src), 30.0, tmp_path / "t", runner=fake, start=3, end=13)
+    assert out == str(tmp_path / "t" / "a@3s-13s.mp4")
+    assert seen[-1][seen[-1].index("-t") + 1] == "10"
+    # only limit the length: from the start, stream copy is fine
+    out = C.trim_for_instagram(str(src), 30.0, tmp_path / "t", runner=fake, start=0, end=8)
+    assert out == str(tmp_path / "t" / "a@0s-8s.mp4") and "copy" in seen[-1]
+    assert seen[-1][seen[-1].index("-t") + 1] == "8"
+    # an end past the 59s limit is capped
+    C.trim_for_instagram(str(src), 200.0, tmp_path / "t", runner=fake, start=10, end=150)
+    assert seen[-1][seen[-1].index("-t") + 1] == "59"
+    # an end at or past the clip's own end with no start cut posts the original
+    assert C.trim_for_instagram(str(src), 30.0, tmp_path / "t", runner=fake, start=0, end=30) == str(src)
+
+
+def test_cut_window():
+    assert C.cut_window(30.0) == (0.0, 30.0)
+    assert C.cut_window(100.0) == (0.0, 59.0)
+    assert C.cut_window(100.0, 50, None) == (50.0, 100.0)
+    assert C.cut_window(100.0, 10, 20) == (10.0, 20.0)
+    assert C.cut_window(100.0, 10, 500) == (10.0, 69.0)

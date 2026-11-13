@@ -126,47 +126,137 @@
   }
 
   const isLong = (c) => c.duration && c.duration > S.ig_max_s;
-  const cutEnd = (c) => (c.trim_start || 0) + S.ig_max_s;
+  const cutStart = (c) => c.trim_start || 0;
+  // Where the posted cut ends: the chosen end, else the clip's end, never more than 59s after the start.
+  const cutEnd = (c) => Math.min(c.duration || Infinity,
+    c.trim_end === null || c.trim_end === undefined ? Infinity : c.trim_end, cutStart(c) + S.ig_max_s);
+  const isCut = (c) => c.duration && (cutStart(c) > 0 || cutEnd(c) < c.duration - 0.05);
+  const fmtT = (s) => { const m = Math.floor(s / 60); const r = s - m * 60; return `${m}:${r.toFixed(1).padStart(4, '0')}`; };
 
-  // Plays only the part Instagram will get: starts at the chosen start, stops at start + 59s.
-  function previewVideo(c) {
-    const v = h('video', { src: `/media/${c.id}`, controls: true, autoplay: true, playsinline: true, preload: 'auto' });
-    if (isLong(c)) {
-      v.dataset.clip = c.id;
-      v.addEventListener('loadedmetadata', () => { v.currentTime = c.trim_start || 0; });
-      v.addEventListener('timeupdate', () => {
-        if (v.currentTime >= cutEnd(c)) { v.pause(); v.currentTime = c.trim_start || 0; }
-      });
-    }
-    return v;
+  async function saveTrim(c, start, end) {
+    const res = await api('/api/trim', { clip_id: c.id, start, end });
+    if (!res.ok) { setStatus((res.errors || ['trim failed']).join('\n'), 'err'); return false; }
+    const now = res.state.clips.find((x) => x.id === c.id);
+    const mine = S.clips.find((x) => x.id === c.id);
+    mine.trim_start = now.trim_start;
+    mine.trim_end = now.trim_end;
+    renderGrid();
+    renderPanel();
+    return true;
   }
 
-  function trimControl(c) {
-    const max = Math.max(0, c.duration - S.ig_max_s);
-    const label = h('span', { class: 'trim-lbl' });
-    const show = (s) => {
-      label.textContent = `Cut starts ${fmtDur(s)} · ends ${fmtDur(Math.min(c.duration, s + S.ig_max_s))} (of ${fmtDur(c.duration)})`;
+  // The player plays only the part that gets posted (start → end), with its own seek bar and
+  // ±1s/±5s buttons: Chrome drops the native timeline on a player this narrow.
+  function previewVideo(c) {
+    const v = h('video', { src: `/media/${c.id}`, autoplay: true, playsinline: true, preload: 'auto' });
+    v.dataset.clip = c.id;
+    const dur = () => (Number.isFinite(v.duration) ? v.duration : (c.duration || 0));
+    const seek = h('input', { type: 'range', min: '0', max: String(c.duration || 0), step: '0.1', value: '0',
+      'aria-label': 'Seek within the clip' });
+    const time = h('span', { class: 'ptime' });
+    const playBtn = h('button', { type: 'button', class: 'pbtn', 'aria-label': 'Play or pause' }, '⏸');
+    const window_ = h('div', { class: 'pwin' });
+    const draw = () => {
+      const d = dur() || 1;
+      seek.max = String(d);
+      seek.value = String(v.currentTime);
+      time.textContent = `${fmtT(v.currentTime)} / ${fmtT(d)}`;
+      playBtn.textContent = v.paused ? '▶' : '⏸';
+      window_.style.left = `${(cutStart(c) / d) * 100}%`;
+      window_.style.width = `${((cutEnd(c) - cutStart(c)) / d) * 100}%`;
     };
-    show(c.trim_start || 0);
-    const range = h('input', {
-      type: 'range', min: 0, max: String(max), step: '0.5', value: String(c.trim_start || 0),
-      'aria-label': 'Where the 59 second cut starts',
-      oninput: (e) => {
-        const s = Number(e.target.value);
-        show(s);
-        c.trim_start = s;  // live, so the preview below follows
-        const v = document.querySelector(`video[data-clip="${c.id}"]`);
-        if (v) { v.currentTime = s; }
-      },
-      onchange: async (e) => {
-        const res = await api('/api/trim', { clip_id: c.id, start: Number(e.target.value) });
-        if (!res.ok) return setStatus((res.errors || ['trim failed']).join('\n'), 'err');
-        S.clips.find((x) => x.id === c.id).trim_start = res.state.clips.find((x) => x.id === c.id).trim_start;
-        renderPanel();
-      },
+    // Playing past the cut's end loops back to its start, so you only ever hear what's posted.
+    // Seeking by hand outside the cut is allowed (to find a new start or end) and just pauses at the end.
+    let manual = false;
+    v.addEventListener('loadedmetadata', () => { v.currentTime = cutStart(c); draw(); });
+    v.addEventListener('timeupdate', () => {
+      if (!manual && v.currentTime >= cutEnd(c)) { v.pause(); v.currentTime = cutStart(c); }
+      draw();
     });
-    return h('div', { class: 'trim' }, label, range,
-      h('div', { class: 'muted' }, 'Press play to preview exactly this cut. The upload snaps to the nearest earlier keyframe, so it may start up to a second or so sooner.'));
+    v.addEventListener('play', () => {
+      if (v.currentTime < cutStart(c) - 0.05 || v.currentTime >= cutEnd(c) - 0.05) { v.currentTime = cutStart(c); manual = false; }
+      else manual = false;
+      draw();
+    });
+    v.addEventListener('pause', draw);
+    v.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
+    const jump = (t) => { manual = true; v.currentTime = Math.max(0, Math.min(dur(), t)); draw(); };
+    seek.addEventListener('input', () => jump(Number(seek.value)));
+    playBtn.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
+    const step = (d, label) => h('button', { type: 'button', class: 'pbtn', 'aria-label': `${label}`, title: label,
+      onclick: () => jump(v.currentTime + d) }, d > 0 ? `+${d}` : `${d}`);
+    const here = (which) => h('button', {
+      type: 'button', class: 'pbtn wide',
+      title: which === 'start' ? 'Posted cut starts here (cuts off everything before)' : 'Posted cut ends here (cuts off everything after)',
+      onclick: async () => {
+        const t = Math.round(v.currentTime * 10) / 10;
+        v.pause();
+        if (which === 'start') {
+          const end = c.trim_end !== null && c.trim_end !== undefined && c.trim_end > t ? c.trim_end : null;
+          await saveTrim(c, t, end);
+        } else {
+          await saveTrim(c, Math.min(cutStart(c), Math.max(0, t - 1)), t);
+        }
+      },
+    }, which === 'start' ? '⟦ Start here' : 'End here ⟧');
+    const bar = h('div', { class: 'player' },
+      h('div', { class: 'pseek' }, window_, seek),
+      h('div', { class: 'prow' }, playBtn, step(-5, 'Back 5 seconds'), step(-1, 'Back 1 second'),
+        step(1, 'Forward 1 second'), step(5, 'Forward 5 seconds'), time),
+      h('div', { class: 'prow' }, here('start'), here('end')));
+    return { video: v, bar };
+  }
+
+  // Start and length of the posted cut, for every clip. Typing a number or using
+  // "Start here" / "End here" in the player both land here.
+  function trimControl(c) {
+    const start = cutStart(c);
+    const len = Math.round((cutEnd(c) - start) * 10) / 10;
+    const maxLen = Math.min(S.ig_max_s, c.duration - start);
+    const startIn = h('input', { type: 'number', min: '0', max: String(Math.max(0, c.duration - 1)), step: '0.5',
+      value: String(start), 'aria-label': 'Seconds to cut off the start' });
+    const lenIn = h('input', { type: 'number', min: '1', max: String(Math.round(maxLen * 10) / 10), step: '0.5',
+      value: String(len), 'aria-label': 'Length in seconds' });
+    const apply = async () => {
+      const s = Math.max(0, Number(startIn.value) || 0);
+      const l = Number(lenIn.value);
+      const end = Number.isFinite(l) && l > 0 ? s + l : null;
+      // A length that just reaches the clip's end (or the 59s limit) means "no limit": keep it
+      // following the start when you move it.
+      const natural = Math.min(c.duration, s + S.ig_max_s);
+      await saveTrim(c, s, end === null || end >= natural - 0.05 ? null : end);
+    };
+    startIn.addEventListener('change', apply);
+    lenIn.addEventListener('change', apply);
+    const kids = [
+      h('div', { class: 'trim-row' },
+        h('label', {}, 'Cut first ', startIn, ' s'),
+        h('label', {}, 'Length ', lenIn, ' s')),
+      h('div', { class: 'trim-lbl' + (isCut(c) ? ' on' : '') },
+        isCut(c) ? `✂ Posts ${fmtT(start)} → ${fmtT(cutEnd(c))} (${len}s of ${fmtDur(c.duration)})`
+          : `Posts the whole clip (${fmtDur(c.duration)})`),
+    ];
+    if (isCut(c)) {
+      kids.push(h('button', { type: 'button', class: 'linkish', onclick: () => saveTrim(c, 0, null) },
+        isLong(c) ? 'Reset (first 59s)' : 'Reset (whole clip)'));
+    }
+    if (isLong(c) && !isCut(c)) {
+      kids[1].textContent = `✂ Posts the first ${fmtDur(S.ig_max_s)} of ${fmtDur(c.duration)} (Instagram's limit)`;
+    }
+    return h('div', { class: 'trim' }, ...kids);
+  }
+
+  // Instagram handle for a singer, saved to [handles] in config.toml for every future night too.
+  async function editHandle(name, current) {
+    const v = prompt(`Instagram handle for ${name}?\nSaved to your config for future nights too. Leave empty to forget it.`, current ? `@${current}` : '');
+    if (v === null) return;
+    const res = await api('/api/handle', { name, handle: v });
+    if (!res.ok) return setStatus((res.errors || ['saving the handle failed']).join('\n'), 'err');
+    applyState(res.state, { keepSelection: true });
+    await selectionChanged();
+    if (!res.handle) setStatus(`Forgot ${name}'s handle.`, 'ok');
+    else if (res.tagged) setStatus(`Saved @${res.handle} for ${name}.${captionDirty ? ' Click Regenerate to put it in the caption.' : ''}`, 'ok');
+    else setStatus(`Saved @${res.handle} for ${name}, but they're not tagged tonight: they didn't say yes to photos.`);
   }
 
   function noteInput(c) {
@@ -188,8 +278,10 @@
     const pos = selected.indexOf(c.id);
     const isSel = pos >= 0;
     const media = h('div', { class: 'media' });
+    let player = null;
     if (playing === c.id && c.local) {
-      media.append(previewVideo(c));
+      player = previewVideo(c);
+      media.append(player.video);
     } else {
       if (c.has_thumb) media.append(h('img', { src: `/thumbs/${c.id}.jpg`, alt: '', loading: 'lazy' }));
       else media.append(h('div', { class: 'noimg' }, c.error || 'no thumbnail'));
@@ -202,9 +294,9 @@
     }
     if (isSel) media.append(h('span', { class: 'order-badge' }, pos + 1));
     if (c.duration) {
-      const long = c.duration > S.ig_max_s;
-      media.append(h('span', { class: 'dur', title: long ? `Instagram allows up to a minute per video; ${fmtDur(S.ig_max_s)} is posted (choose where it starts below)` : '' },
-        long ? `${fmtDur(c.duration)} → ${fmtDur(S.ig_max_s)}` : fmtDur(c.duration)));
+      const cut = isCut(c) || isLong(c);
+      media.append(h('span', { class: 'dur', title: cut ? `${fmtDur(cutEnd(c) - cutStart(c))} of this clip is posted (set the cut below)` : '' },
+        cut ? `${fmtDur(c.duration)} → ${fmtDur(cutEnd(c) - cutStart(c))}` : fmtDur(c.duration)));
     }
 
     const info = h('div', { class: 'info' },
@@ -215,7 +307,9 @@
       song ? h('div', { class: 'performers' }, perfsOf(c).map((p) => h('span', {
         class: `perf ${p.consent}`, title: `${String(p.consent).toUpperCase()}: ${REASONS[p.reason] || p.reason}`,
       }, { yes: '✓', no: '✗', unknown: '?' }[p.consent] || '?', ' ', p.name,
-      p.instagram ? ` @${p.instagram}` : '')),
+      p.instagram ? ` @${p.instagram}` : '',
+      p.consent === 'yes' ? h('button', { class: 'edit-handle', type: 'button', title: `Set ${p.name}'s Instagram handle`,
+        'aria-label': `Set ${p.name}'s Instagram handle`, onclick: () => editHandle(p.name, p.instagram) }, p.instagram ? '✎' : '+@') : null)),
       h('button', { class: 'edit-perf', type: 'button', title: 'Edit who is singing in this clip', 'aria-label': 'Edit singers',
         onclick: () => editPerformers(c) }, '✎'),
       c.performers ? h('span', { class: 'muted' }, ` (edited; logged as ${song.performers.map((p) => p.name).join(' & ')})`) : '') : null,
@@ -228,7 +322,7 @@
     if (c.reviewed) info.append(h('div', { class: 'reviewed' }, '✓ singer checked'));
     info.append(reassignSelect(c));
     if (c.custom) info.append(noteInput(c));
-    if (isLong(c)) info.append(trimControl(c));
+    if (c.local && c.duration) info.append(trimControl(c));
 
     const canSelect = c.local && (c.status === 'eligible' || c.status === 'unknown');
     const full = !isSel && selected.length >= S.max_clips;
@@ -239,7 +333,7 @@
       onclick: () => toggle(c),
     }, isSel ? `✓ Selected #${pos + 1}` : (full && canSelect ? `Full (${S.max_clips})` : 'Select')));
 
-    return h('article', { class: `card st-${c.status}${isSel ? ' selected' : ''}`, id: `clip-${c.id}` }, media, info);
+    return h('article', { class: `card st-${c.status}${isSel ? ' selected' : ''}`, id: `clip-${c.id}` }, media, player ? player.bar : null, info);
   }
 
   function reassignSelect(c) {
@@ -277,7 +371,7 @@
         c.has_thumb ? h('img', { src: `/thumbs/${c.id}.jpg`, alt: '' }) : h('span'),
         h('span', { class: 'lbl', title: s ? `${s.singer} — ${s.song}` : c.filename },
           `${hhmm(c.start)} ${s ? perfsOf(c).map((p) => p.name).join(' & ') : (c.note || '?')}`,
-          isLong(c) ? ` ✂${fmtDur(c.trim_start || 0)}` : '',
+          isCut(c) || isLong(c) ? ` ✂${fmtDur(cutStart(c))}–${fmtDur(cutEnd(c))}` : '',
           c.status === 'unknown' ? ' (?)' : ''),
         h('span', { class: 'mv' },
           s ? h('button', { type: 'button', 'aria-label': 'Edit singers', title: 'Edit who is singing', onclick: () => editPerformers(c) }, '✎') : '',
@@ -301,7 +395,10 @@
     if (!counts.length) ps.append(h('li', { class: 'muted' }, 'No clips selected.'));
     else counts.forEach((r) => ps.append(h('li', {},
       h('span', { class: 'cnt' }, `${r.n}×`), ' ', r.name,
-      r.handle ? h('span', { class: 'muted' }, ` @${r.handle}`) : '')));
+      r.handle ? h('span', { class: 'muted' }, ` @${r.handle}`) : '',
+      r.person ? h('button', { class: 'edit-handle', type: 'button', title: `Set ${r.name}'s Instagram handle`,
+        'aria-label': `Set ${r.name}'s Instagram handle`, onclick: () => editHandle(r.name, r.handle) },
+      r.handle ? '✎' : '+ @handle') : null)));
 
     updateCapCount();
   }
@@ -311,8 +408,8 @@
   function clipsPerSinger() {
     const clips = byId();
     const rows = new Map();
-    const bump = (key, name, handle) => {
-      const r = rows.get(key) || { name, handle: '', n: 0, order: rows.size };
+    const bump = (key, name, handle, person) => {
+      const r = rows.get(key) || { name, handle: '', n: 0, order: rows.size, person };
       r.n += 1;
       if (handle && !r.handle) r.handle = handle;
       rows.set(key, r);
@@ -326,10 +423,10 @@
           const key = p.name.trim().toLowerCase().replace(/\s+/g, ' ');
           if (seen.has(key)) return;
           seen.add(key);
-          bump(key, p.name, (p.instagram || '').replace(/^@/, ''));
+          bump(key, p.name, (p.instagram || '').replace(/^@/, ''), p.consent === 'yes');
         });
       } else if (c && c.note) {
-        bump(`other:${c.note}`, `✎ ${c.note}`, '');
+        bump(`other:${c.note}`, `✎ ${c.note}`, '', false);
       }
     }
     return [...rows.values()].sort((a, b) => b.n - a.n || a.order - b.order);

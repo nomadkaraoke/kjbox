@@ -72,8 +72,18 @@ On the review page:
 - **Other (not singing)**: the dropdown on any clip has "✎ Other…". Write a label (e.g. "Costume contest winners 🏆")
   and the clip becomes selectable regardless of consent data (your call), with the label as its caption line.
   Other clips are never pre-selected and must have a label to publish.
-- **Clips over a minute** get a start slider (0.5s steps). Play shows exactly the chosen 59s window. A cut from the start of the clip is a
-  quick stream copy; a cut from a later start is re-encoded (a few seconds per clip) so it matches the preview exactly.
+- **The player** has its own seek bar, ⏯ and −5/−1/+1/+5 second buttons (Chrome hides the native timeline on a player
+  this narrow). The pink strip under the seek bar is the part that gets posted. Play stays inside that part and loops
+  back to its start; seeking by hand can go anywhere, so you can find a new start or end.
+- **Cutting any clip**: in the player, **⟦ Start here** cuts off everything before the playhead and **End here ⟧** everything
+  after it. Or type **Cut first N s** and **Length N s** on the card. Clips over a minute are capped at 59s from the start
+  you choose. **Reset** goes back to the whole clip (or its first 59s). The cut is saved in the draft. A cut from the start of
+  the clip is a quick stream copy; a cut from a later start is re-encoded (a few seconds per clip) so it matches the preview exactly.
+- **Instagram handles**: click **+@** (or ✎ next to a handle) on a singer who said yes, on a card or in **Clips per singer**,
+  and type their handle. It's saved to `[handles]` in `config.toml` straight away, so future nights get it too. That line is
+  updated in place and its comment kept; a new name is added at the end of the table. Tonight's clips and the caption
+  use it at once. On this night your edit wins over a handle the singer typed. Empty forgets it. If you've edited the
+  caption by hand, click **Regenerate** to pick it up.
 - **Singers not yet covered** lists the consenting singers who have a clip but none selected.
 - **Clips per singer** counts how many selected clips each singer is in (a duet counts for both), most first, with their @handle. "Other" clips count under their label.
 - The **Caption** follows the selection until you edit it by hand. **Regenerate** resets it.
@@ -170,8 +180,8 @@ footer = "#karaoke #nomadkaraoke"
 match the way consent does (case and extra spaces are ignored), so use the name they sign up with.
 A handle the singer gave on the night always wins, and nobody is tagged unless they said yes to
 photos. An empty `""` means no handle yet. `@name` and `instagram.com/name` links are accepted; an invalid handle stops the run with
-an error. If you change it while the review page is open, restart `night-clips` and click
-**Regenerate** on the caption.
+an error. Handles set on the review page are written here for you. If you edit the file by hand while the review page is
+open, restart `night-clips` and click **Regenerate** on the caption.
 
 ## Files
 
@@ -182,7 +192,7 @@ an error. If you change it while the review page is open, restart `night-clips` 
   <night>/
     thumbs/*.jpg
     draft.json                # selection, order, caption, manual reassignments
-    trimmed/*.mp4             # first-59s copies of clips over a minute
+    trimmed/*.mp4             # cut copies: first 59s of long clips, or the start/end you chose
     publish_request.json      # what the publisher was asked to upload
     publish-*.png             # screenshots when a publish step fails
     posted.json               # written by "Mark as posted"
