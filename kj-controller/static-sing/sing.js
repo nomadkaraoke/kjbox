@@ -3625,6 +3625,7 @@ async function submitSelection() {
   rememberRequestId(TOKEN, data.request.id, data.request.edit_token,
     friend ? data.request.singer_name || friend.name : "");
   state.friend = null;
+  resetSearchDraft();
   // "You're on the list!" at the top of the done screen, so nobody wonders
   // whether it went through (live 2026-10-22: repeat taps, re-searches).
   state.justSent = {
@@ -3635,6 +3636,19 @@ async function submitSelection() {
   state.step = "done";
   state._navReplace = true;   // Back returns past the search, not into it
   render();
+}
+
+// Once a song is sent, the next visit to the search box starts empty: the
+// singer's next search shouldn't open on the last song's text and results
+// (Andrew, 2026-11-13). Covers every way back — "Request another song", the
+// Request tab, browser Back — because the search card renders from state.
+function resetSearchDraft() {
+  state.query = "";
+  state.selected = null;
+  state.showMakeForm = false;
+  state.makeArtist = "";
+  state.makeTitle = "";
+  state.makePrefill = { artist: "", title: "" };
 }
 
 // One line right after sending, so nobody wonders whether it went through
@@ -3748,6 +3762,7 @@ async function sendPicked() {
       state.changeRequestId = null;
       state.changeEditToken = null;
       state.changeSongLabel = "";
+      resetSearchDraft();
       state.step = "done";
       state._navReplace = true;
       render();
