@@ -180,7 +180,15 @@
     });
     v.addEventListener('pause', draw);
     v.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
-    const jump = (t) => { manual = true; v.currentTime = Math.max(0, Math.min(dur(), t)); draw(); };
+    // A seek inside the cut keeps looping it; one outside the cut (to hunt for a new start or end)
+    // pauses, so playback never runs on through footage that won't be posted.
+    const jump = (t) => {
+      const to = Math.max(0, Math.min(dur(), t));
+      manual = to < cutStart(c) - 0.05 || to >= cutEnd(c);
+      if (manual && !v.paused) v.pause();
+      v.currentTime = to;
+      draw();
+    };
     seek.addEventListener('input', () => jump(Number(seek.value)));
     playBtn.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
     const step = (d, label) => h('button', { type: 'button', class: 'pbtn', 'aria-label': `${label}`, title: label,

@@ -202,12 +202,12 @@ max_clips = 20
 [caption]
 footer = "#karaoke"
 
-[handles]
+[handles]   # regulars
 # regulars
 "Big Dave" = ""                 # 5 of last 20 nights
 "Mars W" = "main_mm_"           # keep me
 
-[other]
+[ "other" ]
 x = 1
 """
 

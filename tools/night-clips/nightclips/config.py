@@ -106,11 +106,11 @@ def save_handle(path: Path, name: str, handle: str) -> None:
     value = '"' + handle + '"'  # normalize_handle output is [a-z0-9._] only
     section, start, end, hit = None, None, len(lines), False
     for i, line in enumerate(lines):
-        stripped = line.strip()
+        stripped = line.split("#", 1)[0].strip()  # "[handles]   # regulars" is still the handles table
         if stripped.startswith("[") and not stripped.startswith("[["):
             if section == "handles" and end == len(lines):
                 end = i
-            section = stripped.strip("[]").strip()
+            section = stripped.strip("[]").strip().strip("\"'")
             if section == "handles":
                 start, end = i, len(lines)
             continue
