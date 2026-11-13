@@ -190,20 +190,29 @@ def thumbnail(path: str, out: Path, duration: float | None, runner: Runner = sub
     return out
 
 
-def _cut_cmd(path: str, start: float, out: Path) -> list[str]:
-    """ffmpeg command for the <=59s cut. From the start of the clip: stream copy (quick, lossless).
-    From a chosen start: re-encode, because a stream-copy seek lands on the keyframe *before* ``start``
-    and the upload would contain footage the review preview didn't show."""
-    base = ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:g}", "-i", path, "-t", f"{IG_MAX_S:g}",
+def _cut_cmd(path: str, start: float, out: Path, length: float = IG_MAX_S) -> list[str]:
+    """ffmpeg command for the cut (at most ``IG_MAX_S``). From the start of the clip: stream copy
+    (quick, lossless). From a chosen start: re-encode, because a stream-copy seek lands on the keyframe
+    *before* ``start`` and the upload would contain footage the review preview didn't show."""
+    base = ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:g}", "-i", path, "-t", f"{min(length, IG_MAX_S):g}",
             "-map", "0:v:0", "-map", "0:a?"]
     codec = ["-c", "copy"] if start <= 0 else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
                                                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k"]
     return base + codec + ["-movflags", "+faststart", str(out)]
 
 
+def cut_window(duration: float, start: float = 0.0, end: float | None = None) -> tuple[float, float]:
+    """``(start, end)`` actually posted: ``end`` defaults to the clip's end, and the window is
+    never longer than ``IG_MAX_S``."""
+    start = max(0.0, float(start or 0.0))
+    stop = duration if end is None else min(float(end), duration)
+    return start, min(stop, start + IG_MAX_S)
+
+
 def trim_for_instagram(path: str, duration: float | None, out_dir: Path, runner: Runner = subprocess.run,
-                       start: float = 0.0) -> str:
-    """Path to upload: the clip itself, or a copy cut to ``IG_MAX_S`` seconds from ``start``.
+                       start: float = 0.0, end: float | None = None) -> str:
+    """Path to upload: the clip itself, or a copy cut to ``start``..``end`` (at most ``IG_MAX_S``
+    seconds; ``end`` None = to the end of the clip, or ``IG_MAX_S`` after ``start``).
 
     Stream copy (no re-encode), so it's quick and keeps quality and rotation. The
     original in Camera Uploads is never touched.
@@ -216,12 +225,20 @@ def trim_for_instagram(path: str, duration: float | None, out_dir: Path, runner:
         if not duration:
             raise RuntimeError(f"can't read the length of {Path(path).name}")
     start = max(0.0, float(start or 0.0))
-    if start <= 0 and duration <= IG_MAX_S:
-        return path
     if start >= duration:
         raise RuntimeError(f"trim start {start:g}s is past the end of {Path(path).name}")
+    start, stop = cut_window(duration, start, end)
+    if stop <= start:
+        raise RuntimeError(f"trim end {stop:g}s is before the start of the cut in {Path(path).name}")
+    full_tail = stop >= duration  # runs to the clip's own end
+    if start <= 0 and full_tail:
+        return path
     p = Path(path)
-    out = out_dir / (p.name if start <= 0 else f"{p.stem}@{start:g}s{p.suffix}")
+    if end is None:  # window follows from start alone (old names, so cached cuts are reused)
+        name = p.name if start <= 0 else f"{p.stem}@{start:g}s{p.suffix}"
+    else:
+        name = f"{p.stem}@{start:g}s-{stop:g}s{p.suffix}"
+    out = out_dir / name
     if out.resolve() == Path(path).resolve():
         raise RuntimeError(f"trim output would overwrite the original {Path(path).name}")
     if out.exists() and out.stat().st_size > 0 and out.stat().st_mtime >= Path(path).stat().st_mtime:
@@ -229,7 +246,7 @@ def trim_for_instagram(path: str, duration: float | None, out_dir: Path, runner:
     out_dir.mkdir(parents=True, exist_ok=True)
     try:
         proc = runner(
-            _cut_cmd(path, start, out),
+            _cut_cmd(path, start, out, stop - start),
             capture_output=True,
             text=True,
             timeout=300,

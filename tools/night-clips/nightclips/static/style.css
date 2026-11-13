@@ -141,3 +141,21 @@ textarea:focus { border-color: var(--pink); outline: none; }
 .card .trim .muted { font-size: 11px; margin-top: 2px; }
 .edit-perf { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 0.95em; padding: 0 4px; }
 .edit-perf:hover { color: inherit; }
+
+/* clip player: own seek bar + step buttons (Chrome hides the native timeline on narrow players) */
+.player { padding: 6px 10px 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.pseek { position: relative; height: 24px; }
+.pseek input[type=range] { position: absolute; left: 0; right: 0; top: 0; height: 16px; width: 100%; margin: 0; }
+.pwin { position: absolute; top: 18px; height: 4px; min-width: 2px; background: rgba(255, 91, 184, 0.45); border-radius: 3px; pointer-events: none; }
+.prow { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.pbtn { border: 1px solid var(--line); background: #1a1a1a; border-radius: 6px; min-width: 32px; height: 28px; cursor: pointer; font-size: 12px; padding: 0 6px; }
+.pbtn:hover { border-color: var(--pink); }
+.pbtn.wide { flex: 1; }
+.ptime { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card .trim-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.card .trim-row input[type=number] { width: 4.2em; background: #111; border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; color: inherit; }
+.card .trim-lbl { color: var(--muted); margin-top: 4px; }
+.card .trim-lbl.on { color: var(--pink); }
+.linkish { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 11px; }
+.edit-handle { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 0.85em; padding: 0 2px; }
+.edit-handle:hover { color: var(--pink); }

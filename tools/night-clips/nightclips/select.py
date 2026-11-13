@@ -178,6 +178,7 @@ def apply_handle_overrides(songs: list[dict], handles: dict[str, str]) -> int:
             handle = handles.get(name_key(p.get("name", "")))
             if handle:
                 p["instagram"] = handle
+                p["handle_source"] = "config"
                 n += 1
     return n
 

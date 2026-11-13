@@ -1,4 +1,5 @@
 import datetime as dt
+import tomllib
 
 import pytest
 from nightclips import match
@@ -193,3 +194,50 @@ def test_caption_and_counts_follow_edited_performers():
     assert sel.item_status(b, songs) == "eligible"
     assert sel.item_status({**b, "performers": [{"name": "X", "consent": "unknown"}]}, songs) == "unknown"
     assert list(sel.consenting_performers([a, b], songs)) == ["logged", "real"]
+
+
+CFG_WITH_HANDLES = """\
+max_clips = 20
+
+[caption]
+footer = "#karaoke"
+
+[handles]   # regulars
+# regulars
+"Big Dave" = ""                 # 5 of last 20 nights
+"Mars W" = "main_mm_"           # keep me
+
+[ "other" ]
+x = 1
+"""
+
+
+def test_save_handle_updates_in_place_keeping_comments(tmp_path):
+    from nightclips.config import save_handle
+    p = tmp_path / "config.toml"
+    p.write_text(CFG_WITH_HANDLES)
+    save_handle(p, "big  dave", "davethevoice")
+    text = p.read_text()
+    assert '"Big Dave" = "davethevoice"                 # 5 of last 20 nights' in text
+    assert "# regulars" in text and '"Mars W" = "main_mm_"           # keep me' in text
+    assert tomllib.loads(text)["handles"]["Big Dave"] == "davethevoice"
+
+
+def test_save_handle_appends_inside_the_handles_table(tmp_path):
+    from nightclips.config import save_handle
+    p = tmp_path / "config.toml"
+    p.write_text(CFG_WITH_HANDLES)
+    save_handle(p, 'Arlin "A" M', "arlinmejiab")
+    data = tomllib.loads(p.read_text())
+    assert data["handles"]['Arlin "A" M'] == "arlinmejiab"
+    assert data["other"] == {"x": 1}  # didn't land in the next table
+    save_handle(p, "Mars W", "")  # forget: back to the placeholder
+    assert tomllib.loads(p.read_text())["handles"]["Mars W"] == ""
+
+
+def test_save_handle_creates_the_table(tmp_path):
+    from nightclips.config import save_handle
+    p = tmp_path / "config.toml"
+    p.write_text('max_clips = 20\n[caption]\nfooter = "x"')
+    save_handle(p, "Lindsay W", "lindsayhistory")
+    assert tomllib.loads(p.read_text())["handles"] == {"Lindsay W": "lindsayhistory"}

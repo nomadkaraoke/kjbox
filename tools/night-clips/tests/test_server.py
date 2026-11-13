@@ -2,6 +2,7 @@
 
 import json
 import threading
+import tomllib
 import urllib.error
 import urllib.request
 
@@ -189,7 +190,7 @@ def test_publish_sends_trimmed_copies_of_long_clips(served):
     first, second = state.selected[:2]
     state.clips[first].duration = 63.2
     calls = []
-    state.trim = lambda path, dur, out_dir, start=0.0: (calls.append((path, dur, out_dir)) or
+    state.trim = lambda path, dur, out_dir, start=0.0, end=None: (calls.append((path, dur, out_dir)) or
                                              (str(out_dir / "cut.mp4") if dur > 59 else path))
     code, res = post(base + "/api/publish", {"selected": [first, second], "caption": "c"})
     assert code == 200 and res["ok"]
@@ -228,7 +229,7 @@ def test_other_label_makes_a_clip_selectable_and_a_caption_line(served):
     post(base + "/api/note", {"clip_id": it["id"], "note": "  Costume   contest winners 🏆 "})
     code, res = post(base + "/api/caption", {"selected": [it["id"]]})
     assert "Costume contest winners 🏆" in res["caption"]
-    state.trim = lambda path, dur, out_dir, start=0.0: path  # fake clip isn't probeable
+    state.trim = lambda path, dur, out_dir, start=0.0, end=None: path  # fake clip isn't probeable
     code, res = post(base + "/api/publish", {"selected": [it["id"]], "caption": "c"})
     assert code == 200, res
     assert published
@@ -254,12 +255,12 @@ def test_trim_start_is_clamped_and_passed_to_trim(served):
     cid = state.selected[0]
     state.clips[cid].duration = state.by_id[cid]["duration"] = 100.0
     code, res = post(base + "/api/trim", {"clip_id": cid, "start": 999})
-    assert state.by_id[cid]["trim_start"] == 41.0  # 100 - 59
+    assert state.by_id[cid]["trim_start"] == 99.0  # any start up to 1s before the end (100 - 1)
     post(base + "/api/trim", {"clip_id": cid, "start": -5})
     assert state.by_id[cid]["trim_start"] == 0.0
     post(base + "/api/trim", {"clip_id": cid, "start": 12.34})
     calls = []
-    state.trim = lambda path, dur, out_dir, start=0.0: (calls.append(start) or path)
+    state.trim = lambda path, dur, out_dir, start=0.0, end=None: (calls.append(start) or path)
     code, _ = post(base + "/api/publish", {"selected": [cid], "caption": "c"})
     assert code == 200 and calls == [12.3]
     assert post(base + "/api/trim", {"clip_id": "nope", "start": 1})[0] == 400
@@ -269,7 +270,7 @@ def test_publish_stages_facebook_only_when_asked(served):
     base, state, published, _ = served
     fb = []
     state.facebook_publisher = lambda files, cap: fb.append((files, cap)) or {"started": True}
-    state.trim = lambda path, dur, out_dir, start=0.0: path
+    state.trim = lambda path, dur, out_dir, start=0.0, end=None: path
     ids = state.selected[:2]
     code, res = post(base + "/api/publish", {"selected": ids, "caption": "c"})
     assert code == 200 and "facebook" not in res and fb == []
@@ -284,7 +285,7 @@ def test_facebook_launch_failure_is_reported_without_failing_instagram(served):
     def boom(files, cap):
         raise OSError("no chromium")
     state.facebook_publisher = boom
-    state.trim = lambda path, dur, out_dir, start=0.0: path
+    state.trim = lambda path, dur, out_dir, start=0.0, end=None: path
     code, res = post(base + "/api/publish", {"selected": state.selected[:1], "caption": "c", "facebook": True})
     assert code == 200 and res["ok"] and len(published) == 1
     assert res["facebook"]["started"] is False and "no chromium" in res["facebook"]["error"]
@@ -352,3 +353,69 @@ def test_edit_performers_needs_a_song_and_survives_draft_reload(served):
     state._restatus(it)
     assert state.load_draft()
     assert [p["name"] for p in it["performers"]] == ["Zed Q", "Ana"] and it["status"] == "unknown"
+
+
+def test_trim_end_limits_the_cut_and_survives_the_draft(served):
+    base, state, published, _ = served
+    cid = state.selected[0]
+    state.clips[cid].duration = state.by_id[cid]["duration"] = 30.0
+    code, _ = post(base + "/api/trim", {"clip_id": cid, "start": 3, "end": 13})
+    assert code == 200 and (state.by_id[cid]["trim_start"], state.by_id[cid]["trim_end"]) == (3.0, 13.0)
+    post(base + "/api/trim", {"clip_id": cid, "start": 3, "end": 3.2})  # at least 1s long
+    assert state.by_id[cid]["trim_end"] == 4.0
+    post(base + "/api/trim", {"clip_id": cid, "start": 3, "end": 30})  # to the end = no limit
+    assert state.by_id[cid]["trim_end"] is None
+    post(base + "/api/trim", {"clip_id": cid, "start": 3, "end": 13})
+    post(base + "/api/trim", {"clip_id": cid, "start": 5})  # start-only (old page) keeps the end
+    assert state.by_id[cid]["trim_end"] == 13.0
+    calls = []
+    state.trim = lambda path, dur, out_dir, start=0.0, end=None: (calls.append((start, end)) or path)
+    code, _ = post(base + "/api/publish", {"selected": [cid], "caption": "c"})
+    assert code == 200 and calls == [(5.0, 13.0)]
+    state.by_id[cid].update(trim_start=0.0, trim_end=None)
+    assert state.load_draft()  # publish saved the draft
+    assert (state.by_id[cid]["trim_start"], state.by_id[cid]["trim_end"]) == (5.0, 13.0)
+
+
+def _handleless_yes(state):
+    """A consenting singer with no handle who is in at least one clip."""
+    clipped = {i["song_idx"] for i in state.items if i["song_idx"] is not None}
+    for idx, s in enumerate(state.songs):
+        for p in s["performers"]:
+            if idx in clipped and p["consent"] == "yes" and not p.get("instagram"):
+                return p["name"]
+    raise AssertionError("fixture has no consenting singer without a handle")
+
+
+def test_set_handle_saves_config_and_tags_the_caption(served, tmp_path):
+    base, state, *_ = served
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text('[handles]\n# mine\n')
+    state.cfg["path"] = str(cfg_path)
+    name = _handleless_yes(state)
+    code, res = post(base + "/api/handle", {"name": name.upper(), "handle": "@New.Handle"})
+    assert code == 200 and res["handle"] == "new.handle" and res["tagged"] >= 1
+    assert tomllib.loads(cfg_path.read_text())["handles"][name.upper()] == "new.handle"
+    perfs = [p for s in res["state"]["songs"] for p in s["performers"] if p["name"] == name]
+    assert perfs and all(p["instagram"] == "new.handle" for p in perfs)
+    ids = [c["id"] for c in res["state"]["clips"]
+           if c["song_idx"] is not None and any(p["name"] == name for p in state.songs[c["song_idx"]]["performers"])]
+    assert ids, "fixture should have a clip of this singer"
+    assert "@new.handle" in post(base + "/api/caption", {"selected": ids[:1]})[1]["caption"]
+    # forget it again
+    code, res = post(base + "/api/handle", {"name": name, "handle": ""})
+    assert code == 200 and not any(p.get("instagram") for s in state.songs for p in s["performers"] if p["name"] == name)
+
+
+def test_set_handle_never_tags_someone_who_said_no(served):
+    base, state, *_ = served
+    no = _performers_by_consent(state)["no"]
+    code, res = post(base + "/api/handle", {"name": no, "handle": "nope_nope"})
+    assert code == 200 and res["tagged"] == 0
+    assert not any(p.get("instagram") == "nope_nope" for s in state.songs for p in s["performers"])
+
+
+def test_set_handle_rejects_bad_handles(served):
+    base, *_ = served
+    assert post(base + "/api/handle", {"name": "X", "handle": "not a handle!"})[0] == 400
+    assert post(base + "/api/handle", {"name": " ", "handle": "ok"})[0] == 400
