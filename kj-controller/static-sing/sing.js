@@ -2256,7 +2256,9 @@ function renderSearch() {
         const data = await search(q.trim(), sid);
         if (myGen !== searchGen) return;   // superseded — discard stale response
         results = data;
-        const identified = applyIdentification(await identP, q.trim(), myGen);
+        const ident = await identP;
+        if (myGen !== searchGen) return;   // cancelled while identification was in flight
+        const identified = applyIdentification(ident, q.trim(), myGen);
         // Gemini fallback (gen) only when on-device identification had nothing
         // and karaoke search found nothing either.
         if (!identified && !(data.songs || []).length) resolveEmptySearch(q.trim(), myGen);
