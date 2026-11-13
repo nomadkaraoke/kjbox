@@ -5438,8 +5438,10 @@ body.simple-mode .night-log-launcher { display: none; }
     body.ao-printing { background: #fff; }
     body.ao-printing #ao-explain-modal { position: static; display: block; background: none; backdrop-filter: none; }
     body.ao-printing .ao-modal-content { max-height: none; overflow: visible; width: 100%; max-width: none; border: none; box-shadow: none; background: #fff; color: #111; }
-    body.ao-printing .ao-panel { display: block !important; }
-    body.ao-printing .ao-panel.hidden { display: block !important; }
+    /* Expand the guide panels, but never tonight's live queue (real names). */
+    body.ao-printing .ao-panel:not(.ao-no-print),
+    body.ao-printing .ao-panel.hidden:not(.ao-no-print) { display: block !important; }
+    body.ao-printing .ao-panel.ao-no-print { display: none !important; }
     body.ao-printing .ao-no-print, body.ao-printing .ao-tabs, body.ao-printing .ao-header-actions, body.ao-printing .ao-toc, body.ao-printing .ao-decision { display: none !important; }
     body.ao-printing .ao-body, body.ao-printing .ao-lead, body.ao-printing .ao-scn-situation, body.ao-printing .ao-scn-head h4, body.ao-printing .modal-header h3 { color: #111; }
     body.ao-printing .ao-modal-content { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
