@@ -11,6 +11,7 @@
     'use strict';
 
     let aoData = null;
+    let aoRequestSeq = 0;
     let aoTab = 'how';
     // Which after-row's decision is open, per panel key ("scn:<id>" / "live").
     const aoOpenSlot = {};
@@ -68,17 +69,24 @@
         aoShowTab(tab || aoTab);
         const body = document.getElementById('ao-explain-body');
         body.innerHTML = '<div class="ao-muted">Loading&hellip;</div>';
+        // Only the latest request may paint: a slower, older response (e.g. from
+        // before a close + reopen) must not overwrite a newer queue preview.
+        const req = ++aoRequestSeq;
         try {
             const resp = await fetch('/rotation/auto-order/explain');
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            aoData = await resp.json();
+            const data = await resp.json();
+            if (req !== aoRequestSeq) return;
+            aoData = data;
             render();
         } catch (e) {
+            if (req !== aoRequestSeq) return;
             body.innerHTML = `<div class="ao-error">Couldn't load the explainer (${esc(e.message)}).</div>`;
         }
     };
 
     window.closeAutoOrderExplainer = function () {
+        aoRequestSeq++;   // drop any in-flight response
         document.getElementById('ao-explain-modal').classList.add('hidden');
     };
 

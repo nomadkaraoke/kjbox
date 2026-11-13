@@ -1274,7 +1274,14 @@ class TestShellHeader:
         sels = ('[data-testid="mysongs-bar"]', '[data-testid="status-stage"]', ".sing-rotation-page")
         for sel in sels:
             expect(page.locator(sel)).to_be_visible()
-        boxes = [page.locator(sel).bounding_box() for sel in sels]
+        # Measure all three in ONE read: the page re-renders on its status poll,
+        # replacing these nodes, so three separate bounding_box() calls could land
+        # mid-render and get None (flaked ~1 in 3 on main).
+        boxes = page.wait_for_function(
+            """(sels) => {
+                const r = sels.map((s) => document.querySelector(s)?.getBoundingClientRect());
+                return r.every((b) => b && b.width > 0) ? r.map((b) => ({x: b.x, width: b.width})) : null;
+            }""", arg=list(sels)).json_value()
         assert len({round(b["x"]) for b in boxes}) == 1
         assert len({round(b["width"]) for b in boxes}) == 1
 
