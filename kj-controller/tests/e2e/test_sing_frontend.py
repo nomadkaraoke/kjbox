@@ -144,6 +144,25 @@ class TestDoneMultiSong:
         expect(page.locator('input[type="search"]')).to_be_visible()
         expect(page.locator("text=Hi Alice")).to_be_visible()
 
+    def test_search_box_is_empty_after_a_send(self, page, live_server, live_token):
+        # Andrew, 2026-11-13: after a singer types a search and requests a
+        # song, the next search must start empty, not on the last song's text.
+        page.goto(f"{live_server}/sing/?t={live_token}")
+        page.wait_for_function("!!window.__sing_state")
+        page.evaluate("localStorage.setItem('sing_name', 'Alice')")
+        page.evaluate("() => { window.__sing_state.name = 'Alice'; window.__sing_state.step = 'search'; window.__sing_render(); }")
+        page.locator('input[type="search"]').fill("wonderwall")
+        assert page.evaluate("window.__sing_state.query") == "wonderwall"
+        page.evaluate("""
+            window.__sing_state.selected = { source_type: 'local', source_ref: '/tmp/x.mp4',
+                song_artist: 'Oasis', song_title: 'Wonderwall', label: 'Wonderwall' };
+            window.__sing_send();
+        """)
+        expect(page.locator('[data-testid="request-another"]')).to_be_visible(timeout=5000)
+        assert page.evaluate("window.__sing_state.query") == ""
+        page.locator('[data-testid="request-another"]').click()
+        expect(page.locator('input[type="search"]')).to_have_value("")
+
     def test_request_another_without_a_name_asks_for_the_name(self, page, live_server, live_token):
         # Live 2026-11-05: a fresh Safari private tab (no saved name) went
         # My songs → "Request another song" → search, and every send 400'd
@@ -1274,9 +1293,15 @@ class TestShellHeader:
         sels = ('[data-testid="mysongs-bar"]', '[data-testid="status-stage"]', ".sing-rotation-page")
         for sel in sels:
             expect(page.locator(sel)).to_be_visible()
-        boxes = [page.locator(sel).bounding_box() for sel in sels]
-        assert len({round(b["x"]) for b in boxes}) == 1
-        assert len({round(b["width"]) for b in boxes}) == 1
+        # Measured in the page and retried: the live poll re-renders these
+        # nodes, so a Python-side bounding_box() could land on a detached one
+        # (None) on a busy host.
+        page.wait_for_function("""(sels) => {
+            const rs = sels.map((s) => document.querySelector(s)?.getBoundingClientRect());
+            if (rs.some((r) => !r || !r.width)) return false;
+            return new Set(rs.map((r) => Math.round(r.x))).size === 1
+                && new Set(rs.map((r) => Math.round(r.width))).size === 1;
+        }""", arg=list(sels), timeout=5000)
 
     def test_tab_switch_paints_from_cache_without_waiting(self, page, live_server, live_token):
         self._seed(page, live_server, live_token)

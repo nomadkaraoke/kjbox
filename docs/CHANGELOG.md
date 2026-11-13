@@ -2,6 +2,16 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-13 - Singer search box starts empty after a request (v0.150.1)
+
+After a singer searched and requested a song, going back to search ("Request another song", the Request tab,
+Back) reopened the box on the last search text and its results. A successful send (and a "Change song")
+now clears the search draft (query and make-it fields) and cancels any still-pending search from the old screen.
+
+- `sing.js`: `resetSearchDraft()` after a successful `submitSelection()` / change-song.
+- Test fix: `test_download_queues_item` / `test_download_failure_tracked` stopped waiting while the item was
+  still `queued`, so they failed every time on the slower build host. `test_web_sub_still_gets_all_steps` (thread-pool order) and `test_header_and_cards_share_one_column` (detached node) were flaky there too.
+
 ## 2026-11-06 - KJ: add lyrics to a quick version gen made without any (v0.150.0)
 
 Live show, 2026-11-06 01:24: Sombr "My Body Isn't Ready (Orchestral Version Live From Sound City)" played

@@ -227,6 +227,7 @@ function rotateDeviceId() {
 
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
+let _cancelSearch = null;   // set by the live search screen (renderSearch)
 const state = {
   step: null,   // resolved at bootstrap: hash > legacy ?r= > _bootStep()
   name: LS.get("sing_name"),
@@ -2216,6 +2217,11 @@ function renderSearch() {
   // bumped at the start of each fetch so a slower earlier query cannot clobber
   // a newer one, and so only the latest search may clear loading / set err.
   let searchGen = 0;
+  // Only the newest search screen may search: a rebuilt screen or a cleared
+  // draft (a song was just sent) cancels this one's pending/in-flight search,
+  // so a late response can't refill the next screen with old results.
+  if (_cancelSearch) _cancelSearch();
+  _cancelSearch = () => { clearTimeout(debounceTimer); searchGen++; };
   const doSearch = (q) => {
     clearTimeout(debounceTimer);
     showOtherOptions = false;   // a new search starts with just the song card
@@ -2250,7 +2256,9 @@ function renderSearch() {
         const data = await search(q.trim(), sid);
         if (myGen !== searchGen) return;   // superseded — discard stale response
         results = data;
-        const identified = applyIdentification(await identP, q.trim(), myGen);
+        const ident = await identP;
+        if (myGen !== searchGen) return;   // cancelled while identification was in flight
+        const identified = applyIdentification(ident, q.trim(), myGen);
         // Gemini fallback (gen) only when on-device identification had nothing
         // and karaoke search found nothing either.
         if (!identified && !(data.songs || []).length) resolveEmptySearch(q.trim(), myGen);
@@ -3625,6 +3633,7 @@ async function submitSelection() {
   rememberRequestId(TOKEN, data.request.id, data.request.edit_token,
     friend ? data.request.singer_name || friend.name : "");
   state.friend = null;
+  resetSearchDraft();
   // "You're on the list!" at the top of the done screen, so nobody wonders
   // whether it went through (live 2026-10-22: repeat taps, re-searches).
   state.justSent = {
@@ -3635,6 +3644,19 @@ async function submitSelection() {
   state.step = "done";
   state._navReplace = true;   // Back returns past the search, not into it
   render();
+}
+
+// Once a song is sent, the next visit to the search box starts empty: the
+// singer's next search shouldn't open on the last song's text and results
+// (Andrew, 2026-11-13). Covers every way back — "Request another song", the
+// Request tab, browser Back — because the search card renders from state.
+function resetSearchDraft() {
+  if (_cancelSearch) _cancelSearch();
+  state.query = "";
+  state.showMakeForm = false;
+  state.makeArtist = "";
+  state.makeTitle = "";
+  state.makePrefill = { artist: "", title: "" };
 }
 
 // One line right after sending, so nobody wonders whether it went through
@@ -3748,6 +3770,7 @@ async function sendPicked() {
       state.changeRequestId = null;
       state.changeEditToken = null;
       state.changeSongLabel = "";
+      resetSearchDraft();
       state.step = "done";
       state._navReplace = true;
       render();
