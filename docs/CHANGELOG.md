@@ -2,6 +2,27 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-13 - KJ: "How Auto Order works" explainer (v0.151.0)
+
+**Deploy:** `.py` change, so auto-deploy restarts kj-controller (playback continues).
+
+A read-only guide to how Auto Order decides the rotation, built from the real algorithm rather than a
+drawing of it.
+
+- Open it from **System → Rotation → How Auto Order works**, the **?** next to the Rotation header's Reorder button
+  (also visible in Simple KJ mode), or "How does it decide?" under the Auto Order toggle in Requests settings.
+- **How it works:** the hard rules, how each spot is filled, every scoring term from strongest to weakest (values
+  read live from `AutoOrderConfig`), the look-ahead and wait-reset ideas, and the KJ's controls.
+- **Examples:** 12 curated rotations (invented names) run through `compute_auto_order` every time the modal opens.
+  Each shows before/after, and tapping an After row shows the exact score breakdown for every contender for that
+  spot. Each story's claims are checked live and in `tests/unit/test_auto_order_explain.py`, so a retune that
+  makes a story untrue fails the tests and flags the example in the modal.
+- **Tonight's queue:** a dry run of Auto Order on the current rotation with the same breakdowns. Nothing is
+  applied.
+- **Print / PDF** prints the guide and examples on white.
+- New: `kj-controller/auto_order_explain.py`, `static/auto_order_explain.js`,
+  `GET /rotation/auto-order/explain`, and `compute_auto_order(..., trace=True)` (ordering unchanged; `_score`
+  now sums `_score_terms`).
 ## 2026-11-13 - Singer search box starts empty after a request (v0.150.1)
 
 After a singer searched and requested a song, going back to search ("Request another song", the Request tab,
@@ -11,6 +32,7 @@ now clears the search draft (query and make-it fields) and cancels any still-pen
 - `sing.js`: `resetSearchDraft()` after a successful `submitSelection()` / change-song.
 - Test fix: `test_download_queues_item` / `test_download_failure_tracked` stopped waiting while the item was
   still `queued`, so they failed every time on the slower build host. `test_web_sub_still_gets_all_steps` (thread-pool order) and `test_header_and_cards_share_one_column` (detached node) were flaky there too.
+
 
 ## 2026-11-06 - KJ: add lyrics to a quick version gen made without any (v0.150.0)
 

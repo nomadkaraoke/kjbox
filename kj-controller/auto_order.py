@@ -152,6 +152,11 @@ class AutoOrderResult:
     placements: list = field(default_factory=list)     # list[Placement]
     metrics_before: dict = field(default_factory=dict)
     metrics_after: dict = field(default_factory=dict)
+    # Only filled when ``compute_auto_order(..., trace=True)``: one dict per row of
+    # the new order recording WHY that entry is there (locked / pinned / the scored
+    # contest it won, with every candidate's term-by-term breakdown). Used by the
+    # KJ "How Auto Order works" explainer; never affects the ordering itself.
+    trace: list = field(default_factory=list)
 
     @property
     def ordered_ids(self):
@@ -229,7 +234,7 @@ def _slot_minutes(e, config):
 # Core algorithm
 # ---------------------------------------------------------------------------
 
-def compute_auto_order(entries, config=None):
+def compute_auto_order(entries, config=None, trace=False):
     """Compute a fair reordering of the visible rotation queue.
 
     ``entries`` is a list of :class:`EntryView` in current display order.
@@ -238,6 +243,9 @@ def compute_auto_order(entries, config=None):
     Entries still ``being_made`` are pinned to the very bottom (in their existing
     relative order) and held out of the weave entirely; only the remaining entries
     are fairly reordered above them.
+
+    ``trace=True`` additionally records, per row, the decision that put each entry
+    there (``AutoOrderResult.trace``). The ordering is identical either way.
     """
     config = config or AutoOrderConfig()
     if len(entries) == 0:
@@ -249,7 +257,8 @@ def compute_auto_order(entries, config=None):
     woven_input = [e for e in entries if not e.being_made] if making else entries
 
     locked_idx = _locked_indices(woven_input, config)
-    result_order = _weave(woven_input, locked_idx, config) + making
+    slot_trace = [] if trace else None
+    result_order = _weave(woven_input, locked_idx, config, slot_trace) + making
 
     # Build placements + rationale. Making entries were never woven, so their reason
     # reflects the pin, not the locked head.
@@ -262,20 +271,28 @@ def compute_auto_order(entries, config=None):
             reason = _reason_for(e, new_idx, config, locked_region=(new_idx in locked_idx))
         placements.append(Placement(entry=e, new_index=new_idx, moved=moved, reason=reason))
 
+    if trace:
+        for e in making:
+            slot_trace.append({"slot": len(slot_trace), "kind": "being_made",
+                               "entry_id": e.id, "candidates": []})
+
     return AutoOrderResult(
         order=result_order,
         placements=placements,
         metrics_before=compute_metrics(entries, config),
         metrics_after=compute_metrics(result_order, config),
+        trace=slot_trace or [],
     )
 
 
-def _weave(entries, locked_idx, config):
+def _weave(entries, locked_idx, config, slot_trace=None):
     """Scored greedy weave of ``entries`` (list[EntryView]) → new ordered list.
 
     Rows are positional in the passed list; ``locked_idx`` (from ``_locked_indices``)
     are frozen in place and everything else fills the open slots. Callers that pin
     some entries out of the weave (e.g. "being made") pass only the woven entries.
+
+    ``slot_trace`` (a list, or None) receives one decision record per position.
     """
     n = len(entries)
     if n == 0:
@@ -334,6 +351,10 @@ def _weave(entries, locked_idx, config):
     for pos in range(n):
         if pos not in open_set:
             e = result[pos]
+            if slot_trace is not None:
+                slot_trace.append({"slot": pos, "kind": "locked", "entry_id": e.id,
+                                   "starts_in_minutes": round(time_ahead, 1),
+                                   "candidates": []})
             for m in e.members:
                 member_last_time[m] = time_ahead
             time_ahead += _slot_minutes(e, config)
@@ -341,6 +362,9 @@ def _weave(entries, locked_idx, config):
         candidates = [q[0] for q in remaining.values() if q]
         best = _pick_best(candidates, pos, member_slots, bumped_ids,
                           time_ahead, member_last_time, config)
+        if slot_trace is not None:
+            slot_trace.append(_trace_slot(candidates, best, pos, member_slots, bumped_ids,
+                                          time_ahead, member_last_time, config))
         remaining[best.owner].pop(0)
         result[pos] = best
         for m in best.members:
@@ -444,8 +468,12 @@ def _projected_wait(e, time_ahead, member_last_time, config):
     return time_ahead - last_t
 
 
-def _score(e, slot, member_slots, time_ahead, member_last_time, config):
-    """Score a candidate for a given slot. Higher = place sooner.
+def _score_terms(e, slot, member_slots, time_ahead, member_last_time, config):
+    """Score a candidate for a given slot, term by term. Higher total = place sooner.
+
+    Returns a dict of every scoring term plus the context values that produced them
+    (projected sung count / wait, nearest gap). ``_score`` sums the terms; the
+    explainer shows them.
 
     ``time_ahead`` = real minutes of songs before this slot (linked durations +
     turnaround), used to project how long this singer will actually have waited.
@@ -509,7 +537,55 @@ def _score(e, slot, member_slots, time_ahead, member_last_time, config):
     # in a row (the -w_back_to_back spacing term cancels it out).
     bias = config.w_priority_bias * e.priority_bias
 
-    return fairness + promote + wait + overdue + stick + spacing + bias
+    return {
+        "fairness": fairness, "new_singer": promote, "wait": wait, "overdue": overdue,
+        "stick": stick, "spacing": spacing, "priority": bias,
+        "projected_sung": projected_sung, "projected_wait": projected_wait,
+        "nearest_gap": dist,
+    }
+
+
+_TERM_ORDER = ("fairness", "new_singer", "wait", "overdue", "stick", "spacing", "priority")
+
+
+def _score(e, slot, member_slots, time_ahead, member_last_time, config):
+    """Total score for a candidate at ``slot`` (sum of ``_score_terms``)."""
+    t = _score_terms(e, slot, member_slots, time_ahead, member_last_time, config)
+    # Same summation order as the original single expression, so floating-point
+    # totals (and therefore tie-breaks) are bit-for-bit unchanged.
+    return (t["fairness"] + t["new_singer"] + t["wait"] + t["overdue"]
+            + t["stick"] + t["spacing"] + t["priority"])
+
+
+def _trace_slot(candidates, best, slot, member_slots, bumped_ids, time_ahead,
+                member_last_time, config):
+    """Decision record for one open slot: every eligible candidate's breakdown,
+    best first (same ranking key as ``_pick_best``)."""
+    rows = []
+    for e in candidates:
+        t = _score_terms(e, slot, member_slots, time_ahead, member_last_time, config)
+        total = _score(e, slot, member_slots, time_ahead, member_last_time, config)
+        bump = 0.0
+        if id(e) in bumped_ids and slot < config.lock_head:
+            bump = -config.w_bump_top5
+            total -= config.w_bump_top5
+        terms = {k: round(t[k], 2) for k in _TERM_ORDER}
+        terms["bump_top5"] = round(bump, 2)
+        rows.append({
+            "entry_id": e.id,
+            "total": round(total, 2),
+            "terms": terms,
+            "projected_sung": t["projected_sung"],
+            "projected_wait": round(t["projected_wait"], 1),
+            "nearest_gap": t["nearest_gap"],
+            "back_to_back": t["nearest_gap"] is not None and t["nearest_gap"] <= 1,
+            "_key": (total, -e.seq, -e.orig_index, -(e.id or 0)),
+        })
+    rows.sort(key=lambda r: r["_key"], reverse=True)
+    for r in rows:
+        del r["_key"]
+    return {"slot": slot, "kind": "chosen", "entry_id": best.id,
+            "starts_in_minutes": round(time_ahead, 1), "candidates": rows}
 
 
 def _reason_for(e, new_idx, config, locked_region):

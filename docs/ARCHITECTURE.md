@@ -217,6 +217,7 @@ utils.py → (stdlib only)
 | POST | `/rotation/delete` | Delete a rotation entry (`{id}`) |
 | POST | `/rotation/add` | Add a new singer (`{singer, song_artist?, notes?, file_path?, url_fallback?}`, default status: Waiting) |
 | POST | `/rotation/move` | Reorder a rotation entry (`{id, new_position}`) |
+| GET | `/rotation/auto-order/explain` | Read-only data for the KJ "How Auto Order works" modal: curated scenarios run live through Auto Order with per-slot score breakdowns, plus a dry run of the current queue (`live`). Applies nothing |
 | POST | `/rotation/archive` | Archive all entries to local archive + Sheet, start new rotation |
 | POST | `/rotation/link` | Link a media file to a rotation entry (`{id, file_path}`) |
 | POST | `/rotation/unlink` | Remove file link from a rotation entry (`{id}`) |
