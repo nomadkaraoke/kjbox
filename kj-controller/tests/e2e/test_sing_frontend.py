@@ -160,7 +160,6 @@ class TestDoneMultiSong:
         """)
         expect(page.locator('[data-testid="request-another"]')).to_be_visible(timeout=5000)
         assert page.evaluate("window.__sing_state.query") == ""
-        assert page.evaluate("window.__sing_state.selected") is None
         page.locator('[data-testid="request-another"]').click()
         expect(page.locator('input[type="search"]')).to_have_value("")
 
@@ -1294,9 +1293,15 @@ class TestShellHeader:
         sels = ('[data-testid="mysongs-bar"]', '[data-testid="status-stage"]', ".sing-rotation-page")
         for sel in sels:
             expect(page.locator(sel)).to_be_visible()
-        boxes = [page.locator(sel).bounding_box() for sel in sels]
-        assert len({round(b["x"]) for b in boxes}) == 1
-        assert len({round(b["width"]) for b in boxes}) == 1
+        # Measured in the page and retried: the live poll re-renders these
+        # nodes, so a Python-side bounding_box() could land on a detached one
+        # (None) on a busy host.
+        page.wait_for_function("""(sels) => {
+            const rs = sels.map((s) => document.querySelector(s)?.getBoundingClientRect());
+            if (rs.some((r) => !r || !r.width)) return false;
+            return new Set(rs.map((r) => Math.round(r.x))).size === 1
+                && new Set(rs.map((r) => Math.round(r.width))).size === 1;
+        }""", arg=list(sels), timeout=5000)
 
     def test_tab_switch_paints_from_cache_without_waiting(self, page, live_server, live_token):
         self._seed(page, live_server, live_token)

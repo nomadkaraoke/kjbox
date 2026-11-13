@@ -227,6 +227,7 @@ function rotateDeviceId() {
 
 const PHONE_RE = /^\+?[0-9 \-()]{7,20}$/;
 
+let _cancelSearch = null;   // set by the live search screen (renderSearch)
 const state = {
   step: null,   // resolved at bootstrap: hash > legacy ?r= > _bootStep()
   name: LS.get("sing_name"),
@@ -2216,6 +2217,11 @@ function renderSearch() {
   // bumped at the start of each fetch so a slower earlier query cannot clobber
   // a newer one, and so only the latest search may clear loading / set err.
   let searchGen = 0;
+  // Only the newest search screen may search: a rebuilt screen or a cleared
+  // draft (a song was just sent) cancels this one's pending/in-flight search,
+  // so a late response can't refill the next screen with old results.
+  if (_cancelSearch) _cancelSearch();
+  _cancelSearch = () => { clearTimeout(debounceTimer); searchGen++; };
   const doSearch = (q) => {
     clearTimeout(debounceTimer);
     showOtherOptions = false;   // a new search starts with just the song card
@@ -3643,8 +3649,8 @@ async function submitSelection() {
 // (Andrew, 2026-11-13). Covers every way back — "Request another song", the
 // Request tab, browser Back — because the search card renders from state.
 function resetSearchDraft() {
+  if (_cancelSearch) _cancelSearch();
   state.query = "";
-  state.selected = null;
   state.showMakeForm = false;
   state.makeArtist = "";
   state.makeTitle = "";
