@@ -23,42 +23,59 @@ if app_dir not in sys.path:
 # duration probe -> ffprobe, download worker, VLC verify) lands its call in this
 # test's mock: `assert_called_once()` sees two calls, `call_args` holds the
 # wrong argv. These failed 1-3 random tests per full run, each passing alone.
-# So: wait (bounded) for the threads a test started before the next one runs.
+# So: after each test's teardown, wait (bounded) for the threads its body
+# started, before the next test runs.
 _THREAD_JOIN_BUDGET_S = 3.0
 
 
-@pytest.fixture(autouse=True)
-def _short_idle_workers(monkeypatch):
+@pytest.fixture(autouse=True, scope="session")
+def _short_idle_workers():
+    # Session-wide, not monkeypatch: a per-test undo runs in teardown, BEFORE
+    # the thread wait below, and puts the worker back on a 30 s idle wait.
     import rotation
-    monkeypatch.setattr(rotation.RotationManager, "_DURATION_IDLE_EXIT_S", 0.2)
+    rotation.RotationManager._DURATION_IDLE_EXIT_S = 0.2
 
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
     import threading
-    import time
-    before = set(threading.enumerate())
+    item._threads_before = set(threading.enumerate())
     yield
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item):
+    # After fixture teardown, so fixtures that stop their own workers (e.g. the
+    # AudioMonitor drain loop) do so first and this is only the fallback.
+    yield
+    import threading
+    import time
+    before = getattr(item, "_threads_before", None)
+    if before is None:
+        return
+    # e2e live-server request threads live as long as the browser's keep-alive
+    # connection; they never touch a test's mocks.
+    started = [t for t in threading.enumerate()
+               if t not in before and t is not threading.current_thread()
+               and "process_request_thread" not in t.name]
+    # Cancel every pending timer (push debounce, volume save) before any wait,
+    # so none is still scheduled if a slow worker uses up the budget.
+    for t in started:
+        if isinstance(t, threading.Timer):
+            t.cancel()
     start = time.monotonic()
     deadline = start + _THREAD_JOIN_BUDGET_S
-    for t in threading.enumerate():
-        # e2e live-server request threads live as long as the browser's
-        # keep-alive connection; they never touch a test's mocks.
-        if (t in before or t is threading.current_thread()
-                or "process_request_thread" in t.name):
-            continue
-        if isinstance(t, threading.Timer):
-            t.cancel()  # not fired yet (push debounce, volume save): drop it
+    for t in started:
         remaining = deadline - time.monotonic()
         t0 = time.monotonic()
         if remaining > 0:
             t.join(remaining)
         tgt = getattr(t, "_target", None)
         key = getattr(tgt, "__qualname__", None) or type(t).__name__
-        _thread_join_stats["by_kind"][key] = _thread_join_stats["by_kind"].get(key, 0) + time.monotonic() - t0
-        if t.is_alive():
-            _thread_join_stats["timed_out"].append(item.nodeid)
-            break
+        _thread_join_stats["by_kind"][key] = (
+            _thread_join_stats["by_kind"].get(key, 0) + time.monotonic() - t0)
+    if any(t.is_alive() for t in started):
+        _thread_join_stats["timed_out"].append(item.nodeid)
     _thread_join_stats["waited_s"] += time.monotonic() - start
 
 

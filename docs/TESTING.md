@@ -65,8 +65,8 @@ from the workspace root (never on Andrew's MacBook). Until 2026-11-13 almost eve
 - **Patching `routes.subprocess.run` or `routes.threading.Thread` patches the whole module, for
   every thread.** `routes.subprocess` *is* `subprocess`. A worker left running by an earlier
   test (rotation duration probe running ffprobe, download worker, VLC verify) lands its call in
-  your mock. `tests/conftest.py` now waits up to 3 s after each test body for the threads that
-  test started (`pytest_runtest_call` hook), and shortens `RotationManager._DURATION_IDLE_EXIT_S`
+  your mock. `tests/conftest.py` now waits up to 3 s after each test's teardown for the threads its
+  body started (`pytest_runtest_teardown` hook; pending timers are cancelled), and shortens `RotationManager._DURATION_IDLE_EXIT_S`
   so idle workers exit quickly. The run summary prints `background-thread wait: …` and lists any
   test whose thread outlived the budget. Fix those by stopping the thread (or mocking what starts
   it), not by raising the budget.
