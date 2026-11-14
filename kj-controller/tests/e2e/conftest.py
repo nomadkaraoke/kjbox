@@ -7,16 +7,19 @@ import time
 import urllib.request
 
 import pytest
+from werkzeug.serving import make_server
 
 from app import create_app
 
 
 @pytest.fixture(scope="session")
 def flask_port():
-    """Port for the test server (default 5099). Set ``KJ_E2E_PORT`` to run a
-    second worktree's E2E suite in parallel — on a shared port the browser
-    silently talks to the OTHER worktree's server (and its code)."""
-    return int(os.environ.get("KJ_E2E_PORT", "5099"))
+    """Port for the test server. 0 (the default) = a free port the OS picks, so
+    several worktrees' suites can share one build host. A fixed port (the old
+    default, 5099) let a second run's browser silently test the FIRST run's
+    server and code: hundreds of e2e failures that all passed alone. Set
+    ``KJ_E2E_PORT`` only to pin it, e.g. to point a browser at it by hand."""
+    return int(os.environ.get("KJ_E2E_PORT", "0"))
 
 
 _LIVE = {}
@@ -66,27 +69,28 @@ def live_server(tmp_path_factory, flask_port):
     app.config["TESTING"] = True
     _LIVE["app"] = app
 
-    server_thread = threading.Thread(
-        target=lambda: app.run(
-            host="127.0.0.1", port=flask_port, use_reloader=False
-        ),
-        daemon=True,
-    )
+    # Bind HERE, not inside app.run() on a thread: a port already in use then
+    # fails loudly instead of the readiness probe below answering from
+    # whatever other server holds the port.
+    server = make_server("127.0.0.1", flask_port, app, threaded=True)
+    port = server.server_port
+    config["flask_port"] = port
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
 
     # Wait for server to be ready
-    for _ in range(30):
+    for _ in range(50):
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{flask_port}/status")
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/status")
             break
         except Exception:
             time.sleep(0.1)
     else:
         raise RuntimeError("Flask test server failed to start")
 
-    yield f"http://127.0.0.1:{flask_port}"
+    yield f"http://127.0.0.1:{port}"
 
-    # Server thread is daemon — dies with the test process
+    server.shutdown()
 
 
 @pytest.fixture(scope="session")

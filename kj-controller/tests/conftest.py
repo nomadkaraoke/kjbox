@@ -15,6 +15,68 @@ if app_dir not in sys.path:
     sys.path.insert(0, os.path.abspath(app_dir))
 
 
+# --- Background threads must not outlive their test ------------------------
+#
+# Many tests patch a module global such as `routes.subprocess.run` or
+# `routes.threading.Thread`. That patches the shared `subprocess` / `threading`
+# module for EVERY thread, so a worker a previous test left running (rotation
+# duration probe -> ffprobe, download worker, VLC verify) lands its call in this
+# test's mock: `assert_called_once()` sees two calls, `call_args` holds the
+# wrong argv. These failed 1-3 random tests per full run, each passing alone.
+# So: wait (bounded) for the threads a test started before the next one runs.
+_THREAD_JOIN_BUDGET_S = 3.0
+
+
+@pytest.fixture(autouse=True)
+def _short_idle_workers(monkeypatch):
+    import rotation
+    monkeypatch.setattr(rotation.RotationManager, "_DURATION_IDLE_EXIT_S", 0.2)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    import threading
+    import time
+    before = set(threading.enumerate())
+    yield
+    start = time.monotonic()
+    deadline = start + _THREAD_JOIN_BUDGET_S
+    for t in threading.enumerate():
+        # e2e live-server request threads live as long as the browser's
+        # keep-alive connection; they never touch a test's mocks.
+        if (t in before or t is threading.current_thread()
+                or "process_request_thread" in t.name):
+            continue
+        if isinstance(t, threading.Timer):
+            t.cancel()  # not fired yet (push debounce, volume save): drop it
+        remaining = deadline - time.monotonic()
+        t0 = time.monotonic()
+        if remaining > 0:
+            t.join(remaining)
+        tgt = getattr(t, "_target", None)
+        key = getattr(tgt, "__qualname__", None) or type(t).__name__
+        _thread_join_stats["by_kind"][key] = _thread_join_stats["by_kind"].get(key, 0) + time.monotonic() - t0
+        if t.is_alive():
+            _thread_join_stats["timed_out"].append(item.nodeid)
+            break
+    _thread_join_stats["waited_s"] += time.monotonic() - start
+
+
+_thread_join_stats = {"waited_s": 0.0, "timed_out": [], "by_kind": {}}
+
+
+def pytest_terminal_summary(terminalreporter):
+    s = _thread_join_stats
+    terminalreporter.write_line(
+        f"background-thread wait: {s['waited_s']:.1f}s total; "
+        f"{len(s['timed_out'])} test(s) left a thread running past "
+        f"{_THREAD_JOIN_BUDGET_S:.0f}s")
+    for k, v in sorted(s["by_kind"].items(), key=lambda kv: -kv[1])[:10]:
+        terminalreporter.write_line(f"  waited {v:6.1f}s on {k}")
+    for nodeid in s["timed_out"][:20]:
+        terminalreporter.write_line(f"  thread still running after: {nodeid}")
+
+
 @pytest.fixture
 def tmp_media_dir(tmp_path):
     """Temp directory structure with downloads/ and media/ subdirs."""

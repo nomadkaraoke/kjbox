@@ -42,7 +42,13 @@ def monitor(mock_mpv, mocker):
     """AudioMonitor with subprocess.run mocked (pactl calls) and source discovery mocked."""
     mocker.patch('audio_monitor.subprocess.run')
     mocker.patch.object(AudioMonitor, '_find_monitor_source', return_value=MOCK_MONITOR_SOURCE)
-    return AudioMonitor(mock_mpv)
+    m = AudioMonitor(mock_mpv)
+    yield m
+    # The drain loop exits when the process is gone. Left alone, it spins on the
+    # mocked stdout.read() (a truthy Mock) for the rest of the run, burning a CPU.
+    m._ffmpeg_proc = None
+    if m._drain_thread is not None:
+        m._drain_thread.join(2)
 
 
 # --- Initial state ---
