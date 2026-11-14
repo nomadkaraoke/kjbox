@@ -63,8 +63,11 @@ On the review page:
   Carousel panel, or with ↑ ↓.
 - On a flagged clip, use the dropdown to reassign it to an adjacent song, or to "not a
   performance". Its consent is re-evaluated straight away.
+- **Two people singing but only one logged?** Click **+ Add singer** under the card's singers and pick
+  or type a name. The list suggests tonight's singers (with their consent) and the names in `[handles]`.
+  **×** on a name takes that person out of the clip (shown when there are two or more).
 - **Wrong singer on a clip?** Click ✎ next to the singers (on the card or the Carousel row) and type
-  who is really in it, separated by `&`. Consent follows the people you type: someone who sang that
+  who is really in it, separated by `&`. Consent follows the people you add or type: someone who sang that
   night brings their own answer and handle, someone who said no takes the clip out, and anyone else is
   consent unknown (you confirm before publishing) and gets their `[handles]` handle if there is one.
   Empty goes back to the logged singers; changing the clip's song also resets it. Saved in the draft.

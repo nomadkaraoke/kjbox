@@ -55,6 +55,9 @@ def load_config(home: Path | None = None) -> dict:
     cfg["camera_uploads"] = str(Path(os.path.expanduser(cfg["camera_uploads"])))
     cfg["max_clips"] = max(1, min(20, int(cfg.get("max_clips") or 20)))
     cfg["handles"] = _load_handles(user.get("handles") or {}, path)
+    # name_key -> the name as written in [handles], for the review page's "+ Add singer" list.
+    cfg["handle_names"] = {" ".join(n.casefold().split()): " ".join(n.split())
+                           for n in (user.get("handles") or {}) if " ".join(n.casefold().split()) in cfg["handles"]}
     cfg["path"] = str(path)
     return cfg
 

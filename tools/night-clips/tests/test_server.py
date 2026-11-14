@@ -11,6 +11,7 @@ import pytest
 from nightclips import match
 from nightclips.clips import Clip, clip_id, parse_clip_time
 from nightclips.config import DEFAULTS
+from nightclips.select import name_key as sel_key
 from nightclips.server import ReviewState, make_server
 
 
@@ -419,3 +420,49 @@ def test_set_handle_rejects_bad_handles(served):
     base, *_ = served
     assert post(base + "/api/handle", {"name": "X", "handle": "not a handle!"})[0] == 400
     assert post(base + "/api/handle", {"name": " ", "handle": "ok"})[0] == 400
+
+
+def test_state_people_lists_tonights_singers_then_handles(served):
+    base, state, *_ = served
+    names = _performers_by_consent(state)
+    state.cfg = {**state.cfg, "handles": {"zed q": "zed.sings", sel_key(names["yes"]): "dup"},
+                 "handle_names": {"zed q": "Zed Q", sel_key(names["yes"]): names["yes"]}}
+    people = json.loads(get(base + "/api/state")[2])["people"]
+    by_name = {p["name"]: p for p in people}
+    assert by_name[names["no"]] == {"name": names["no"], "tonight": True, "consent": "no",
+                                    "has_handle": by_name[names["no"]]["has_handle"]}
+    assert by_name["Zed Q"] == {"name": "Zed Q", "tonight": False, "consent": "unknown", "has_handle": True}
+    assert sum(sel_key(p["name"]) == sel_key(names["yes"]) for p in people) == 1  # tonight's entry wins
+    assert all(p["tonight"] for p in people[:-1]) and not people[-1]["tonight"]
+    assert not any("instagram" in p for p in people)  # the handles themselves stay server-side
+
+
+def test_add_second_singer_keeps_logged_one_and_tags_both(served):
+    """Andrew: the KJ logged one singer but two sang -> add the second from the review page."""
+    base, state, *_ = served
+    it = _eligible_selected(state)
+    logged = [p["name"] for p in state.songs[it["song_idx"]]["performers"]]
+    yes_other = next(p for s in state.songs for p in s["performers"]
+                     if p["consent"] == "yes" and p["name"] not in logged)
+    state.cfg = {**state.cfg, "handles": {"zed q": "zed.sings"}, "handle_names": {"zed q": "Zed Q"}}
+    # what "+ Add singer" sends: current names plus the new one
+    post(base + "/api/performers", {"clip_id": it["id"], "names": " & ".join(logged + ["Zed Q"])})
+    assert [p["name"] for p in it["performers"]] == logged + ["Zed Q"]
+    assert it["status"] == "unknown" and it["id"] in state.selected
+    assert "@zed.sings" in state.default_caption([it["id"]])
+    # a second singer from tonight who said yes keeps the clip postable
+    post(base + "/api/performers", {"clip_id": it["id"], "names": " & ".join(logged + [yes_other["name"]])})
+    assert it["status"] == "eligible"
+    # × on the added person (names minus them) goes back to the log
+    post(base + "/api/performers", {"clip_id": it["id"], "names": " & ".join(logged)})
+    assert it["performers"] is None
+
+
+def test_set_handle_adds_and_forgets_people_names(served, tmp_path):
+    base, state, *_ = served
+    state.cfg["path"] = str(tmp_path / "c.toml")
+    (tmp_path / "c.toml").write_text("[handles]\n")
+    post(base + "/api/handle", {"name": "New  Person", "handle": "new.person"})
+    assert {"name": "New Person", "tonight": False, "consent": "unknown", "has_handle": True} in state.known_people()
+    post(base + "/api/handle", {"name": "new person", "handle": ""})
+    assert not any(p["name"] == "New Person" for p in state.known_people())

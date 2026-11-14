@@ -120,15 +120,33 @@ class ReviewState:
     def _restatus(self, item: dict) -> None:
         item["status"] = sel.item_status(item, self.songs)
 
-    def resolve_performers(self, names: list[str]) -> list[dict]:
-        """Names -> performer dicts. Someone who sang tonight brings their own consent and
-        handle; anyone else is consent-unknown, with a ``[handles]`` handle if there is one."""
+    def _tonight(self) -> dict[str, dict]:
+        """name_key -> tonight's performer entry (a "no" anywhere wins, then a "yes")."""
         tonight: dict[str, dict] = {}
         for song in self.songs:
             for p in song.get("performers") or []:
                 cur = tonight.get(sel.name_key(p["name"]))
                 if cur is None or (p.get("consent") == "no") or (cur.get("consent") != "yes" and p.get("consent") == "yes"):
                     tonight[sel.name_key(p["name"])] = p
+        return tonight
+
+    def known_people(self) -> list[dict]:
+        """Who "+ Add singer" suggests: tonight's singers (with their consent), then ``[handles]``
+        names. Names and whether a handle is known only, nothing else from the config."""
+        out = [{"name": p["name"], "tonight": True, "consent": p.get("consent") or "unknown",
+                "has_handle": bool(p.get("instagram"))} for p in self._tonight().values()]
+        seen = {sel.name_key(p["name"]) for p in out}
+        handles = self.cfg.get("handles") or {}
+        names = self.cfg.get("handle_names") or {}
+        for key in sorted(handles, key=lambda k: names.get(k, k).casefold()):
+            if key not in seen:
+                out.append({"name": names.get(key, key), "tonight": False, "consent": "unknown", "has_handle": True})
+        return out
+
+    def resolve_performers(self, names: list[str]) -> list[dict]:
+        """Names -> performer dicts. Someone who sang tonight brings their own consent and
+        handle; anyone else is consent-unknown, with a ``[handles]`` handle if there is one."""
+        tonight = self._tonight()
         handles = self.cfg.get("handles") or {}
         out = []
         for n in names:
@@ -305,11 +323,15 @@ class ReviewState:
                 save_handle(Path(self.cfg["path"]), name, handle)
             key = sel.name_key(name)
             handles = dict(self.cfg.get("handles") or {})
+            names = dict(self.cfg.get("handle_names") or {})
             if handle:
                 handles[key] = handle
+                names[key] = name
             else:
                 handles.pop(key, None)
+                names.pop(key, None)
             self.cfg["handles"] = handles
+            self.cfg["handle_names"] = names
             tagged = 0
             for song in self.songs:
                 for p in song.get("performers") or []:
@@ -403,6 +425,7 @@ class ReviewState:
                 "caption": self.caption,
                 "uncovered": sel.uncovered_performers(self.items, self.songs, self.selected),
                 "consenting": list(sel.consenting_performers(self.items, self.songs).values()),
+                "people": self.known_people(),
                 "posted": self.posted(),
                 "draft_loaded": self.draft_loaded,
             }
