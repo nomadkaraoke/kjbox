@@ -52,8 +52,14 @@
   const perfsOf = (c) => { const s = c && songOf(c); return s ? (c.performers || s.performers) : []; };
 
   // Save who is in the clip (names = array; [] = back to the logged singers) and report consent.
+  // One performer edit per clip at a time, so a quick × can't overwrite an add still in flight.
+  const perfSaving = new Set();
   async function savePerformers(c, names) {
-    const res = await api('/api/performers', { clip_id: c.id, names: names.join(' & ') });
+    if (perfSaving.has(c.id)) return setStatus('Still saving the last change to this clip; try again in a moment.');
+    perfSaving.add(c.id);
+    let res;
+    try { res = await api('/api/performers', { clip_id: c.id, names: names.join(' & ') }); }
+    finally { perfSaving.delete(c.id); }
     if (!res.ok) return setStatus((res.errors || ['edit failed']).join('\n'), 'err');
     const was = selected.includes(c.id);
     applyState(res.state, { keepSelection: true });
@@ -73,10 +79,11 @@
     await savePerformers(c, v.split(/\s*[&,+/]\s*/).filter((n) => n.trim()));
   }
 
+  const latest = (c) => S.clips.find((x) => x.id === c.id) || c;  // the card's clip may predate the last save
   const nameKey = (n) => String(n || '').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
 
   function removePerformer(c, name) {
-    return savePerformers(c, perfsOf(c).map((p) => p.name).filter((n) => nameKey(n) !== nameKey(name)));
+    return savePerformers(c, perfsOf(latest(c)).map((p) => p.name).filter((n) => nameKey(n) !== nameKey(name)));
   }
 
   // "+ Add singer": a button that turns into a name box suggesting tonight's singers and [handles].
@@ -84,7 +91,6 @@
     const wrap = h('span', { class: 'add-singer' });
     const listId = 'people-list';
     const openBox = () => {
-      const inClip = new Set(perfsOf(c).map((p) => nameKey(p.name)));
       const input = h('input', {
         type: 'text', list: listId, placeholder: 'Name', 'aria-label': 'Add a singer to this clip', size: 14,
       });
@@ -96,8 +102,8 @@
         if (!v) { wrap.replaceChildren(btn); return; }
         const opt = (S.people || []).find((p) => nameKey(p.name) === nameKey(v));
         const name = opt ? opt.name : v.replace(/^@/, '');
-        if (inClip.has(nameKey(name))) { setStatus(`${name} is already in this clip.`); wrap.replaceChildren(btn); return; }
-        await savePerformers(c, [...perfsOf(c).map((p) => p.name), name]);
+        if (perfsOf(latest(c)).some((p) => nameKey(p.name) === nameKey(name))) { setStatus(`${name} is already in this clip.`); wrap.replaceChildren(btn); return; }
+        await savePerformers(c, [...perfsOf(latest(c)).map((p) => p.name), name]);
       };
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); done(); }

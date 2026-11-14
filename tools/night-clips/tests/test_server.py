@@ -466,3 +466,25 @@ def test_set_handle_adds_and_forgets_people_names(served, tmp_path):
     assert {"name": "New Person", "tonight": False, "consent": "unknown", "has_handle": True} in state.known_people()
     post(base + "/api/handle", {"name": "new person", "handle": ""})
     assert not any(p["name"] == "New Person" for p in state.known_people())
+
+
+@pytest.mark.parametrize("order", [("no", "yes"), ("yes", "no")])
+def test_a_no_anywhere_tonight_wins_over_a_yes(served, order):
+    base, state, *_ = served
+    a, b = state.songs[0], state.songs[1]
+    a["performers"] = [{"name": "Pat Q", "consent": order[0], "reason": "night_default"}]
+    b["performers"] = [{"name": "Pat Q", "consent": order[1], "reason": "night_default"}]
+    assert state.resolve_performers(["Pat Q"])[0]["consent"] == "no"
+    assert next(p for p in state.known_people() if p["name"] == "Pat Q")["consent"] == "no"
+
+
+def test_logged_singer_keeps_this_songs_consent_when_someone_is_added(served):
+    """Per-song consent: a singer who said yes for this song but no elsewhere stays postable here."""
+    base, state, *_ = served
+    it = _eligible_selected(state)
+    me = state.songs[it["song_idx"]]["performers"][0]
+    other = next(i for i, s in enumerate(state.songs) if i != it["song_idx"])
+    state.songs[other]["performers"] = [*state.songs[other]["performers"], {**me, "consent": "no"}]
+    post(base + "/api/performers", {"clip_id": it["id"], "names": f"{me['name']} & Zed Q"})
+    assert [p["consent"] for p in it["performers"]] == [me["consent"], "unknown"]
+    assert it["id"] in state.selected

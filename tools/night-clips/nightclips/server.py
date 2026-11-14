@@ -126,7 +126,8 @@ class ReviewState:
         for song in self.songs:
             for p in song.get("performers") or []:
                 cur = tonight.get(sel.name_key(p["name"]))
-                if cur is None or (p.get("consent") == "no") or (cur.get("consent") != "yes" and p.get("consent") == "yes"):
+                if (cur is None or p.get("consent") == "no"
+                        or (cur.get("consent") not in ("yes", "no") and p.get("consent") == "yes")):
                     tonight[sel.name_key(p["name"])] = p
         return tonight
 
@@ -143,10 +144,15 @@ class ReviewState:
                 out.append({"name": names.get(key, key), "tonight": False, "consent": "unknown", "has_handle": True})
         return out
 
-    def resolve_performers(self, names: list[str]) -> list[dict]:
-        """Names -> performer dicts. Someone who sang tonight brings their own consent and
-        handle; anyone else is consent-unknown, with a ``[handles]`` handle if there is one."""
+    def resolve_performers(self, names: list[str], song_idx: int | None = None) -> list[dict]:
+        """Names -> performer dicts. Someone logged on the clip's song (``song_idx``) keeps that
+        song's consent and handle; someone else who sang tonight brings their night-wide answer
+        (a "no" anywhere wins); anyone else is consent-unknown, with a ``[handles]`` handle if
+        there is one."""
         tonight = self._tonight()
+        if song_idx is not None:
+            for p in self.songs[song_idx].get("performers") or []:
+                tonight[sel.name_key(p["name"])] = p
         handles = self.cfg.get("handles") or {}
         out = []
         for n in names:
@@ -186,7 +192,7 @@ class ReviewState:
                     it["custom"] = bool(a.get("custom")) and idx is None
                     it["note"] = str(a.get("note") or "")
                     names = a.get("performers")
-                    it["performers"] = (self.resolve_performers([str(x) for x in names])
+                    it["performers"] = (self.resolve_performers([str(x) for x in names], idx)
                                         if isinstance(names, list) and names and idx is not None else None)
                     self._restatus(it)
                 try:
@@ -262,7 +268,7 @@ class ReviewState:
             names = sel.split_names(text)
             logged = [p["name"] for p in self.songs[it["song_idx"]]["performers"]]
             same = [sel.name_key(n) for n in names] == [sel.name_key(n) for n in logged]
-            it["performers"] = None if (not names or same) else self.resolve_performers(names)
+            it["performers"] = None if (not names or same) else self.resolve_performers(names, it["song_idx"])
             it["reviewed"] = True
             self._restatus(it)
             if clip_id in self.selected and not sel.is_selectable(it, allow_unknown=True):
@@ -346,7 +352,7 @@ class ReviewState:
                     tagged += bool(p["instagram"])
             for it in self.items:
                 if it["performers"] is not None and any(sel.name_key(p["name"]) == key for p in it["performers"]):
-                    it["performers"] = self.resolve_performers([p["name"] for p in it["performers"]])
+                    it["performers"] = self.resolve_performers([p["name"] for p in it["performers"]], it["song_idx"])
             return {"name": name, "handle": handle, "tagged": tagged}
 
     def validate_selection(self, selected: list[str], allow_unknown: bool) -> list[str]:
