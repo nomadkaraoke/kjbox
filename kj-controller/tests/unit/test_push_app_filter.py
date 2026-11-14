@@ -65,8 +65,9 @@ def test_app_sub_gets_only_up_next_and_now_singing(store):
     with patch("push_dispatcher.requests.post",
                side_effect=lambda url, **kw: (sent.append(kw["json"]), _ok())[1]):
         _walk_ladder(d, entries)
-    assert [m["data"]["step"] for m in sent] == ["up_next", "now_singing"]
-    assert [m["title"] for m in sent] == ["You're up next", "It's your turn"]
+    # Sends run on the dispatcher's thread pool, so arrival order isn't fixed.
+    assert sorted((m["data"]["step"], m["title"]) for m in sent) == [
+        ("now_singing", "It's your turn"), ("up_next", "You're up next")]
 
 
 def test_app_sub_gets_no_decision_or_sung_pushes(store):

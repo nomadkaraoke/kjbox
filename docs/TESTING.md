@@ -56,6 +56,32 @@ Shared fixtures live in `tests/conftest.py`:
 - **Config**: Pass test config dict to `create_app(config=mock_config)`
 - **Platform detection**: Mock `vlc.is_pi()` to return False (auto in tests via enabled=False)
 
+### Keeping the full suite deterministic
+
+The full suite (~4,600 tests) runs on the build host with `scripts/kjbox-test-remote <worktree>`
+from the workspace root (never on Andrew's MacBook). Until 2026-11-13 almost every full run had
+1-3 random failures that passed alone. Causes and the rules they imply:
+
+- **Patching `routes.subprocess.run` or `routes.threading.Thread` patches the whole module, for
+  every thread.** `routes.subprocess` *is* `subprocess`. A worker left running by an earlier
+  test (rotation duration probe running ffprobe, download worker, VLC verify) lands its call in
+  your mock. `tests/conftest.py` now waits up to 3 s after each test's teardown for the threads its
+  body started (`pytest_runtest_teardown` hook; pending timers are cancelled), and shortens `RotationManager._DURATION_IDLE_EXIT_S`
+  so idle workers exit quickly. The run summary prints `background-thread wait: …` and lists any
+  test whose thread outlived the budget. Fix those by stopping the thread (or mocking what starts
+  it), not by raising the budget.
+- Prefer filtering mock calls by what you expect (`[c for c in m.call_args_list if 'vlc' in c[0][0]]`)
+  over `call_args` / `assert_called_once()` on a module-wide patch.
+- **Wait for state, don't assume speed.** Poll until the item leaves *every* transient state
+  (`queued` and `downloading`, not just one). The build host is slower than the MacBook.
+- **No order assumptions on thread pools.** `PushDispatcher` sends on an executor; compare sorted
+  lists.
+- **E2E server port.** `live_server` binds a free port (`KJ_E2E_PORT` pins one). It used to be
+  fixed at 5099, so two sessions' full runs at once on the shared host tested each other's server:
+  hundreds of e2e failures that passed when re-run.
+- **Playwright and live re-renders.** `bounding_box()` returns `None` if the 2 s poll replaced the
+  node. Measure in the page with `wait_for_function` instead.
+
 ## Coverage Targets
 
 - Overall: 70%+

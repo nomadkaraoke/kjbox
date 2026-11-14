@@ -2,6 +2,19 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-14 - Full test suite no longer flaky on the build host (v0.151.1)
+
+Test-only change (plus one tunable constant in `rotation.py`; device behaviour unchanged). Full
+runs on `andrewmastech` used to fail 1-3 random tests that passed alone, and once 233.
+- E2E `live_server` binds a free port instead of fixed 5099. Two sessions' runs at once on the
+  shared host had one browser testing the other worktree's server.
+- `tests/conftest.py` waits (max 3 s) after each test for threads it started and cancels pending
+  timers, so a leftover worker can't land a call in the next test's module-wide mock
+  (`routes.subprocess.run`, `routes.threading.Thread`, `subprocess.Popen`).
+- AudioMonitor tests no longer leave 8 drain loops busy-spinning a CPU for the rest of the run.
+- `test_app_sub_gets_only_up_next_and_now_singing` no longer assumes thread-pool send order.
+- Conventions: `docs/TESTING.md` § "Keeping the full suite deterministic".
+
 ## 2026-11-13 - KJ: "How Auto Order works" explainer (v0.151.0)
 
 **Deploy:** `.py` change, so auto-deploy restarts kj-controller (playback continues).

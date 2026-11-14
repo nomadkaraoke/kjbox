@@ -269,6 +269,9 @@ class RotationManager:
 
     # While draining a backlog, UIs are told to re-render at most this often.
     _DURATION_REV_INTERVAL_S = 3.0
+    # An idle worker exits after this long; get_rotation restarts it. Tests
+    # shorten it so a test's worker is gone before the next test runs.
+    _DURATION_IDLE_EXIT_S = 30
 
     def _duration_worker_loop(self):
         try:
@@ -290,7 +293,8 @@ class RotationManager:
         last_bump = time.monotonic()
         while True:
             try:
-                entry_id, path = self._duration_queue.get(timeout=0.5 if dirty else 30)
+                entry_id, path = self._duration_queue.get(
+                    timeout=0.5 if dirty else self._DURATION_IDLE_EXIT_S)
             except queue.Empty:
                 if dirty:
                     self._bump_rev_for_durations()
