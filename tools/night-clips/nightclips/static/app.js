@@ -51,12 +51,15 @@
   // Who is in the clip: hand-edited names win over the logged song's performers.
   const perfsOf = (c) => { const s = c && songOf(c); return s ? (c.performers || s.performers) : []; };
 
-  async function editPerformers(c) {
-    const cur = perfsOf(c).map((p) => p.name).join(' & ');
-    const logged = songOf(c).performers.map((p) => p.name).join(' & ');
-    const v = prompt(`Who is singing in this clip? Separate people with &.\nLogged as: ${logged}\nLeave empty to go back to that.`, cur);
-    if (v === null) return;
-    const res = await api('/api/performers', { clip_id: c.id, names: v });
+  // Save who is in the clip (names = array; [] = back to the logged singers) and report consent.
+  // One performer edit per clip at a time, so a quick × can't overwrite an add still in flight.
+  const perfSaving = new Set();
+  async function savePerformers(c, names) {
+    if (perfSaving.has(c.id)) return setStatus('Still saving the last change to this clip; try again in a moment.');
+    perfSaving.add(c.id);
+    let res;
+    try { res = await api('/api/performers', { clip_id: c.id, names: names.join(' & ') }); }
+    finally { perfSaving.delete(c.id); }
     if (!res.ok) return setStatus((res.errors || ['edit failed']).join('\n'), 'err');
     const was = selected.includes(c.id);
     applyState(res.state, { keepSelection: true });
@@ -64,6 +67,70 @@
     const now = S.clips.find((x) => x.id === c.id);
     if (was && !selected.includes(c.id)) setStatus(`Removed from the carousel: someone in it said no.`, 'err');
     else if (now && now.status === 'unknown') setStatus(`Consent unknown for someone in this clip; you'll be asked to confirm before publishing.`);
+    else setStatus('');
+  }
+
+  async function editPerformers(c) {
+    const cur = perfsOf(c).map((p) => p.name).join(' & ');
+    const logged = songOf(c).performers.map((p) => p.name).join(' & ');
+    const v = prompt(`Who's in this clip? Add more people with &, e.g. "${logged || 'Ana'} & Ben".\n` +
+      `Logged as: ${logged}\nLeave empty to go back to that.`, cur);
+    if (v === null) return;
+    await savePerformers(c, v.split(/\s*[&,+/]\s*/).filter((n) => n.trim()));
+  }
+
+  const latest = (c) => S.clips.find((x) => x.id === c.id) || c;  // the card's clip may predate the last save
+  const nameKey = (n) => String(n || '').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+
+  function removePerformer(c, name) {
+    return savePerformers(c, perfsOf(latest(c)).map((p) => p.name).filter((n) => nameKey(n) !== nameKey(name)));
+  }
+
+  // "+ Add singer": a button that turns into a name box suggesting tonight's singers and [handles].
+  function addSingerControl(c) {
+    const wrap = h('span', { class: 'add-singer' });
+    const listId = 'people-list';
+    const openBox = () => {
+      const input = h('input', {
+        type: 'text', list: listId, placeholder: 'Name', 'aria-label': 'Add a singer to this clip', size: 14,
+      });
+      let busy = false;
+      const done = async () => {
+        if (busy) return;
+        busy = true;
+        const v = input.value.trim();
+        if (!v) { wrap.replaceChildren(btn); return; }
+        const opt = (S.people || []).find((p) => nameKey(p.name) === nameKey(v));
+        const name = opt ? opt.name : v.replace(/^@/, '');
+        if (perfsOf(latest(c)).some((p) => nameKey(p.name) === nameKey(name))) { setStatus(`${name} is already in this clip.`); wrap.replaceChildren(btn); return; }
+        await savePerformers(c, [...perfsOf(latest(c)).map((p) => p.name), name]);
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); done(); }
+        else if (e.key === 'Escape') { wrap.replaceChildren(btn); }
+      });
+      input.addEventListener('change', () => {
+        // Picking from the suggestion list fires change with an exact name: add it straight away.
+        if ((S.people || []).some((p) => p.name === input.value)) done();
+      });
+      wrap.replaceChildren(input,
+        h('button', { type: 'button', class: 'mini', onclick: done }, 'Add'),
+        h('button', { type: 'button', class: 'mini', 'aria-label': 'Cancel', onclick: () => wrap.replaceChildren(btn) }, '×'));
+      input.focus();
+    };
+    const btn = h('button', { type: 'button', class: 'add-perf', title: 'Someone else is singing in this clip too',
+      onclick: openBox }, '+ Add singer');
+    wrap.append(btn);
+    return wrap;
+  }
+
+  // One shared <datalist> of people "+ Add singer" can suggest.
+  function renderPeopleList() {
+    let dl = $('people-list');
+    if (!dl) { dl = h('datalist', { id: 'people-list' }); document.body.append(dl); }
+    dl.replaceChildren(...(S.people || []).map((p) => h('option', { value: p.name },
+      p.tonight ? `tonight · ${{ yes: '✓ said yes', no: '✗ said no', unknown: '? never answered' }[p.consent] || p.consent}`
+        : 'not tonight · consent unknown', p.has_handle ? ' · has @handle' : '')));
   }
 
   function prettyNight(n) {
@@ -92,6 +159,7 @@
     const src = { events: 'per-song consent log', legacy: 'legacy night consent', unavailable: 'NO consent data' };
     $('source').textContent = `Consent: ${src[S.consent_source] || S.consent_source}`;
     renderBanners();
+    renderPeopleList();
     renderGrid();
     renderPanel();
   }
@@ -317,8 +385,11 @@
       }, { yes: '✓', no: '✗', unknown: '?' }[p.consent] || '?', ' ', p.name,
       p.instagram ? ` @${p.instagram}` : '',
       p.consent === 'yes' ? h('button', { class: 'edit-handle', type: 'button', title: `Set ${p.name}'s Instagram handle`,
-        'aria-label': `Set ${p.name}'s Instagram handle`, onclick: () => editHandle(p.name, p.instagram) }, p.instagram ? '✎' : '+@') : null)),
-      h('button', { class: 'edit-perf', type: 'button', title: 'Edit who is singing in this clip', 'aria-label': 'Edit singers',
+        'aria-label': `Set ${p.name}'s Instagram handle`, onclick: () => editHandle(p.name, p.instagram) }, p.instagram ? '✎' : '+@') : null,
+      perfsOf(c).length > 1 ? h('button', { class: 'rm-perf', type: 'button', title: `${p.name} isn't in this clip`,
+        'aria-label': `Remove ${p.name} from this clip`, onclick: () => removePerformer(c, p.name) }, '×') : null)),
+      addSingerControl(c),
+      h('button', { class: 'edit-perf', type: 'button', title: 'Type who is in this clip (several people: use &)', 'aria-label': 'Edit singers',
         onclick: () => editPerformers(c) }, '✎'),
       c.performers ? h('span', { class: 'muted' }, ` (edited; logged as ${song.performers.map((p) => p.name).join(' & ')})`) : '') : null,
       h('div', { class: 'muted' }, c.custom ? 'Custom clip (non-singing)' : (STATUS_LABEL[c.status] || c.status)),

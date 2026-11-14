@@ -147,6 +147,7 @@ def test_handles_table_parsed_and_normalized(tmp_path):
     )
     cfg = load_config(tmp_path)
     assert cfg["handles"] == {"big dave": "davethevoice", "anya": "anya.sings"}
+    assert cfg["handle_names"] == {"big dave": "Big Dave", "anya": "Anya"}  # placeholders skipped
 
 
 def test_default_config_has_no_handles(tmp_path):
