@@ -1,0 +1,41 @@
+{
+  "slug": "2026-thanksgiving-karaoke",
+  "event": {
+    "name": "Thanksgiving Karaoke at Babylon Kino",
+    "start": "2026-11-26T21:00",
+    "end": "2026-11-27T03:00"
+  },
+  "sticker": ["GOBBLE", "GOBBLE!"],
+  "title": "Karaoke",
+  "venue": "Babylon Kino - Five Points",
+  "date": "Thanksgiving, Thu Nov 26",
+  "time": "9pm-3am",
+  "quip": "Family too far away? Or not far enough?",
+  "features": [
+    {"icon": "1f983", "overlay": "1f3a4", "overlay_style": "transform: scaleX(-1)", "text": "Gobble up the mic all night!"},
+    {"icon": "1f37a", "text": "Cheap drinks, zero family drama"},
+    {"icon": "1f64a", "text": "Nobody asks about your love life"},
+    {"icon": "1f9e1", "text": "Your chosen family saved you a seat"}
+  ],
+  "decorations": [
+    {"emoji": "1f341", "left": -30, "top": 330, "size": 130, "rotate": -30, "blur": true},
+    {"emoji": "1f342", "left": 950, "top": 150, "size": 110, "rotate": 25},
+    {"emoji": "1f341", "left": 970, "top": 520, "size": 150, "rotate": 60, "blur": true},
+    {"emoji": "1f341", "left": 40, "top": 640, "size": 70, "rotate": 15},
+    {"emoji": "1f342", "left": 960, "top": 860, "size": 66, "rotate": -50, "hide_in": ["square"]},
+    {"emoji": "1f342", "left": 430, "top": 1150, "size": 90, "rotate": 100, "blur": true, "opacity": 0.6, "hide_in": ["square"]}
+  ],
+  "theme": {},
+  "caption": "Gobble gobble 🦃🎤 Thanksgiving night we're still singing at @babylonkino, 9pm–3am. Family too far away, or not far enough? Come sing with your chosen family. Cheap drinks, no awkward questions, every song on YouTube. #ColumbiaSC #FivePoints #Karaoke #Friendsgiving",
+  "post": {
+    "when": "2026-11-20T18:00",
+    "instagram_collab": "babylonkino",
+    "boost_usd": 20,
+    "status": "reminder set (Google Calendar, Fri 2026-11-20 5:50pm)"
+  },
+  "credits": [
+    "Emoji art: Google Noto Emoji (Apache 2.0)",
+    "Background: CSS stage curtain (template)",
+    "Fonts: Shrikhand, Bangers, Poppins (Google Fonts, OFL)"
+  ]
+}

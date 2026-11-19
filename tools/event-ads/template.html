@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Event ad</title>
+<!--
+  Themed event ad template. render.py injects:
+    __FONTS_HREF__   Google Fonts stylesheet URL for the theme's fonts
+    __EVENT_JSON__   the event.json contents (plus resolved asset paths)
+    __NOMAD_LOGO__   inline Nomad Karaoke logo SVG
+    __VARIANT__      "portrait" (1080x1350) or "square" (1080x1080)
+  Layout is a flex column, so nothing overlaps; fit() shrinks the text until it fits the canvas.
+-->
+<link href="__FONTS_HREF__" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #000; }
+  .canvas {
+    --k: 1;                       /* text scale, lowered by fit() when content overflows */
+    width: 1080px; height: 1350px; position: relative; overflow: hidden;
+    font-family: var(--body-font), sans-serif; color: #fff; background: var(--bg-base);
+  }
+  .square .canvas { height: 1080px; }
+
+  /* ---------- background: a stage curtain in the theme colours ---------- */
+  .curtain {
+    position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(90deg,
+        rgba(0,0,0,0.55) 0px, rgba(0,0,0,0) 22px, rgba(255,255,255,0.05) 40px,
+        rgba(0,0,0,0) 58px, rgba(0,0,0,0.6) 82px),
+      linear-gradient(180deg, var(--c0) 0%, var(--c1) 22%, var(--c2) 48%, var(--c3) 75%, var(--c4) 100%);
+  }
+  .curtain.swag::after {
+    content: ""; position: absolute; left: -5%; right: -5%; top: -60px; height: 170px;
+    background:
+      radial-gradient(ellipse 18% 100% at 10% 0%, var(--swag-hi) 0%, var(--swag-lo) 55%, transparent 56%),
+      radial-gradient(ellipse 18% 100% at 30% 0%, var(--swag-hi) 0%, var(--swag-lo) 55%, transparent 56%),
+      radial-gradient(ellipse 18% 100% at 50% 0%, var(--swag-hi) 0%, var(--swag-lo) 55%, transparent 56%),
+      radial-gradient(ellipse 18% 100% at 70% 0%, var(--swag-hi) 0%, var(--swag-lo) 55%, transparent 56%),
+      radial-gradient(ellipse 18% 100% at 90% 0%, var(--swag-hi) 0%, var(--swag-lo) 55%, transparent 56%);
+    filter: drop-shadow(0 8px 10px rgba(0,0,0,0.6));
+  }
+  .bgimg { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .panel {   /* darker centre so the text reads */
+    position: absolute; left: 50px; right: 50px; top: 30px; bottom: 30px;
+    background: radial-gradient(ellipse 75% 65% at 50% 50%, var(--panel) 0%, var(--panel-mid) 70%, transparent 100%);
+  }
+  .noise {
+    position: absolute; inset: 0; opacity: 0.13; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 220px 220px;
+  }
+  .deco { position: absolute; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.45)); }
+  .deco.blur { filter: blur(3px) drop-shadow(0 6px 8px rgba(0,0,0,0.45)); opacity: 0.85; }
+
+  /* ---------- content column ---------- */
+  .content {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    padding: calc(150px * var(--k)) 50px 40px;
+  }
+  .square .content { padding-top: calc(108px * var(--k)); padding-bottom: 26px; }
+
+  .sticker {
+    position: absolute; left: 40px; top: 56px; z-index: 3;
+    font-family: var(--sticker-font), cursive; font-size: calc(92px * var(--k)); letter-spacing: 3px; line-height: 0.9;
+    color: var(--sticker-color); transform: rotate(-11deg); transform-origin: left top;
+    text-shadow: 5px 5px 0 var(--shadow), 0 0 24px rgba(0,0,0,0.6);
+    -webkit-text-stroke: 3px var(--shadow); paint-order: stroke fill;
+  }
+  .square .sticker { font-size: calc(72px * var(--k)); left: 30px; top: 34px; }
+
+  .title {
+    font-family: var(--title-font), cursive; font-size: calc(206px * var(--k)); line-height: 1; letter-spacing: 2px;
+    white-space: nowrap; padding: 0 10px 0 calc(var(--title-indent) * 1px);
+    background: linear-gradient(180deg, var(--t0) 10%, var(--t1) 55%, var(--t2) 90%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 7px 0 var(--shadow)) drop-shadow(0 14px 22px rgba(0,0,0,0.55));
+  }
+  .square .title { font-size: calc(160px * var(--k)); }
+
+  .info { text-align: center; margin-top: calc(46px * var(--k)); }
+  .square .info { margin-top: calc(30px * var(--k)); }
+  .venue { font-size: calc(62px * var(--k)); font-weight: 700; color: var(--accent); line-height: 1.1; text-shadow: 0 3px 12px rgba(0,0,0,0.6); }
+  .date  { font-size: calc(58px * var(--k)); font-weight: 700; color: var(--date-color); line-height: 1.1; margin-top: 10px; text-shadow: 0 3px 12px rgba(0,0,0,0.6); }
+  .square .venue { font-size: calc(48px * var(--k)); }
+  .square .date { font-size: calc(44px * var(--k)); margin-top: 4px; }
+  .quip {
+    display: inline-block; margin-top: calc(22px * var(--k));
+    font-size: calc(33px * var(--k)); font-weight: 600; font-style: italic; color: #fff;
+    background: var(--quip-bg); border: 2px solid var(--quip-border); border-radius: 999px; padding: 8px 30px;
+  }
+  .square .quip { font-size: calc(27px * var(--k)); margin-top: calc(14px * var(--k)); padding: 6px 24px; }
+
+  .features { display: flex; flex-direction: column; gap: calc(16px * var(--k)); margin-top: calc(36px * var(--k)); }
+  .square .features { gap: calc(8px * var(--k)); margin-top: calc(28px * var(--k)); }
+  .feature { display: flex; align-items: center; gap: 24px; font-size: calc(41px * var(--k)); font-weight: 600; line-height: 1.1; text-shadow: 0 3px 10px rgba(0,0,0,0.6); white-space: nowrap; }
+  .square .feature { font-size: calc(32px * var(--k)); gap: 18px; }
+  .icon { position: relative; width: calc(74px * var(--k)); height: calc(74px * var(--k)); flex-shrink: 0; }
+  .square .icon { width: calc(56px * var(--k)); height: calc(56px * var(--k)); }
+  .icon img { width: 100%; height: 100%; display: block; }
+  /* an overlay emoji held up to the main one (e.g. a mic at the turkey's beak) */
+  .icon img.overlay { position: absolute; width: 40%; height: 40%; left: -16%; top: 12%; }
+
+  .bottom { width: 100%; margin-top: auto; padding: 0 10px 0 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .partner { height: 180px; }
+  .square .partner { height: 140px; }
+  .nomad svg { width: 380px; display: block; }
+  .square .nomad svg { width: 300px; }
+</style>
+</head>
+<body class="__VARIANT__">
+<div class="canvas" id="canvas">
+  <div class="curtain" id="curtain"></div>
+  <div class="bgimg" id="bgimg" hidden></div>
+  <div class="panel"></div>
+  <div class="noise"></div>
+  <div id="decos"></div>
+  <div class="sticker" id="sticker"></div>
+  <div class="content" id="content">
+    <div class="title" id="title"></div>
+    <div class="info">
+      <div class="venue" id="venue"></div>
+      <div class="date" id="date"></div>
+      <div class="quip" id="quip"></div>
+    </div>
+    <div class="features" id="features"></div>
+    <div class="bottom">
+      <img class="partner" id="partner" alt="">
+      <div class="nomad">__NOMAD_LOGO__</div>
+    </div>
+  </div>
+</div>
+<script>
+const EVENT = __EVENT_JSON__;
+const VARIANT = document.body.className;
+const $ = (id) => document.getElementById(id);
+const t = EVENT.theme;
+
+// theme -> CSS variables
+const vars = {
+  '--title-font': `'${t.title_font}'`, '--sticker-font': `'${t.sticker_font}'`, '--body-font': `'${t.body_font}'`,
+  '--t0': t.title_gradient[0], '--t1': t.title_gradient[1], '--t2': t.title_gradient[2],
+  '--shadow': t.shadow, '--accent': t.accent, '--date-color': t.date_color, '--sticker-color': t.sticker_color,
+  '--c0': t.curtain[0], '--c1': t.curtain[1], '--c2': t.curtain[2], '--c3': t.curtain[3], '--c4': t.curtain[4],
+  '--bg-base': t.curtain[4], '--swag-hi': t.swag?.[0] ?? 'transparent', '--swag-lo': t.swag?.[1] ?? 'transparent',
+  '--panel': t.panel[0], '--panel-mid': t.panel[1], '--quip-bg': t.quip_bg, '--quip-border': t.quip_border,
+  '--title-indent': EVENT.title_indent ?? 60,
+};
+for (const [k, v] of Object.entries(vars)) $('canvas').style.setProperty(k, v);
+if (t.swag) $('curtain').classList.add('swag');
+if (t.background_image) {
+  $('bgimg').hidden = false;
+  $('bgimg').style.backgroundImage = `url('${t.background_image}')`;
+  $('curtain').hidden = true;
+}
+
+const img = (src, cls) => { const i = document.createElement('img'); i.src = src; if (cls) i.className = cls; return i; };
+
+$('sticker').innerHTML = (EVENT.sticker || []).map(s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
+$('title').textContent = EVENT.title;
+$('venue').textContent = EVENT.venue;
+$('date').innerHTML = [EVENT.date, EVENT.time].filter(Boolean).map(s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
+if (EVENT.quip) $('quip').textContent = EVENT.quip; else $('quip').remove();
+$('partner').src = EVENT.partner_logo;
+
+for (const f of EVENT.features) {
+  const row = document.createElement('div'); row.className = 'feature';
+  const ic = document.createElement('div'); ic.className = 'icon';
+  ic.appendChild(img(f.icon_src));
+  if (f.overlay_src) {
+    const o = img(f.overlay_src, 'overlay');
+    if (f.overlay_style) o.style.cssText += f.overlay_style;
+    ic.appendChild(o);
+  }
+  row.appendChild(ic);
+  row.appendChild(document.createTextNode(f.text));
+  $('features').appendChild(row);
+}
+
+for (const d of EVENT.decorations || []) {
+  if ((d.hide_in || []).includes(VARIANT)) continue;
+  const i = img(d.src, 'deco' + (d.blur ? ' blur' : ''));
+  Object.assign(i.style, { left: d.left + 'px', top: d.top + 'px', width: d.size + 'px',
+                           transform: `rotate(${d.rotate || 0}deg)`, opacity: d.opacity ?? '' });
+  $('decos').appendChild(i);
+}
+
+// Shrink the text until nothing overflows: the column must fit the canvas height and no line may be
+// wider than the canvas. render.py reads window.__fit and refuses to write a PNG that still overflows.
+async function fit() {
+  await document.fonts.ready;
+  await Promise.all([...document.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; })));
+  const canvas = $('canvas'), content = $('content');
+  const W = canvas.clientWidth;
+  const tooWide = () => [...document.querySelectorAll('.title, .venue, .date, .quip, .feature, .sticker')]
+      .some(el => { const r = el.getBoundingClientRect();   // includes the sticker's rotation
+                    return r.right > W - 10 || r.left < 0 || el.scrollWidth > el.clientWidth + 1; });
+  const overflow = () => content.scrollHeight > content.clientHeight + 1 || tooWide();
+  let k = 1;
+  while (overflow() && k > 0.6) { k -= 0.02; canvas.style.setProperty('--k', k.toFixed(2)); }
+  window.__fit = { scale: Number(k.toFixed(2)), overflow: overflow() };
+}
+window.__ready = fit();
+</script>
+</body>
+</html>

@@ -59,6 +59,7 @@ kjbox/
     nomad-kjbox-desktop-background-4k.jpg  # 4K source wallpaper (desktop background)
   tools/
     night-clips/               # Mac-only: night's phone clips -> reviewed Instagram carousel (see its README)
+    event-ads/                 # Mac-only: themed social ads (event.json -> 4:5 + square PNGs; see its README)
   kj-controller/               # KJ Remote Controller web app
     app.py                     # App factory (create_app) + entry point
     config.py                  # Constants, platform detection, config loading
