@@ -149,8 +149,12 @@ def test_desktop_singer_group_wraps_within_two_lines(page, live_server, width, t
     for i in range(3):
         item = row.locator(".rotation-singer-item").nth(i).bounding_box()
         assert item["height"] < pill["height"] + 8
-    # Status + prep badges stack beside the singers instead of wrapping below.
+    # Status + prep badges sit side by side on ONE line (so they line up with
+    # single-singer rows), beside the singers rather than wrapped below.
     badge = row.locator(".rotation-badge").first.bounding_box()
+    prep = row.locator(".rotation-prep-badge").first.bounding_box()
+    assert abs((badge["y"] + badge["height"] / 2) - (prep["y"] + prep["height"] / 2)) < 4, (badge, prep)
+    assert prep["x"] > badge["x"]
     page.screenshot(path=str(tmp_path / f"kj-singer-group-{width}.png"), clip={
         "x": 0, "y": row.bounding_box()["y"] - 4,
         "width": width, "height": row.bounding_box()["height"] + 8})

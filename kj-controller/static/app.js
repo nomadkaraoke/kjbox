@@ -7167,16 +7167,7 @@ function renderRotation(entries) {
             badge.classList.add('badge-cancelled');
             badge.title = 'Cancelled by the singer — removing automatically; set Waiting to restore';
         }
-        // Multi-singer rows are already two lines tall (the singer grid), so
-        // stack the status + prep badges there too instead of letting the prep
-        // badge wrap onto a third line on its own.
-        let badgeHost = info;
-        if (singers_parsed && singers_parsed.length > 1) {
-            badgeHost = document.createElement('span');
-            badgeHost.className = 'rotation-status-stack';
-            info.appendChild(badgeHost);
-        }
-        if (badge.textContent) badgeHost.appendChild(badge);
+        if (badge.textContent) info.appendChild(badge);
 
         // Preparation status badge
         const prepBadge = document.createElement('span');
@@ -7276,7 +7267,7 @@ function renderRotation(entries) {
             prepBadge.classList.add('prep-unlinked');
             prepBadge.title = 'No song file linked \u2014 use the link button to search and attach a song';
         }
-        badgeHost.appendChild(prepBadge);
+        info.appendChild(prepBadge);
         if (quickHasNoLyrics(entry)) {
             // gen found no lyrics for the quick draft — it would only show
             // "(lyrics unavailable)". Let the KJ search or paste some in.
