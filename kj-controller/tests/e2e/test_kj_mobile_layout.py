@@ -112,3 +112,46 @@ class TestSlidersToggle:
         page.locator("#pc-sliders-toggle").click()
         expect(page.locator("#pc-sliders")).to_be_visible()
         assert page.evaluate("() => localStorage.getItem('kj-sliders-hidden')") is None
+
+
+# Three singers + a long title (Andrew's screenshot, 2026-11-19): the singer
+# pills used to wrap as loose items in .rotation-info, pushing the badges onto
+# a third line. They now sit in a width-capped box of at most two lines.
+_RENDER_GROUP_ROW = (
+    "() => {"
+    "  for (let i = 1; i < 100000; i++) clearInterval(i);"
+    "  window.rotationData = ["
+    "    { id: 1, position: 1, singer: 'Mars W, Lulu K & Rowan',"
+    "      singers_json: JSON.stringify(['Mars W', 'Lulu K', 'Rowan']),"
+    "      song_artist: \"I'll Make A Man Out Of You - Disney (Mulan) Donny Osmond\","
+    "      status: 'Waiting', songs_sung: 0, wait_minutes: 25, duration: 202,"
+    "      estimated_time: '11:01 pm', file_path: '/d/x.mp4',"
+    "      sms: { configured: true, available: true } },"
+    "  ];"
+    "  renderRotation(window.rotationData);"
+    "}"
+)
+
+
+@pytest.mark.parametrize("width", [1500, 1700])
+def test_desktop_singer_group_wraps_within_two_lines(page, live_server, width, tmp_path):
+    page.set_viewport_size({"width": width, "height": 900})
+    page.goto(live_server)
+    page.wait_for_load_state("networkidle")
+    page.evaluate(_RENDER_GROUP_ROW)
+    row = page.locator(".rotation-entry").first
+    group = row.locator(".rotation-singers").bounding_box()
+    pill = row.locator(".rotation-singer-pill").first.bounding_box()
+    # At most two lines of pills, and every singer is reachable.
+    assert group["height"] <= 2 * pill["height"] + 8, (group, pill)
+    assert row.locator(".rotation-singer-pill").count() == 3
+    # Each name stays on the same line as its camera marker.
+    for i in range(3):
+        item = row.locator(".rotation-singer-item").nth(i).bounding_box()
+        assert item["height"] < pill["height"] + 8
+    # Status + prep badges stack beside the singers instead of wrapping below.
+    badge = row.locator(".rotation-badge").first.bounding_box()
+    page.screenshot(path=str(tmp_path / f"kj-singer-group-{width}.png"), clip={
+        "x": 0, "y": row.bounding_box()["y"] - 4,
+        "width": width, "height": row.bounding_box()["height"] + 8})
+    assert badge["y"] < group["y"] + group["height"], (badge, group)
