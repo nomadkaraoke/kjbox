@@ -279,6 +279,54 @@ class TestApprove:
         entry = admin_app.rotation.store.get_entry(items[0]["rotation_entry_id"])
         assert entry["download_status"] == "queued"
 
+    def test_approve_pasted_youtube_already_on_disk_gets_title(
+        self, admin_client, admin_app, tmp_path
+    ):
+        # 2026-11-19: a singer pasted a YouTube link (no artist/title) for a
+        # video the box had already downloaded. The dedup-skip path linked the
+        # file but never back-filled the title, so the queue row was blank.
+        f = tmp_path / "Olivia Rodrigo - expectations [yt-xC0O1XyKF1c].mp4"
+        f.write_bytes(b"x")
+        req = _make_pending(
+            admin_app, singer_name="Lulu K", source_type="youtube",
+            source_ref="https://youtu.be/xC0O1XyKF1c", song_artist="", song_title="",
+        )
+        row = {"file_path": str(f), "artist": "Olivia Rodrigo", "title": "expectations"}
+        with patch("routes._existing_media_for", return_value=row), \
+                patch("routes._download_worker") as _w:
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+            assert resp.status_code == 200
+            _w.assert_not_called()
+        entry = admin_app.rotation.store.get_entry(resp.get_json()["request"]["linked_entry_id"])
+        assert entry["file_path"] == str(f)
+        assert entry["song_artist"] == "expectations - Olivia Rodrigo"
+
+    def test_dedup_link_title_falls_back_to_filename(self, admin_client, admin_app, tmp_path):
+        f = tmp_path / "Some Artist - Some Song [yt-abc123].mp4"
+        f.write_bytes(b"x")
+        req = _make_pending(
+            admin_app, singer_name="Lulu K", source_type="youtube",
+            source_ref="https://youtu.be/abc123", song_artist="", song_title="",
+        )
+        row = {"file_path": str(f), "artist": "", "title": ""}
+        with patch("routes._existing_media_for", return_value=row):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        entry = admin_app.rotation.store.get_entry(resp.get_json()["request"]["linked_entry_id"])
+        assert entry["song_artist"] == "Some Artist - Some Song"
+
+    def test_dedup_link_keeps_singer_supplied_title(self, admin_client, admin_app, tmp_path):
+        f = tmp_path / "x [yt-abc123].mp4"
+        f.write_bytes(b"x")
+        req = _make_pending(
+            admin_app, singer_name="Lulu K", source_type="youtube",
+            source_ref="https://youtu.be/abc123", song_artist="Real Artist", song_title="Real Song",
+        )
+        row = {"file_path": str(f), "artist": "Other", "title": "Other"}
+        with patch("routes._existing_media_for", return_value=row):
+            resp = admin_client.post(f"/rotation/requests/{req['id']}/approve")
+        entry = admin_app.rotation.store.get_entry(resp.get_json()["request"]["linked_entry_id"])
+        assert entry["song_artist"] == "Real Song - Real Artist"
+
     def test_approve_youtube_skip_download_creates_unlinked_entry(self, admin_client, admin_app):
         # KJ watched the pasted URL, decided it's not actually a karaoke
         # version, but wants to keep the singer in rotation and link a
