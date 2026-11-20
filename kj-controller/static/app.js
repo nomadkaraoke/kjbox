@@ -7017,16 +7017,29 @@ function renderRotation(entries) {
         info.appendChild(num);
 
         if (singers_parsed && singers_parsed.length > 1) {
-            // Multi-singer: render individual pills
+            // Multi-singer: individual pills in a width-capped grid of exactly
+            // two rows, so a duet/group plus a long title
+            // doesn't push the song and badges onto extra lines. Each name
+            // stays on the same line as its camera marker.
+            const group = document.createElement('span');
+            group.className = 'rotation-singers';
+            group.title = singers_parsed.join(', ');
+            // Fill two rows: 2 singers stack, 3-4 make a 2x2, 5-6 a 3x2...
+            group.style.gridTemplateColumns =
+                'repeat(' + Math.ceil(singers_parsed.length / 2) + ', minmax(0, max-content))';
             singers_parsed.forEach((s) => {
+                const pair = document.createElement('span');
+                pair.className = 'rotation-singer-item';
                 const sp = document.createElement('span');
                 sp.className = 'rotation-singer-pill rotation-copyable';
                 sp.textContent = s;
                 sp.title = 'Click to copy \u2022 Shift+click to edit';
                 sp.onclick = (ev) => { if (!ev.shiftKey) copyRotationText(sp); };
-                info.appendChild(sp);
-                info.appendChild(photoConsentMarker(entry, s));
+                pair.appendChild(sp);
+                pair.appendChild(photoConsentMarker(entry, s));
+                group.appendChild(pair);
             });
+            info.appendChild(group);
         } else {
             // Single singer or legacy: plain text (unchanged)
             const name = document.createElement('span');
@@ -7154,7 +7167,16 @@ function renderRotation(entries) {
             badge.classList.add('badge-cancelled');
             badge.title = 'Cancelled by the singer — removing automatically; set Waiting to restore';
         }
-        if (badge.textContent) info.appendChild(badge);
+        // Multi-singer rows are already two lines tall (the singer grid), so
+        // stack the status + prep badges there too instead of letting the prep
+        // badge wrap onto a third line on its own.
+        let badgeHost = info;
+        if (singers_parsed && singers_parsed.length > 1) {
+            badgeHost = document.createElement('span');
+            badgeHost.className = 'rotation-status-stack';
+            info.appendChild(badgeHost);
+        }
+        if (badge.textContent) badgeHost.appendChild(badge);
 
         // Preparation status badge
         const prepBadge = document.createElement('span');
@@ -7254,7 +7276,7 @@ function renderRotation(entries) {
             prepBadge.classList.add('prep-unlinked');
             prepBadge.title = 'No song file linked \u2014 use the link button to search and attach a song';
         }
-        info.appendChild(prepBadge);
+        badgeHost.appendChild(prepBadge);
         if (quickHasNoLyrics(entry)) {
             // gen found no lyrics for the quick draft — it would only show
             // "(lyrics unavailable)". Let the KJ search or paste some in.
@@ -7353,46 +7375,14 @@ function renderRotation(entries) {
             actions.appendChild(dlBtn);
         }
 
-        // "Singing" \u2014 always rendered (disabled when the singer is already
-        // performing) so following buttons never shift between states.
-        {
-            const isSinging = statusLower.includes('singing') || statusLower === 'now singing';
-            const singBtn = document.createElement('button');
-            singBtn.className = 'rotation-btn rotation-btn-sing';
-            singBtn.textContent = 'Singing';
-            if (isSinging) {
-                singBtn.disabled = true;
-                singBtn.title = 'Already marked as currently performing';
-            } else {
-                singBtn.title = 'Mark this singer as currently performing';
-                singBtn.onclick = () => updateRotationStatus(entry.id, 'Now Singing');
-            }
-            actions.appendChild(singBtn);
-        }
-
+        // No row "Singing"/"Next" buttons: Andrew never used them (Play sets
+        // Now Singing) and they're both in the "\u2026" status menu.
         const doneBtn = document.createElement('button');
         doneBtn.className = 'rotation-btn rotation-btn-done';
         doneBtn.textContent = 'Done';
         doneBtn.title = 'Song finished \u2014 mark as done and credit the singer';
         doneBtn.onclick = () => updateRotationStatus(entry.id, 'Done');
         actions.appendChild(doneBtn);
-
-        // "Next" \u2014 always rendered (disabled when already up next) so the
-        // buttons after it keep a stable position.
-        {
-            const isNext = statusLower.includes('next');
-            const nextBtn = document.createElement('button');
-            nextBtn.className = 'rotation-btn rotation-btn-next';
-            nextBtn.textContent = 'Next';
-            if (isNext) {
-                nextBtn.disabled = true;
-                nextBtn.title = 'Already marked as up next';
-            } else {
-                nextBtn.title = 'Mark as up next \u2014 give them a heads up to get ready';
-                nextBtn.onclick = () => updateRotationStatus(entry.id, 'Up Next');
-            }
-            actions.appendChild(nextBtn);
-        }
 
         // "..." more status options
         const moreBtn = document.createElement('button');

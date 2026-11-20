@@ -3091,13 +3091,6 @@ body.col-resizing {
     background: #222;
     color: #ccc;
 }
-.rotation-btn-sing {
-    border-color: rgba(34, 197, 94, 0.4);
-    color: #86efac;
-}
-.rotation-btn-sing:hover {
-    background: rgba(34, 197, 94, 0.15);
-}
 .rotation-btn-sms {
     border-color: rgba(255, 77, 207, 0.4);
     color: #ff4dcf;
@@ -3313,13 +3306,6 @@ body.col-resizing {
 }
 .rotation-btn-done:hover {
     background: rgba(139, 92, 246, 0.15);
-}
-.rotation-btn-next {
-    border-color: rgba(245, 158, 11, 0.3);
-    color: #fcd34d;
-}
-.rotation-btn-next:hover {
-    background: rgba(245, 158, 11, 0.15);
 }
 .rotation-btn-more {
     border-color: #444;
@@ -3841,7 +3827,40 @@ body.col-resizing {
     color: #e74c3c;
 }
 
-/* Multi-singer pills in rotation rows */
+/* Multi-singer pills in rotation rows. The group is a two-row grid whose
+ * column count app.js sets to ceil(n/2), so a duet stacks and a group of
+ * 3-4 makes a 2x2: the singers never take more than two lines and the grid
+ * shrinks to its content, leaving the room for the song title and badges.
+ * Over-long names ellipsize (full list in the group's tooltip). */
+.rotation-singers {
+    display: inline-grid;
+    grid-auto-flow: row;
+    align-items: center;
+    gap: 2px 6px;
+    flex: 0 1 auto;
+    max-width: 16rem;
+    min-width: 0;
+}
+.rotation-singer-item {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    min-width: 0;
+}
+.rotation-singer-item .rotation-singer-pill {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rotation-singer-item .rotation-photo-consent { flex-shrink: 0; }
+.rotation-singer-item .rotation-photo-consent { margin-left: 2px; }
+.rotation-status-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    flex-shrink: 0;
+}
 .rotation-singer-pill {
     background: #2a2a2a;
     color: #ffdf6b;
@@ -5206,6 +5225,7 @@ body.simple-mode .night-log-launcher { display: none; }
     }
     .rotation-name { font-size: 1em; white-space: normal; overflow-wrap: anywhere; }
     .rotation-singer-pill { font-size: 0.85em; }
+    .rotation-singers { max-width: 100%; }
     .rotation-song {
         order: 10;               /* after the pills/badges → its own line */
         flex: 1 1 calc(100% - 2em);
