@@ -9,6 +9,7 @@
   let selected = [];         // ordered clip ids
   let captionDirty = false;  // caption edited by hand -> don't auto-regenerate
   let playing = null;        // clip id with an inline player
+  let consentPending = {};   // name_key -> 'yes' | 'no' | null (back to the kjbox's answer), not saved yet
 
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -142,6 +143,8 @@
     song_override_singer: 'singer set for this song',
     song_override_kj: 'KJ set for this song',
     night_default: 'singer’s answer for the night',
+    kj_override: 'you set this on the review page',
+    edited: 'added to this clip by hand',
     unknown: 'never answered',
   };
   const FLAGS = {
@@ -461,6 +464,8 @@
       ol.append(li);
     });
 
+    renderConsent();
+
     const ul = $('uncovered');
     ul.replaceChildren();
     const unc = uncovered();
@@ -480,6 +485,70 @@
       r.handle ? '✎' : '+ @handle') : null)));
 
     updateCapCount();
+  }
+
+  // Everyone whose consent matters tonight, with a picker for Andrew's own call.
+  const CONSENT_TXT = { yes: '✓ yes', no: '✗ no', unknown: '? never answered' };
+  function renderConsent() {
+    const ul = $('consent-list');
+    ul.replaceChildren();
+    const rows = S.singers || [];
+    if (!rows.length) ul.append(h('li', { class: 'muted' }, 'No singers logged tonight.'));
+    rows.forEach((r) => {
+      const val = r.key in consentPending ? consentPending[r.key] : (r.override || null);
+      const eff = val || r.kj_consent;
+      const pending = r.key in consentPending && (consentPending[r.key] || null) !== (r.override || null);
+      const sel = h('select', {
+        'aria-label': `Consent for ${r.name}`,
+        onchange: (e) => {
+          const v = e.target.value || null;
+          if (v === 'yes' && r.kj_consent === 'no' && !confirm(
+            `${r.name} said NO in the app (${REASONS[r.kj_reason] || r.kj_reason}).\n\nOnly mark them OK if they told you otherwise in person.`)) {
+            e.target.value = val || '';
+            return;
+          }
+          if ((v || null) === (r.override || null)) delete consentPending[r.key];
+          else consentPending[r.key] = v;
+          renderConsent();
+        },
+      },
+      h('option', { value: '', selected: !val }, `As logged (${CONSENT_TXT[r.kj_consent] || r.kj_consent})`),
+      h('option', { value: 'yes', selected: val === 'yes' }, '✓ OK to post (told me)'),
+      h('option', { value: 'no', selected: val === 'no' }, '✗ Don’t post'));
+      ul.append(h('li', { class: pending ? 'pending' : '' },
+        h('span', { class: `perf ${eff}`, title: `${String(eff).toUpperCase()}: ${val ? REASONS.kj_override : (REASONS[r.kj_reason] || r.kj_reason)}` },
+          { yes: '✓', no: '✗', unknown: '?' }[eff] || '?', ' ', r.name),
+        h('span', { class: 'muted' }, ` ${r.clips} clip${r.clips === 1 ? '' : 's'}`),
+        sel));
+    });
+    const n = Object.keys(consentPending).length;
+    $('consent-save').disabled = !n;
+    $('consent-save').textContent = n ? `Save ${n} change${n === 1 ? '' : 's'} & re-select clips` : 'Save & re-select clips';
+    $('consent-cancel').hidden = !n;
+  }
+
+  async function saveConsent() {
+    const names = Object.fromEntries((S.singers || []).map((r) => [r.key, r.name]));
+    const overrides = Object.fromEntries(Object.entries(consentPending).map(([k, v]) => [names[k] || k, v]));
+    if (!Object.keys(overrides).length) return;
+    const hand = selected.length && !confirm('Re-select clips from scratch with the new consent? Your current picks and order are replaced (Cancel keeps them, dropping only clips that can no longer be posted).');
+    const keptCaption = $('caption').value;
+    setStatus('Saving consent…');
+    const res = await api('/api/consent', { overrides, reselect: !hand, selected });
+    if (!res.ok) return setStatus((res.errors || ['save failed']).join('\n'), 'err');
+    consentPending = {};
+    const wasDirty = captionDirty;
+    applyState(res.state);
+    selected = [...res.selected];
+    if (wasDirty) { $('caption').value = keptCaption; captionDirty = true; }
+    else {
+      const cap = await api('/api/caption', { selected });
+      if (cap.ok) $('caption').value = cap.caption;
+      captionDirty = false;
+    }
+    render();
+    await saveDraft(true);
+    setStatus(`Consent saved. ${selected.length} clip(s) selected${wasDirty ? '. You edited the caption by hand: click Regenerate to pick up the new singers.' : '.'}`, 'ok');
   }
 
   // How many selected clips each performer appears in (a duet counts for both).
@@ -648,6 +717,8 @@
     if (res.ok) { $('caption').value = res.caption; updateCapCount(); }
   });
   $('save').addEventListener('click', () => saveDraft(false));
+  $('consent-save').addEventListener('click', saveConsent);
+  $('consent-cancel').addEventListener('click', () => { consentPending = {}; renderConsent(); });
   $('publish').addEventListener('click', publish);
   $('posted').addEventListener('click', markPosted);
 

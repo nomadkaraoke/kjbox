@@ -82,6 +82,14 @@ On the review page:
   after it. Or type **Cut first N s** and **Length N s** on the card. Clips over a minute are capped at 59s from the start
   you choose. **Reset** goes back to the whole clip (or its first 59s). The cut is saved in the draft. A cut from the start of
   the clip is a quick stream copy; a cut from a later start is re-encoded (a few seconds per clip) so it matches the preview exactly.
+- **Singers' consent** (side panel) lists everyone logged tonight (and anyone you added to a clip) with the kjbox's
+  answer and how many clips they're in. If someone told you in person they're happy to be posted (or not), pick
+  **✓ OK to post (told me)** or **✗ Don't post**; **As logged** goes back to the kjbox's answer. Your call covers all of
+  that singer's songs tonight, including per-song answers. Turning a logged "no" into OK asks you to confirm. Then click
+  **Save & re-select clips**: every clip is re-checked and the pre-selection is rebuilt (Cancel on the prompt keeps your
+  picks and order and only drops clips that can no longer be posted). A hand-edited caption is kept; click
+  **Regenerate** to pick up the new singers. A "yes" picks up their `[handles]` handle. Saved in the draft
+  (`consent_overrides`) for this night only; it never writes back to the kjbox.
 - **Instagram handles**: click **+@** (or ✎ next to a handle) on a singer who said yes, on a card or in **Clips per singer**,
   and type their handle. It's saved to `[handles]` in `config.toml` straight away, so future nights get it too. That line is
   updated in place and its comment kept; a new name is added at the end of the table. Tonight's clips and the caption
