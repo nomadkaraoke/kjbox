@@ -3772,6 +3772,7 @@ function initColumnResizer() {
 
     resizer.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return;
+        if (e.target.closest('#column-toggle') || isCol2Collapsed()) return;
         e.preventDefault();
         resizer.setPointerCapture(e.pointerId);
         document.body.classList.add('col-resizing');
@@ -3796,13 +3797,15 @@ function initColumnResizer() {
         resizer.addEventListener('pointercancel', onUp);
     });
 
-    resizer.addEventListener('dblclick', () => {
+    resizer.addEventListener('dblclick', (e) => {
+        if (e.target.closest('#column-toggle') || isCol2Collapsed()) return;
         preferred = null;
         applyColShare(null);
         saveColShare(null);
     });
 
     resizer.addEventListener('keydown', (e) => {
+        if (e.target !== resizer || isCol2Collapsed()) return;
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
         e.preventDefault();
         const total = columnsWidth();
@@ -3814,7 +3817,47 @@ function initColumnResizer() {
     });
 }
 
+// --- Collapse/expand the right column (#col2) so #col1 gets the full width ---
+
+function isCol2Collapsed() {
+    const layout = document.querySelector('.main-layout');
+    return !!layout && layout.classList.contains('col2-collapsed');
+}
+
+function setCol2Collapsed(collapsed) {
+    const layout = document.querySelector('.main-layout');
+    const toggle = document.getElementById('column-toggle');
+    if (!layout) return;
+    layout.classList.toggle('col2-collapsed', collapsed);
+    if (toggle) {
+        const label = collapsed ? 'Show side panel' : 'Hide side panel (use the full width)';
+        toggle.innerHTML = collapsed ? '&lsaquo;' : '&rsaquo;';
+        toggle.title = label;
+        toggle.setAttribute('aria-label', label);
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+    }
+    try {
+        if (collapsed) localStorage.setItem('kj-col2-collapsed', '1');
+        else localStorage.removeItem('kj-col2-collapsed');
+    } catch (e) { /* private mode */ }
+    // Width-dependent widgets (VNC fit, toolbars) re-measure on resize.
+    window.dispatchEvent(new Event('resize'));
+}
+
+function initColumnToggle() {
+    const toggle = document.getElementById('column-toggle');
+    if (!toggle) return;
+    let saved = false;
+    try { saved = localStorage.getItem('kj-col2-collapsed') === '1'; } catch (e) { /* private mode */ }
+    if (saved) setCol2Collapsed(true);
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setCol2Collapsed(!isCol2Collapsed());
+    });
+}
+
 document.addEventListener('DOMContentLoaded', initColumnResizer);
+document.addEventListener('DOMContentLoaded', initColumnToggle);
 
 // --- System Control (#4 dangerous action protection) ---
 
