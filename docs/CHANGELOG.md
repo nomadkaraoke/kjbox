@@ -2,6 +2,13 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-20 - /history/night-media also lists direct plays (v0.152.4)
+
+`GET /history/night-media` gains a `plays` list: live plays of the night with no rotation entry (the KJ
+played the song straight from the library), `{played_at (local), artist, title, media_id}`. The
+night-clips tool (v0.6.0) offers them as songs a phone clip can belong to, so Andrew can say who sang.
+Additive, read-only; best effort (an error returns `plays: []`).
+
 ## 2026-11-19 - Singer: picking a song from "Which song?" now shows the make-it card (v0.151.2)
 
 **Deploy:** frontend fix plus a `.py` test change, so auto-deploy restarts kj-controller (playback continues).

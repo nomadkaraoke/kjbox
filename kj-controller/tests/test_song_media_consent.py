@@ -260,6 +260,7 @@ class TestKjAndNightMedia:
         assert "started_at" in by["Mija"]  # play start; sung_at is the Done time
         assert by["Katie B"]["postable"] is False
         assert by["Katie B"]["performers"][0]["reason"] == "song_override_kj"
+        assert data["plays"] == []  # no stats DB in the test app: direct plays are best effort
 
     def test_night_media_bad_night(self, flask_test_client):
         assert flask_test_client.get("/history/night-media?night=nope").status_code == 400

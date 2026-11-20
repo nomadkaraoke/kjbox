@@ -75,7 +75,7 @@
     const cur = perfsOf(c).map((p) => p.name).join(' & ');
     const logged = songOf(c).performers.map((p) => p.name).join(' & ');
     const v = prompt(`Who's in this clip? Add more people with &, e.g. "${logged || 'Ana'} & Ben".\n` +
-      `Logged as: ${logged}\nLeave empty to go back to that.`, cur);
+      `Logged as: ${logged || 'nobody (played directly)'}\nLeave empty to go back to that.`, cur);
     if (v === null) return;
     await savePerformers(c, v.split(/\s*[&,+/]\s*/).filter((n) => n.trim()));
   }
@@ -394,7 +394,9 @@
       addSingerControl(c),
       h('button', { class: 'edit-perf', type: 'button', title: 'Type who is in this clip (several people: use &)', 'aria-label': 'Edit singers',
         onclick: () => editPerformers(c) }, '✎'),
-      c.performers ? h('span', { class: 'muted' }, ` (edited; logged as ${song.performers.map((p) => p.name).join(' & ')})`) : '') : null,
+      c.performers ? h('span', { class: 'muted' }, ` (edited; logged as ${song.performers.map((p) => p.name).join(' & ') || 'nobody'})`) : '',
+      song.direct_play && !perfsOf(c).length
+        ? h('div', { class: 'flag' }, '▶ Played straight from the library, no singer logged: + Add singer to say who sang.') : '') : null,
       h('div', { class: 'muted' }, c.custom ? 'Custom clip (non-singing)' : (STATUS_LABEL[c.status] || c.status)),
     );
 
@@ -430,12 +432,16 @@
     });
     sel.append(h('option', { value: '', selected: c.song_idx === null && !c.custom }, '— not a performance / unassigned —'));
     sel.append(h('option', { value: 'custom', selected: !!c.custom }, '✎ Other (not singing): write my own label…'));
-    for (const i of c.candidates) {
+    const opt = (i) => {
       const s = S.songs[i];
-      const who = s.performers.map((p) => p.name).join(' & ');
-      sel.append(h('option', { value: String(i), selected: c.song_idx === i },
-        `${hhmm(s.start)} ${who} — ${s.song}${i === c.auto_song_idx ? ' (auto)' : ''}`));
-    }
+      const who = s.performers.map((p) => p.name).join(' & ') || (s.direct_play ? '▶ played directly' : '?');
+      return h('option', { value: String(i), selected: c.song_idx === i },
+        `${hhmm(s.start)} ${who} — ${s.song}${i === c.auto_song_idx ? ' (auto)' : ''}`);
+    };
+    // Songs either side of the clip first, then every song played tonight.
+    sel.append(h('optgroup', { label: 'Near this clip' }, ...c.candidates.map(opt)));
+    sel.append(h('optgroup', { label: 'Any song tonight' },
+      ...S.songs.map((_, i) => i).filter((i) => !c.candidates.includes(i)).map(opt)));
     return sel;
   }
 

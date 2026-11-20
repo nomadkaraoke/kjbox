@@ -94,6 +94,14 @@ def songs_from_night_log(data: dict) -> list[dict]:
     return songs
 
 
+def _with_direct_plays(songs: list[dict], plays) -> list[dict]:
+    if not isinstance(plays, list):
+        return songs
+    out = songs + songs_from_direct_plays(plays, songs)
+    out.sort(key=lambda s: s.get("started_at") or s["sung_at"])
+    return out
+
+
 def normalize_night_media(data: dict) -> list[dict]:
     """Defensive normalisation of a ``/history/night-media`` payload's songs."""
     songs = []
@@ -122,6 +130,53 @@ def normalize_night_media(data: dict) -> list[dict]:
     return songs
 
 
+DIRECT_PLAY_DEDUPE = dt.timedelta(minutes=15)
+
+
+def _title_key(text: str) -> str:
+    return " ".join("".join(ch if ch.isalnum() else " " for ch in (text or "").casefold()).split())
+
+
+def songs_from_direct_plays(plays: list[dict], songs: list[dict]) -> list[dict]:
+    """Songs the KJ played straight from the library (no rotation entry), as night-media songs
+    with no performers: nobody is logged, so their clips are consent-unknown until Andrew says
+    who sang. A replay of a logged song (same title, started up to 15 min after it) is skipped,
+    so a restart never steals that singer's clips."""
+    logged = []
+    for s in songs:
+        t = s.get("started_at") or s.get("sung_at")
+        try:
+            logged.append((dt.datetime.fromisoformat(t[:19].replace("T", " ")), s.get("song") or ""))
+        except (TypeError, ValueError):
+            continue
+    out = []
+    for p in plays or []:
+        at = str(p.get("played_at") or "")[:19].replace("T", " ")
+        try:
+            t = dt.datetime.fromisoformat(at)
+        except ValueError:
+            continue
+        title, artist = (p.get("title") or "").strip(), (p.get("artist") or "").strip()
+        if not (title or artist):
+            continue
+        tk = _title_key(title)
+        if tk and any(dt.timedelta(0) <= t - lt <= DIRECT_PLAY_DEDUPE and tk in _title_key(song)
+                      for lt, song in logged):
+            continue
+        out.append({
+            "entry_id": None,
+            "song": f"{title} - {artist}" if title and artist else (title or artist),
+            "singer": "",
+            "sung_at": at,
+            "started_at": at,
+            "added_at": None,
+            "performers": [],
+            "postable": False,
+            "direct_play": True,
+        })
+    return out
+
+
 def fetch_night(night: str, host: str = DEFAULT_HOST, runner: Runner = subprocess.run) -> dict:
     """Return ``{night, consent_source, songs, warning}`` for a night (YYYY-MM-DD).
 
@@ -138,7 +193,7 @@ def fetch_night(night: str, host: str = DEFAULT_HOST, runner: Runner = subproces
         return {
             "night": data.get("night") or night,
             "consent_source": data.get("consent_source") or "events",
-            "songs": normalize_night_media(data),
+            "songs": _with_direct_plays(normalize_night_media(data), data.get("plays")),
             "warning": None,
         }
     if status != 404:
