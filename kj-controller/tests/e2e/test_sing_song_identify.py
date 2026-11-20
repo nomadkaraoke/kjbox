@@ -366,3 +366,30 @@ def test_picked_candidate_the_index_has_karaoke_for_is_never_missing(page, live_
     page.wait_for_timeout(200)
     expect(page.locator(".result-row")).to_have_count(3)
     expect(page.locator('[data-testid="song-missing"]')).to_have_count(0)
+
+
+def test_picked_candidate_with_no_rows_of_its_own_gets_missing_card(page, live_server, live_token):
+    """Live 2026-11-19: "miami" → Which song? → Morgan Wallen showed no make-it card
+    (the index says karaoke exists somewhere, and the typed "miami" rows — other
+    artists' Miamis — vetoed it), while typing "miami morgan" showed the card.
+    Once the picked song's own search comes back empty, the typed rows don't count."""
+    searched = []
+
+    def songs_for(q):
+        searched.append(q)
+        return [] if q == "Morgan Wallen Miami" else OTHERS
+    _setup(page, live_server, live_token, {
+        "status": "candidates", "typed": "miami",
+        "candidates": [{"artist": "Will Smith", "title": "Miami", "karaoke": True},
+                       {"artist": "Morgan Wallen", "title": "Miami", "karaoke": True}],
+    }, songs_for)
+    page.locator('input[type="search"]').fill("miami")
+    page.locator('[data-testid="song-candidate"]').nth(1).click()
+    missing = page.locator('[data-testid="song-missing"]')
+    expect(missing).to_contain_text("Morgan Wallen")
+    expect(missing).to_contain_text("No karaoke version yet")
+    expect(page.locator('[data-testid="song-missing-make"]')).to_be_visible()
+    assert "Morgan Wallen Miami" in searched, searched
+    # The typed rows become capped near-misses under their own heading.
+    expect(page.locator('[data-testid="similar-heading"]')).to_be_visible()
+    expect(page.locator(".result-row")).to_have_count(3)

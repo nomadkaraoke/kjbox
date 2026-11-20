@@ -2316,6 +2316,7 @@ function renderSearch() {
         candidates: (ident.candidates || []).filter((c) => !sameSong(c, ident.song)),
         songs: again ? prev.songs : [], split: null, active: again ? prev.active : true,
         inResults: inResults(ident.song), fetching: again ? prev.fetching : false,
+        searched: again ? !!prev.searched : false,
       };
       if (ident.kind === "content" && !correction.inResults && !correction.songs.length && !correction.fetching) {
         fetchKaraokeForCorrection(gen);
@@ -2345,6 +2346,7 @@ function renderSearch() {
       const cur = correction;
       if (!cur || !cur.corrected || !sameSong(cur.corrected, want)) return;
       cur.songs = data.songs || [];
+      cur.searched = true;   // its own search ran: songMissing() trusts these rows, not the typed ones
       cur.fetching = false;
       update();
     } catch { if (correction) correction.fetching = false; /* keep the typed-text results */ }
@@ -2414,10 +2416,16 @@ function renderSearch() {
   // there's nothing to mismatch, so it's the card too (live 2026-10-22: a
   // confident "Helluva Boss — I Will Be Okay" got the long empty-state triage,
   // under a green "Tidied to" tick the singer read as "done").
+  // Once the identified song's own search has run, only ITS rows count for the
+  // veto: the typed text's rows are other songs ("miami" → Will Smith, Foals…),
+  // so they say nothing about whether Morgan Wallen's "Miami" is here (live
+  // 2026-11-19: picking it from "Which song?" got no card, while typing
+  // "miami morgan" did — same song, same empty search).
   function songMissing(rows) {
     const c = correction;
+    const evidence = c && c.searched ? (c.songs || []) : rows;
     return !!(c && c.corrected && c.active && !rowsHaveSong(c) && !c.fetching
-              && (c.karaoke !== true || rows.length === 0) && !loading && !resolving && !err);
+              && (c.karaoke !== true || evidence.length === 0) && !loading && !resolving && !err);
   }
   // A karaoke row IS the identified song — typed-text rows or the corrected
   // search's own rows (which can be near-misses too, so check each one).
