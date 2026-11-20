@@ -795,6 +795,22 @@ def _prospective_media_id(source, *, youtube_url=None, file_id=None, brand_code=
     return None
 
 
+def _song_text_from_media(row):
+    """Display label ("Title - Artist") for an already-downloaded media row.
+
+    Used when a request with no artist/title (e.g. a singer-pasted YouTube
+    link) is linked to a copy that's already on disk: the fresh-download path
+    back-fills the title in RotationManager.complete_download, but the
+    dedup-skip path never runs it, so the queue row showed no song at all.
+    Falls back to the filename minus extension and its ``[yt-...]`` tag.
+    """
+    text = _format_song_text(row.get("artist"), row.get("title"))
+    if text:
+        return text
+    base = os.path.splitext(os.path.basename(row.get("file_path") or ""))[0]
+    return re.sub(r"\s*\[[^\]]*\]\s*$", "", base).strip()
+
+
 def _existing_media_for(app, media_id):
     """Return the media_library row for media_id iff its file exists on disk."""
     if not media_id:
@@ -6877,7 +6893,9 @@ def approve_sing_request(app, req, skip_download=False):
             existing = _existing_media_for(app, _prospective_media_id(
                 "divebar", file_id=source_ref, brand_code=brand_code))
             if existing:
-                entry = rotation.add_entry(singer, song_text, singers=singers_list)
+                entry = rotation.add_entry(
+                    singer, song_text or _song_text_from_media(existing),
+                    singers=singers_list)
                 rotation.link_file(entry["id"], existing["file_path"])
                 rotation.set_download_status(entry["id"], "divebar", "complete", None)
                 return entry["id"]
@@ -6901,7 +6919,9 @@ def approve_sing_request(app, req, skip_download=False):
             existing = _existing_media_for(app, _prospective_media_id(
                 "youtube", youtube_url=source_ref))
             if existing:
-                entry = rotation.add_entry(singer, song_text, singers=singers_list)
+                entry = rotation.add_entry(
+                    singer, song_text or _song_text_from_media(existing),
+                    singers=singers_list)
                 rotation.link_file(entry["id"], existing["file_path"])
                 rotation.set_download_status(entry["id"], "youtube", "complete", None)
                 return entry["id"]
