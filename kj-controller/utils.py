@@ -4,6 +4,25 @@ import os
 import re
 import sys
 import time
+import unicodedata
+
+
+def existing_unicode_variant(path):
+    """Return the NFC/NFD spelling of ``path`` that actually exists on disk.
+
+    Linux filenames are raw bytes, so "Monáe" in NFC (precomposed) and NFD
+    (a + combining accent) are different files. The external catalog index was
+    built from a macOS-era file list and stores ~2.8K accented paths in NFD
+    while the drive holds NFC, so the raw path from a search result can miss.
+    Returns ``path`` unchanged when it exists or when no variant does.
+    """
+    if not path or os.path.exists(path):
+        return path
+    for form in ("NFC", "NFD"):
+        variant = unicodedata.normalize(form, path)
+        if variant != path and os.path.exists(variant):
+            return variant
+    return path
 
 
 def media_type_label(name_or_ext):
