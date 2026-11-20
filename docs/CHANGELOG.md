@@ -2,6 +2,17 @@
 
 Device configuration changes. For Pi details, see [archive/NOMADPI-DETAILS.md](archive/NOMADPI-DETAILS.md). For mini PC setup, see [MINIPC-SETUP.md](MINIPC-SETUP.md).
 
+## 2026-11-19 - Singer: picking a song from "Which song?" now shows the make-it card (v0.151.2)
+
+**Deploy:** frontend fix plus a `.py` test change, so auto-deploy restarts kj-controller (playback continues).
+- Live: a singer searched "miami" and picked Morgan Wallen from "Which song do you mean?". They got
+  "The song you mean" with no "No karaoke version yet / Make it for me" card, and the only make-it
+  offer was at the bottom of 32 other artists' "Miami" rows. Typing "miami morgan" showed the card.
+- Cause: `songMissing()` holds back "no karaoke version yet" when the song index says karaoke exists
+  (KaraokeNerds lists KV/SR versions, which this box can't play) and there are rows that might hold
+  the song under another name. It counted the typed "miami" rows even after the picked song's own
+  search ("Morgan Wallen Miami") came back empty. Now, once that search has run, only its rows count.
+
 ## 2026-11-14 - Full test suite no longer flaky on the build host (v0.151.1)
 
 Test-only change (plus one tunable constant in `rotation.py`; device behaviour unchanged). Full
