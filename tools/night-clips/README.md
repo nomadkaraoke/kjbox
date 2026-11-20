@@ -61,6 +61,11 @@ On the review page:
 - Click a thumbnail to play the clip inline.
 - **Select** toggles a clip. You can't select more than 20. Reorder clips by dragging them in the
   Carousel panel, or with ↑ ↓.
+- **Wrong song?** The dropdown on every clip lists the songs either side of it first, then **every song played
+  that night**. That includes songs you played straight from the library without a rotation entry
+  (marked "▶ played directly"; the kjbox logs them, kjbox v0.152.4+). Nobody is logged on those, so their clips
+  are consent unknown until you **+ Add singer**; consent then follows the people you add. A replay of a logged
+  song within 15 minutes (e.g. a restart) is not listed separately.
 - On a flagged clip, use the dropdown to reassign it to an adjacent song, or to "not a
   performance". Its consent is re-evaluated straight away.
 - **Two people singing but only one logged?** Click **+ Add singer** under the card's singers and pick

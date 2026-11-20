@@ -92,3 +92,28 @@ def test_normalize_never_trusts_inconsistent_postable():
 )
 def test_default_night(now, expected):
     assert kjbox.default_night(now) == expected
+
+
+def test_direct_plays_become_songs_with_nobody_logged():
+    payload = {"night": "2026-11-19", "consent_source": "events", "songs": [
+        {"entry_id": 1, "song": "All My Love - Noah Kahan", "singer": "Mike B", "sung_at": "2026-11-20 02:05:00",
+         "started_at": "2026-11-20 01:54:27", "performers": [{"name": "Mike B", "consent": "unknown"}]},
+        {"entry_id": 2, "song": "Fallin' - Alicia Keys", "singer": "Emerson", "sung_at": "2026-11-20 02:28:00",
+         "started_at": "2026-11-20 02:22:53", "performers": [{"name": "Emerson", "consent": "unknown"}]},
+    ], "plays": [
+        {"played_at": "2026-11-20 01:59:05", "artist": "Cody Johnson", "title": "Take Me Back (Leave Me There)"},
+        {"played_at": "2026-11-20 02:24:53", "artist": "Alicia Keys", "title": "Fallin'"},  # restart of a logged song
+        {"played_at": "bad", "artist": "X", "title": "Y"},
+    ]}
+    run = FakeSSH({"/history/night-media?night=2026-11-19": (200, json.dumps(payload))})
+    songs = kjbox.fetch_night("2026-11-19", runner=run)["songs"]
+    assert [s["song"] for s in songs] == [
+        "All My Love - Noah Kahan", "Take Me Back (Leave Me There) - Cody Johnson", "Fallin' - Alicia Keys"]
+    direct = songs[1]
+    assert direct["direct_play"] and direct["performers"] == [] and not direct["postable"]
+    assert direct["started_at"] == direct["sung_at"] == "2026-11-20 01:59:05"
+
+
+def test_no_plays_field_means_no_direct_play_songs(night_media_payload):
+    run = FakeSSH({"/history/night-media?night=2026-10-08": (200, json.dumps(night_media_payload))})
+    assert not any(s.get("direct_play") for s in kjbox.fetch_night("2026-10-08", runner=run)["songs"])

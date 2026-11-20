@@ -5,7 +5,7 @@ Routes:
   GET  /api/state           everything the page needs
   GET  /media/<clip_id>     the clip (HTTP Range supported, for seeking)
   GET  /thumbs/<clip_id>    jpg thumbnail
-  POST /api/reassign        {clip_id, song_idx|null}
+  POST /api/reassign        {clip_id, song_idx|null}    any song played tonight (-1 = "Other")
   POST /api/note            {clip_id, note}            label for an "Other" clip (becomes a caption line)
   POST /api/performers     {clip_id, names}           who is really in the clip ("A & B"; "" = back to the log)
   POST /api/trim            {clip_id, start}           where the <=59s cut of a long clip begins
@@ -343,8 +343,8 @@ class ReviewState:
             if song_idx == CUSTOM_IDX:  # "Other": not one of the logged songs, labelled by hand
                 it["song_idx"], it["custom"] = None, True
             else:
-                if song_idx is not None and song_idx not in it["candidates"]:
-                    raise ValueError("song is not adjacent to this clip")
+                if song_idx is not None and not 0 <= song_idx < len(self.songs):
+                    raise ValueError("no such song tonight")
                 it["song_idx"], it["custom"] = song_idx, False
             it["reviewed"] = True
             it["performers"] = None  # edited names belonged to the old song

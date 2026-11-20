@@ -105,8 +105,12 @@ def test_reassign_reevaluates_and_validates(served):
     assert code == 200
     clip = next(c for c in res["state"]["clips"] if c["id"] == item["id"])
     assert clip["song_idx"] == other and clip["reviewed"]
-    code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": 0})
-    assert code == 400  # not adjacent
+    far = max(range(len(state.songs)), key=lambda i: abs(i - item["song_idx"]))
+    assert far not in item["candidates"]
+    code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": far})
+    assert code == 200  # any song tonight, not just the neighbours
+    code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": len(state.songs)})
+    assert code == 400  # no such song
     code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": None})
     assert code == 200
 
@@ -596,3 +600,25 @@ def test_consent_rejects_bad_values(served):
     base, *_ = served
     status, res = post(base + "/api/consent", {"overrides": {"Anyone": "maybe"}})
     assert status == 400 and not res["ok"]
+
+
+def test_direct_play_song_takes_singers_and_their_consent(tmp_path):
+    from nightclips.kjbox import songs_from_direct_plays
+    logged = [{"entry_id": 1, "song": "A - B", "singer": "Fiona", "sung_at": "2026-11-20 01:58:00",
+               "started_at": "2026-11-20 01:50:00",
+               "performers": [{"name": "Fiona", "consent": "yes", "reason": "night_default", "instagram": None}],
+               "postable": True}]
+    songs = match.index_songs(logged + songs_from_direct_plays(
+        [{"played_at": "2026-11-20 01:59:05", "artist": "Cody Johnson", "title": "Take Me Back"}], logged))
+    n = "2026-11-20 02.00.41.mp4"
+    (tmp_path / n).write_bytes(b"x")
+    clips = [Clip(id=clip_id(n), filename=n, path=str(tmp_path / n), start=parse_clip_time(n), local=True, duration=18.0)]
+    state = ReviewState("2026-11-19", songs, clips, match.match_clips(clips, songs), {**DEFAULTS}, tmp_path / "w",
+                        publisher=lambda *a: {})
+    it = state.items[0]
+    assert state.songs[it["song_idx"]]["direct_play"] and it["status"] == "unknown" and not it["flags"]
+    state.set_performers(it["id"], "Emerson & Fiona")
+    assert [p["consent"] for p in it["performers"]] == ["unknown", "yes"]
+    state.set_consent({"Emerson": "yes"})
+    assert it["status"] == "eligible" and it["id"] in state.selected
+    assert "Emerson & Fiona — Take Me Back - Cody Johnson" in state.caption
