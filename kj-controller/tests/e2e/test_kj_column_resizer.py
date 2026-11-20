@@ -116,3 +116,59 @@ class TestRotationSongWraps:
         assert metrics['ws'] == 'normal'
         assert metrics['sw'] <= metrics['cw'] + 1   # nothing clipped
         assert metrics['h'] > 20                     # spans multiple lines
+
+
+class TestColumnToggle:
+    def _reset(self, page):
+        page.evaluate("localStorage.removeItem('kj-col2-collapsed')")
+        page.reload()
+        page.wait_for_load_state("networkidle")
+
+    def test_collapse_gives_left_column_full_width_and_persists(self, desktop_page):
+        page = desktop_page
+        self._reset(page)
+        toggle = page.locator('#column-toggle')
+        assert toggle.get_attribute('aria-expanded') == 'true'
+        layout_w = page.evaluate("document.querySelector('.main-layout').getBoundingClientRect().width")
+        toggle.click()
+        assert not page.locator('#col2').is_visible()
+        col1 = page.evaluate("document.getElementById('col1').getBoundingClientRect().width")
+        resizer = page.locator('#column-resizer').bounding_box()['width']
+        assert col1 == pytest.approx(layout_w - resizer, abs=2)
+        assert toggle.get_attribute('aria-expanded') == 'false'
+
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        assert not page.locator('#col2').is_visible()
+
+        page.locator('#column-toggle').click()
+        assert page.locator('#col2').is_visible()
+        col1, col2 = _col_widths(page)
+        assert col1 / (col1 + col2) == pytest.approx(2 / 3, abs=0.01)
+        assert page.evaluate("localStorage.getItem('kj-col2-collapsed')") is None
+
+    def test_expand_restores_saved_split(self, desktop_page):
+        page = desktop_page
+        self._reset(page)
+        box = page.locator('#column-resizer').bounding_box()
+        _drag_resizer_to(page, box['x'] + box['width'] / 2 + 120)
+        before, _ = _col_widths(page)
+        page.locator('#column-toggle').click()
+        page.locator('#column-toggle').click()
+        after, _ = _col_widths(page)
+        assert after == pytest.approx(before, abs=4)
+
+    def test_clicking_toggle_does_not_start_a_drag(self, desktop_page):
+        page = desktop_page
+        self._reset(page)
+        page.locator('#column-toggle').click()
+        assert page.evaluate("localStorage.getItem('kj-col1-share')") is None
+        assert not page.evaluate("document.body.classList.contains('col-resizing')")
+
+    def test_mobile_ignores_collapsed_state(self, page, live_server):
+        page.set_viewport_size({"width": 375, "height": 812})
+        page.goto(live_server)
+        page.evaluate("localStorage.setItem('kj-col2-collapsed', '1')")
+        page.reload()
+        page.wait_for_load_state("networkidle")
+        assert page.locator('.requests-panel').first.is_visible()

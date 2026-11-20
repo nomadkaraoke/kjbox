@@ -4,6 +4,14 @@ Dated entries, newest first. Each entry notes any required deploy steps.
 
 ---
 
+## 2026-11-19 - KJ UI: collapsible side panel (v0.152.0)
+
+**Deploy:** frontend + version bump → auto-deploy restarts kj-controller (playback continues); refresh the KJ page.
+
+- A small ›/‹ button on the column divider hides the right column (Screen Preview, Requests, searches) so the left column uses the full width; click again to bring it back at the saved split. State persists in `localStorage` (`kj-col2-collapsed`); desktop only (the mobile single-column layout ignores it). Tests in `tests/e2e/test_kj_column_resizer.py::TestColumnToggle`.
+
+---
+
 ## 2026-10-15 - Search finds featured artists + titles after "feat." (v0.131.1)
 
 **Deploy:** `.py` change → auto-deploy restarts kj-controller (playback continues). `NORMALIZER_VERSION` 2 → 3: the KN/Divebar mirror is unusable (search falls back to the Cloud Function — correct, just slower) until `sudo systemctl start nomad-catalog-sync` rebuilds it (also rebuilds `song_id.db`; content unchanged). Reindex the SSD catalog: `cd /opt/nomad/kjbox/kj-controller && ./venv/bin/python scripts/reindex_catalog.py`.
