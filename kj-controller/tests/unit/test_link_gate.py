@@ -171,3 +171,46 @@ class TestLinkLibraryMaterialization:
                 content_type="application/json",
             )
         assert resp.status_code == 200
+
+
+
+_NFC = "/media/nomad/SSD/PMK-0000 - Band (Feat. Mon\u00e1e) - Song.mp4"
+
+
+def _only_nfc_exists(path):
+    # Linux (ext4/exfat-on-Linux) compares raw bytes; macOS APFS would not,
+    # so emulate the Linux drive instead of touching the real filesystem.
+    return path == _NFC
+
+
+class TestLinkUnicodeNormalization:
+    """Index paths can be NFD while the drive holds NFC (2,823 SSD songs, 2026-11-20)."""
+
+    def test_link_uses_on_disk_spelling_of_nfd_path(self, gate_client, mock_rotation):
+        import unicodedata
+        nfd_path = unicodedata.normalize("NFD", _NFC)
+        assert nfd_path != _NFC
+        good_result = types.SimpleNamespace(verdict={"overall_ok": True, "reasons": []})
+        with patch("utils.os.path.exists", side_effect=_only_nfc_exists), \
+             patch("routes._playability_gate", return_value=good_result) as gate, \
+             patch("routes._resolve_or_create_rotation_entry_id", return_value=(1, None)), \
+             patch("routes._enqueue_tier2"):
+            resp = gate_client.post(
+                "/rotation/link",
+                data=json.dumps({"id": 1, "file_path": nfd_path}),
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        gate.assert_called_once_with(_NFC)
+        mock_rotation.link_file.assert_called_once_with(1, _NFC)
+
+
+def test_existing_unicode_variant():
+    import unicodedata
+    from utils import existing_unicode_variant
+    nfd = unicodedata.normalize("NFD", _NFC)
+    with patch("utils.os.path.exists", side_effect=_only_nfc_exists):
+        assert existing_unicode_variant(nfd) == _NFC
+        assert existing_unicode_variant(_NFC) == _NFC
+        assert existing_unicode_variant("/nope/caf\u00e9.mp4") == "/nope/caf\u00e9.mp4"
+        assert existing_unicode_variant("") == ""

@@ -37,7 +37,7 @@ from config import APP_DIR, RENDER_MODE_MPV, RENDER_MODES, load_config, save_con
 from playback import RendererSwitchRejected
 from sing import get_event_url, sync_event_url_overlays
 from sleep_mode import SleepManager
-from utils import log_message, build_divebar_filename, divebar_ext
+from utils import log_message, build_divebar_filename, divebar_ext, existing_unicode_variant
 from naming import youtube_id_from_url, media_id_for, classify_source, SOURCE_MASTER
 from preview import parse_range
 
@@ -1414,7 +1414,7 @@ def _resolve_media_path(file_path):
     if not real:
         mount = (getattr(media, "config", None) or {}).get("external_media_mount")
         if mount:
-            cand = os.path.realpath(file_path)
+            cand = os.path.realpath(existing_unicode_variant(file_path))
             real_mount = os.path.realpath(mount)
             if (cand == real_mount or cand.startswith(real_mount + os.sep)) and os.path.exists(cand):
                 real = cand
@@ -4414,6 +4414,9 @@ def link_rotation_file():
     file_path = data.get('file_path')
     if not file_path:
         return jsonify({"error": "file_path is required"}), 400
+    # Index paths can be NFD while the drive is NFC (or vice versa): link the
+    # spelling that exists so the gate, playback and Night Log all agree.
+    file_path = existing_unicode_variant(file_path)
 
     entry_id, err = _resolve_or_create_rotation_entry_id(data, rotation)
     if err:
