@@ -167,3 +167,8 @@ textarea:focus { border-color: var(--pink); outline: none; }
 .linkish { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 11px; }
 .edit-handle { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 0.85em; padding: 0 2px; }
 .edit-handle:hover { color: var(--pink); }
+.consent-list { margin: 0 0 8px; padding: 0; list-style: none; font-size: 0.88em; }
+.consent-list li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 3px 0; }
+.consent-list li select { margin-left: auto; width: 13.5em; background: #111; border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; font-size: 0.9em; }
+.consent-list li select:focus { border-color: var(--pink); outline: none; }
+.consent-list li.pending { outline: 1px dashed var(--line); outline-offset: 2px; border-radius: 6px; }

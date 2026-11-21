@@ -9,6 +9,7 @@
   let selected = [];         // ordered clip ids
   let captionDirty = false;  // caption edited by hand -> don't auto-regenerate
   let playing = null;        // clip id with an inline player
+  let consentPending = {};   // name_key -> 'yes' | 'no' | null (back to the kjbox's answer), not saved yet
 
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -74,7 +75,7 @@
     const cur = perfsOf(c).map((p) => p.name).join(' & ');
     const logged = songOf(c).performers.map((p) => p.name).join(' & ');
     const v = prompt(`Who's in this clip? Add more people with &, e.g. "${logged || 'Ana'} & Ben".\n` +
-      `Logged as: ${logged}\nLeave empty to go back to that.`, cur);
+      `Logged as: ${logged || 'nobody (played directly)'}\nLeave empty to go back to that.`, cur);
     if (v === null) return;
     await savePerformers(c, v.split(/\s*[&,+/]\s*/).filter((n) => n.trim()));
   }
@@ -142,6 +143,8 @@
     song_override_singer: 'singer set for this song',
     song_override_kj: 'KJ set for this song',
     night_default: 'singer’s answer for the night',
+    kj_override: 'you set this on the review page',
+    edited: 'added to this clip by hand',
     unknown: 'never answered',
   };
   const FLAGS = {
@@ -391,7 +394,9 @@
       addSingerControl(c),
       h('button', { class: 'edit-perf', type: 'button', title: 'Type who is in this clip (several people: use &)', 'aria-label': 'Edit singers',
         onclick: () => editPerformers(c) }, '✎'),
-      c.performers ? h('span', { class: 'muted' }, ` (edited; logged as ${song.performers.map((p) => p.name).join(' & ')})`) : '') : null,
+      c.performers ? h('span', { class: 'muted' }, ` (edited; logged as ${song.performers.map((p) => p.name).join(' & ') || 'nobody'})`) : '',
+      song.direct_play && !perfsOf(c).length
+        ? h('div', { class: 'flag' }, '▶ Played straight from the library, no singer logged: + Add singer to say who sang.') : '') : null,
       h('div', { class: 'muted' }, c.custom ? 'Custom clip (non-singing)' : (STATUS_LABEL[c.status] || c.status)),
     );
 
@@ -427,12 +432,16 @@
     });
     sel.append(h('option', { value: '', selected: c.song_idx === null && !c.custom }, '— not a performance / unassigned —'));
     sel.append(h('option', { value: 'custom', selected: !!c.custom }, '✎ Other (not singing): write my own label…'));
-    for (const i of c.candidates) {
+    const opt = (i) => {
       const s = S.songs[i];
-      const who = s.performers.map((p) => p.name).join(' & ');
-      sel.append(h('option', { value: String(i), selected: c.song_idx === i },
-        `${hhmm(s.start)} ${who} — ${s.song}${i === c.auto_song_idx ? ' (auto)' : ''}`));
-    }
+      const who = s.performers.map((p) => p.name).join(' & ') || (s.direct_play ? '▶ played directly' : '?');
+      return h('option', { value: String(i), selected: c.song_idx === i },
+        `${hhmm(s.start)} ${who} — ${s.song}${i === c.auto_song_idx ? ' (auto)' : ''}`);
+    };
+    // Songs either side of the clip first, then every song played tonight.
+    sel.append(h('optgroup', { label: 'Near this clip' }, ...c.candidates.map(opt)));
+    sel.append(h('optgroup', { label: 'Any song tonight' },
+      ...S.songs.map((_, i) => i).filter((i) => !c.candidates.includes(i)).map(opt)));
     return sel;
   }
 
@@ -461,6 +470,8 @@
       ol.append(li);
     });
 
+    renderConsent();
+
     const ul = $('uncovered');
     ul.replaceChildren();
     const unc = uncovered();
@@ -480,6 +491,70 @@
       r.handle ? '✎' : '+ @handle') : null)));
 
     updateCapCount();
+  }
+
+  // Everyone whose consent matters tonight, with a picker for Andrew's own call.
+  const CONSENT_TXT = { yes: '✓ yes', no: '✗ no', unknown: '? never answered' };
+  function renderConsent() {
+    const ul = $('consent-list');
+    ul.replaceChildren();
+    const rows = S.singers || [];
+    if (!rows.length) ul.append(h('li', { class: 'muted' }, 'No singers logged tonight.'));
+    rows.forEach((r) => {
+      const val = r.key in consentPending ? consentPending[r.key] : (r.override || null);
+      const eff = val || r.kj_consent;
+      const pending = r.key in consentPending && (consentPending[r.key] || null) !== (r.override || null);
+      const sel = h('select', {
+        'aria-label': `Consent for ${r.name}`,
+        onchange: (e) => {
+          const v = e.target.value || null;
+          if (v === 'yes' && r.kj_consent === 'no' && !confirm(
+            `${r.name} said NO in the app (${REASONS[r.kj_reason] || r.kj_reason}).\n\nOnly mark them OK if they told you otherwise in person.`)) {
+            e.target.value = val || '';
+            return;
+          }
+          if ((v || null) === (r.override || null)) delete consentPending[r.key];
+          else consentPending[r.key] = v;
+          renderConsent();
+        },
+      },
+      h('option', { value: '', selected: !val }, `As logged (${CONSENT_TXT[r.kj_consent] || r.kj_consent})`),
+      h('option', { value: 'yes', selected: val === 'yes' }, '✓ OK to post (told me)'),
+      h('option', { value: 'no', selected: val === 'no' }, '✗ Don’t post'));
+      ul.append(h('li', { class: pending ? 'pending' : '' },
+        h('span', { class: `perf ${eff}`, title: `${String(eff).toUpperCase()}: ${val ? REASONS.kj_override : (REASONS[r.kj_reason] || r.kj_reason)}` },
+          { yes: '✓', no: '✗', unknown: '?' }[eff] || '?', ' ', r.name),
+        h('span', { class: 'muted' }, ` ${r.clips} clip${r.clips === 1 ? '' : 's'}`),
+        sel));
+    });
+    const n = Object.keys(consentPending).length;
+    $('consent-save').disabled = !n;
+    $('consent-save').textContent = n ? `Save ${n} change${n === 1 ? '' : 's'} & re-select clips` : 'Save & re-select clips';
+    $('consent-cancel').hidden = !n;
+  }
+
+  async function saveConsent() {
+    const names = Object.fromEntries((S.singers || []).map((r) => [r.key, r.name]));
+    const overrides = Object.fromEntries(Object.entries(consentPending).map(([k, v]) => [names[k] || k, v]));
+    if (!Object.keys(overrides).length) return;
+    const hand = selected.length && !confirm('Re-select clips from scratch with the new consent? Your current picks and order are replaced (Cancel keeps them, dropping only clips that can no longer be posted).');
+    const keptCaption = $('caption').value;
+    setStatus('Saving consent…');
+    const res = await api('/api/consent', { overrides, reselect: !hand, selected });
+    if (!res.ok) return setStatus((res.errors || ['save failed']).join('\n'), 'err');
+    consentPending = {};
+    const wasDirty = captionDirty;
+    applyState(res.state);
+    selected = [...res.selected];
+    if (wasDirty) { $('caption').value = keptCaption; captionDirty = true; }
+    else {
+      const cap = await api('/api/caption', { selected });
+      if (cap.ok) $('caption').value = cap.caption;
+      captionDirty = false;
+    }
+    render();
+    await saveDraft(true);
+    setStatus(`Consent saved. ${selected.length} clip(s) selected${wasDirty ? '. You edited the caption by hand: click Regenerate to pick up the new singers.' : '.'}`, 'ok');
   }
 
   // How many selected clips each performer appears in (a duet counts for both).
@@ -648,6 +723,8 @@
     if (res.ok) { $('caption').value = res.caption; updateCapCount(); }
   });
   $('save').addEventListener('click', () => saveDraft(false));
+  $('consent-save').addEventListener('click', saveConsent);
+  $('consent-cancel').addEventListener('click', () => { consentPending = {}; renderConsent(); });
   $('publish').addEventListener('click', publish);
   $('posted').addEventListener('click', markPosted);
 

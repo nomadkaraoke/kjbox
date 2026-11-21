@@ -5,10 +5,12 @@ Routes:
   GET  /api/state           everything the page needs
   GET  /media/<clip_id>     the clip (HTTP Range supported, for seeking)
   GET  /thumbs/<clip_id>    jpg thumbnail
-  POST /api/reassign        {clip_id, song_idx|null}
+  POST /api/reassign        {clip_id, song_idx|null}    any song played tonight (-1 = "Other")
   POST /api/note            {clip_id, note}            label for an "Other" clip (becomes a caption line)
   POST /api/performers     {clip_id, names}           who is really in the clip ("A & B"; "" = back to the log)
   POST /api/trim            {clip_id, start}           where the <=59s cut of a long clip begins
+  POST /api/consent         {overrides:{name: "yes"|"no"|null}} KJ's own call on a singer's consent
+                            (e.g. they said so in person); re-evaluates every clip and re-selects
   POST /api/caption         {selected:[ids]} -> {caption} (regenerated from the template)
   POST /api/draft           {selected, caption}            -> saves draft.json
   POST /api/publish         {selected, caption, allow_unknown, facebook?} -> saves + starts publisher(s)
@@ -69,6 +71,11 @@ class ReviewState:
         self.facebook_publisher = facebook_publisher or launch_facebook_subprocess(
             self.work_dir, night, cfg.get("facebook_location") or None, auto_share)
         self.lock = threading.RLock()
+        self.consent_overrides: dict[str, str] = {}  # name_key -> "yes"/"no": Andrew's call, beats the kjbox
+        for song in songs:  # remember what the kjbox said, so an override can be undone
+            for p in song.get("performers") or []:
+                p.setdefault("kj_consent", p.get("consent") or "unknown")
+                p.setdefault("kj_reason", p.get("reason") or "unknown")
         self.clips = {c.id: c for c in clips}
         self.items: list[dict] = []
         for c in clips:
@@ -160,9 +167,93 @@ class ReviewState:
             if p:
                 out.append({**p, "name": n})
             else:
-                out.append({"name": n, "consent": "unknown", "reason": "edited",
+                ov = self.consent_overrides.get(sel.name_key(n))
+                out.append({"name": n, "consent": ov or "unknown", "reason": "kj_override" if ov else "edited",
+                            "kj_consent": "unknown", "kj_reason": "edited",
                             "instagram": handles.get(sel.name_key(n))})
         return out
+
+    # -- consent overrides ---------------------------------------------------
+    def _apply_consent(self) -> None:
+        """Put ``consent_overrides`` on every performer (or restore the kjbox's answer), then
+        re-evaluate every clip. A "yes" picks up a ``[handles]`` handle; a performer who is no
+        longer "yes" loses any handle the tool added (nobody is tagged without a yes)."""
+        handles = self.cfg.get("handles") or {}
+        for song in self.songs:
+            perfs = song.get("performers") or []
+            for p in perfs:
+                key = sel.name_key(p.get("name", ""))
+                ov = self.consent_overrides.get(key)
+                p["consent"] = ov or p.get("kj_consent") or "unknown"
+                p["reason"] = "kj_override" if ov else (p.get("kj_reason") or "unknown")
+                if p["consent"] == "yes":
+                    if not (p.get("instagram") or "").strip() and handles.get(key):
+                        p["instagram"], p["handle_source"] = handles[key], "config"
+                elif p.get("handle_source") in ("config", "edited"):
+                    p["instagram"] = p.get("night_instagram") or None
+                    p["handle_source"] = "night" if p["instagram"] else None
+            song["postable"] = bool(perfs) and all(p["consent"] == "yes" for p in perfs)
+        for it in self.items:
+            if it["performers"] is not None:
+                it["performers"] = self.resolve_performers([p["name"] for p in it["performers"]], it["song_idx"])
+            self._restatus(it)
+
+    def set_consent(self, overrides: dict, reselect: bool = True, selected: list[str] | None = None) -> dict:
+        """Merge ``{name: "yes"|"no"|None}`` into the overrides (None = back to the kjbox's answer),
+        re-evaluate every clip and, by default, re-run the pre-selection and caption."""
+        if not isinstance(overrides, dict):
+            raise ValueError("overrides must be an object")
+        with self.lock:
+            for name, val in overrides.items():
+                key = sel.name_key(str(name))
+                if not key:
+                    continue
+                if val in (None, "", "logged"):
+                    self.consent_overrides.pop(key, None)
+                elif val in ("yes", "no"):
+                    self.consent_overrides[key] = val
+                else:
+                    raise ValueError(f"consent for {name!r} must be yes, no or null")
+            self._apply_consent()
+            if reselect:
+                self.selected = sel.preselect(self.items, self.songs, self.max_clips)
+                self.caption = self.default_caption(self.selected)
+            else:  # keep the picks (the page's current ones if given), minus what can't be posted now
+                keep = self.selected if selected is None else selected
+                self.selected = [c for c in keep if c in self.by_id
+                                 and sel.is_selectable(self.by_id[c], allow_unknown=True)][: self.max_clips]
+            return {"selected": self.selected, "caption": self.caption}
+
+    def singers(self) -> list[dict]:
+        """Everyone whose consent matters tonight, in show order: logged performers, then names
+        added to clips by hand. With the kjbox's answer, the effective one and how many clips."""
+        rows: dict[str, dict] = {}
+
+        def add(p: dict, kj: str, kj_reason: str) -> dict:
+            key = sel.name_key(p["name"])
+            r = rows.get(key)
+            if r is None:
+                r = rows[key] = {"name": p["name"], "key": key, "kj_consent": kj, "kj_reason": kj_reason,
+                                 "override": self.consent_overrides.get(key), "clips": 0}
+            elif kj == "no" or (r["kj_consent"] == "unknown" and kj == "yes"):
+                r["kj_consent"], r["kj_reason"] = kj, kj_reason  # a "no" anywhere wins, like _tonight
+            return r
+
+        for song in self.songs:
+            for p in song.get("performers") or []:
+                add(p, p.get("kj_consent") or "unknown", p.get("kj_reason") or "unknown")
+        for it in self.items:
+            if it["performers"] is not None:
+                for p in it["performers"]:
+                    add(p, p.get("kj_consent") or "unknown", p.get("kj_reason") or "edited")
+        for it in self.items:
+            if it.get("local") and it.get("song_idx") is not None:
+                for key in {sel.name_key(p["name"]) for p in sel.item_performers(it, self.songs)}:
+                    if key in rows:
+                        rows[key]["clips"] += 1
+        for r in rows.values():
+            r["consent"] = r["override"] or r["kj_consent"]
+        return list(rows.values())
 
     def default_caption(self, selected: list[str]) -> str:
         items = [self.by_id[i] for i in selected if i in self.by_id] if hasattr(self, "by_id") else []
@@ -181,6 +272,10 @@ class ReviewState:
         except (OSError, ValueError):
             return False
         with self.lock:
+            ov = d.get("consent_overrides") or {}
+            self.consent_overrides = {sel.name_key(k): v for k, v in ov.items()
+                                      if v in ("yes", "no") and sel.name_key(k)} if isinstance(ov, dict) else {}
+            self._apply_consent()
             for cid, a in (d.get("assignments") or {}).items():
                 it = self.by_id.get(cid)
                 if not it:
@@ -223,6 +318,7 @@ class ReviewState:
                 "selected": self.selected,
                 "files": [self.clips[c].path for c in self.selected if c in self.clips],
                 "caption": self.caption,
+                "consent_overrides": self.consent_overrides,
                 "assignments": {
                     i["id"]: {"song_idx": i["song_idx"], "reviewed": i["reviewed"],
                               "custom": i["custom"], "note": i["note"], "trim_start": i["trim_start"],
@@ -247,8 +343,8 @@ class ReviewState:
             if song_idx == CUSTOM_IDX:  # "Other": not one of the logged songs, labelled by hand
                 it["song_idx"], it["custom"] = None, True
             else:
-                if song_idx is not None and song_idx not in it["candidates"]:
-                    raise ValueError("song is not adjacent to this clip")
+                if song_idx is not None and not 0 <= song_idx < len(self.songs):
+                    raise ValueError("no such song tonight")
                 it["song_idx"], it["custom"] = song_idx, False
             it["reviewed"] = True
             it["performers"] = None  # edited names belonged to the old song
@@ -432,6 +528,8 @@ class ReviewState:
                 "uncovered": sel.uncovered_performers(self.items, self.songs, self.selected),
                 "consenting": list(sel.consenting_performers(self.items, self.songs).values()),
                 "people": self.known_people(),
+                "singers": self.singers(),
+                "consent_overrides": self.consent_overrides,
                 "posted": self.posted(),
                 "draft_loaded": self.draft_loaded,
             }
@@ -625,6 +723,11 @@ def make_handler(state: ReviewState):
                     return self._json({"ok": True, "state": state.to_json()})
                 if path == "/api/handle":
                     res = state.set_handle(str(body.get("name") or ""), str(body.get("handle") or ""))
+                    return self._json({"ok": True, **res, "state": state.to_json()})
+                if path == "/api/consent":
+                    res = state.set_consent(body.get("overrides") or {}, bool(body.get("reselect", True)),
+                                            _ids(body) if "selected" in body else None)
+                    state.save_draft()
                     return self._json({"ok": True, **res, "state": state.to_json()})
                 if path == "/api/caption":
                     return self._json({"ok": True, "caption": state.default_caption(_ids(body))})

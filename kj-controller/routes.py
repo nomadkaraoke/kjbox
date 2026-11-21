@@ -7819,4 +7819,10 @@ def history_night_media():
             "postable": postable,
         })
     songs.sort(key=lambda s: s["sung_at"])
-    return jsonify({"night": night, "consent_source": source, "songs": songs})
+    # Songs the KJ played directly (no rotation entry, so no singer or consent):
+    # the tool lets Andrew say who sang them.
+    try:
+        plays = log.unlinked_plays(night)
+    except Exception:  # best effort: never break the clips tool over this
+        plays = []
+    return jsonify({"night": night, "consent_source": source, "songs": songs, "plays": plays})

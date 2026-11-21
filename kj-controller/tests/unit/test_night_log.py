@@ -571,3 +571,17 @@ def test_build_cached_is_single_flight(dbs, monkeypatch):
     assert not errors
     assert got == [[8001]] * 4
     assert len(calls) == 1
+
+
+def test_unlinked_plays_are_the_nights_direct_plays_only(dbs):
+    store, _, stats = dbs
+    _play(stats, "m1", None, None, _utc_of_local("2026-10-21 01:59:05"), "Cody Johnson", "Take Me Back")
+    _play(stats, "m2", 7, "Alice", _utc_of_local("2026-10-20 22:00:00"), "ABBA", "SOS")  # rotation entry
+    _play(stats, "m3", None, None, _utc_of_local("2026-10-20 21:00:00"), "Early", "Warmup")
+    _play(stats, "m4", None, None, _utc_of_local("2026-10-21 13:00:00"), "Next", "Night")  # next night
+    plays = _log(store, stats).unlinked_plays("2026-10-20")
+    assert [(p["played_at"], p["artist"], p["title"]) for p in plays] == [
+        ("2026-10-20 21:00:00", "Early", "Warmup"),
+        ("2026-10-21 01:59:05", "Cody Johnson", "Take Me Back"),
+    ]
+    assert NightLog(store, None).unlinked_plays("2026-10-20") == []

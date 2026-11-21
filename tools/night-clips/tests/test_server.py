@@ -105,8 +105,12 @@ def test_reassign_reevaluates_and_validates(served):
     assert code == 200
     clip = next(c for c in res["state"]["clips"] if c["id"] == item["id"])
     assert clip["song_idx"] == other and clip["reviewed"]
-    code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": 0})
-    assert code == 400  # not adjacent
+    far = max(range(len(state.songs)), key=lambda i: abs(i - item["song_idx"]))
+    assert far not in item["candidates"]
+    code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": far})
+    assert code == 200  # any song tonight, not just the neighbours
+    code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": len(state.songs)})
+    assert code == 400  # no such song
     code, res = post(base + "/api/reassign", {"clip_id": item["id"], "song_idx": None})
     assert code == 200
 
@@ -313,7 +317,8 @@ def test_edit_performers_to_someone_new_is_consent_unknown_and_tagged_from_handl
     assert code == 200
     clip = next(c for c in res["state"]["clips"] if c["id"] == it["id"])
     assert clip["status"] == "unknown" and clip["reviewed"]
-    assert clip["performers"] == [{"name": "Zed Q", "consent": "unknown", "reason": "edited", "instagram": "zed.sings"}]
+    assert clip["performers"] == [{"name": "Zed Q", "consent": "unknown", "reason": "edited",
+                                   "kj_consent": "unknown", "kj_reason": "edited", "instagram": "zed.sings"}]
     assert it["id"] in state.selected  # unknown stays selected; publish asks to confirm
     assert "@zed.sings" in state.default_caption([it["id"]])
     assert any("consent unknown" in e for e in state.validate_selection([it["id"]], allow_unknown=False))
@@ -488,3 +493,132 @@ def test_logged_singer_keeps_this_songs_consent_when_someone_is_added(served):
     post(base + "/api/performers", {"clip_id": it["id"], "names": f"{me['name']} & Zed Q"})
     assert [p["consent"] for p in it["performers"]] == [me["consent"], "unknown"]
     assert it["id"] in state.selected
+
+
+# --- KJ consent overrides ------------------------------------------------------
+
+def _singer(state, consent):
+    """A logged singer whose kjbox answer is ``consent`` and who has at least one local clip."""
+    return next(r for r in state.singers() if r["kj_consent"] == consent and r["clips"])
+
+
+def _clips_of(state, key):
+    return [i for i in state.items if i.get("song_idx") is not None
+            and key in {sel_key(p["name"]) for p in state.songs[i["song_idx"]]["performers"]}]
+
+
+def test_state_lists_singers_with_kjbox_answer_and_clip_counts(served):
+    base, state, *_ = served
+    st = json.loads(get(base + "/api/state")[2])
+    rows = st["singers"]
+    assert rows and all({"name", "key", "kj_consent", "consent", "override", "clips"} <= r.keys() for r in rows)
+    assert {r["kj_consent"] for r in rows} >= {"yes", "no", "unknown"}
+    assert all(r["override"] is None and r["consent"] == r["kj_consent"] for r in rows)
+
+
+def test_verbal_yes_makes_unknown_singer_eligible_and_reselects(served, tmp_path):
+    base, state, _, work = served
+    r = _singer(state, "unknown")
+    solo = [i for i in _clips_of(state, r["key"])
+            if all(sel_key(p["name"]) == r["key"] for p in state.songs[i["song_idx"]]["performers"])]
+    assert solo and all(i["status"] == "unknown" for i in solo)
+    assert not any(i["id"] in state.selected for i in solo)
+
+    status, res = post(base + "/api/consent", {"overrides": {r["name"]: "yes"}})
+    assert status == 200 and res["ok"]
+    assert all(i["status"] == "eligible" for i in solo)
+    assert any(i["id"] in res["selected"] for i in solo if not i["flags"]) or all(i["flags"] for i in solo)
+    row = next(x for x in res["state"]["singers"] if x["key"] == r["key"])
+    assert row["override"] == "yes" and row["consent"] == "yes" and row["kj_consent"] == "unknown"
+    perf = next(p for p in state.songs[solo[0]["song_idx"]]["performers"] if sel_key(p["name"]) == r["key"])
+    assert perf["reason"] == "kj_override"
+    assert json.loads((work / "draft.json").read_text())["consent_overrides"] == {r["key"]: "yes"}
+
+    # null goes back to the kjbox's answer
+    status, res = post(base + "/api/consent", {"overrides": {r["name"]: None}})
+    assert status == 200 and all(i["status"] == "unknown" for i in solo)
+    assert not any(i["id"] in res["selected"] for i in solo)
+
+
+def test_kj_no_excludes_a_yes_singer_and_drops_handle(served):
+    base, state, *_ = served
+    r = next(x for x in state.singers() if x["kj_consent"] == "yes"
+             and any(i["id"] in state.selected for i in _clips_of(state, x["key"])))
+    status, res = post(base + "/api/consent", {"overrides": {r["name"]: "no"}})
+    assert status == 200
+    clips = _clips_of(state, r["key"])
+    assert all(i["status"] == "excluded" for i in clips)
+    assert not any(i["id"] in res["selected"] for i in clips)
+    for s in state.songs:
+        for p in s["performers"]:
+            if sel_key(p["name"]) == r["key"]:
+                assert p["consent"] == "no" and not s["postable"]
+                assert p.get("handle_source") not in ("config", "edited")
+
+
+def test_keep_selection_mode_only_drops_clips_that_cannot_be_posted(served):
+    base, state, *_ = served
+    mine = list(reversed(state.selected))  # a hand-made order
+    r = next(x for x in state.singers() if x["kj_consent"] == "yes"
+             and any(i["id"] in mine for i in _clips_of(state, x["key"])))
+    gone = {i["id"] for i in _clips_of(state, r["key"])}
+    status, res = post(base + "/api/consent", {"overrides": {r["name"]: "no"}, "reselect": False, "selected": mine})
+    assert status == 200
+    assert res["selected"] == [c for c in mine if c not in gone]
+
+
+def test_verbal_yes_picks_up_config_handle(served):
+    base, state, *_ = served
+    r = _singer(state, "unknown")
+    state.cfg["handles"] = {r["key"]: "verbal_yes_handle"}
+    post(base + "/api/consent", {"overrides": {r["name"]: "yes"}})
+    perfs = [p for s in state.songs for p in s["performers"] if sel_key(p["name"]) == r["key"]]
+    assert perfs and all(p["instagram"] == "verbal_yes_handle" for p in perfs)
+    post(base + "/api/consent", {"overrides": {r["name"]: None}})
+    assert all(not p["instagram"] for p in perfs)
+
+
+def test_consent_override_applies_to_hand_added_people_and_survives_reload(served, songs_media):
+    base, state, _, work = served
+    clip = next(i for i in state.items if i["status"] == "eligible")
+    post(base + "/api/performers", {"clip_id": clip["id"], "names": "Brand New Person"})
+    assert clip["status"] == "unknown"
+    names = {x["name"] for x in state.singers()}
+    assert "Brand New Person" in names
+    post(base + "/api/consent", {"overrides": {"Brand New Person": "yes"}})
+    assert clip["status"] == "eligible"
+
+    fresh = ReviewState("2026-10-08", songs_media, list(state.clips.values()),
+                        match.match_clips(list(state.clips.values()), songs_media), state.cfg, work,
+                        publisher=lambda *a: {})
+    assert fresh.load_draft()
+    assert fresh.consent_overrides == {"brand new person": "yes"}
+    assert fresh.by_id[clip["id"]]["status"] == "eligible"
+
+
+def test_consent_rejects_bad_values(served):
+    base, *_ = served
+    status, res = post(base + "/api/consent", {"overrides": {"Anyone": "maybe"}})
+    assert status == 400 and not res["ok"]
+
+
+def test_direct_play_song_takes_singers_and_their_consent(tmp_path):
+    from nightclips.kjbox import songs_from_direct_plays
+    logged = [{"entry_id": 1, "song": "A - B", "singer": "Fiona", "sung_at": "2026-11-20 01:58:00",
+               "started_at": "2026-11-20 01:50:00",
+               "performers": [{"name": "Fiona", "consent": "yes", "reason": "night_default", "instagram": None}],
+               "postable": True}]
+    songs = match.index_songs(logged + songs_from_direct_plays(
+        [{"played_at": "2026-11-20 01:59:05", "artist": "Cody Johnson", "title": "Take Me Back"}], logged))
+    n = "2026-11-20 02.00.41.mp4"
+    (tmp_path / n).write_bytes(b"x")
+    clips = [Clip(id=clip_id(n), filename=n, path=str(tmp_path / n), start=parse_clip_time(n), local=True, duration=18.0)]
+    state = ReviewState("2026-11-19", songs, clips, match.match_clips(clips, songs), {**DEFAULTS}, tmp_path / "w",
+                        publisher=lambda *a: {})
+    it = state.items[0]
+    assert state.songs[it["song_idx"]]["direct_play"] and it["status"] == "unknown" and not it["flags"]
+    state.set_performers(it["id"], "Emerson & Fiona")
+    assert [p["consent"] for p in it["performers"]] == ["unknown", "yes"]
+    state.set_consent({"Emerson": "yes"})
+    assert it["status"] == "eligible" and it["id"] in state.selected
+    assert "Emerson & Fiona — Take Me Back - Cody Johnson" in state.caption

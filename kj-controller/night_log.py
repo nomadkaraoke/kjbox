@@ -563,6 +563,21 @@ class NightLog:
         out.sort(key=lambda n: n["night"], reverse=True)
         return out
 
+    def unlinked_plays(self, night):
+        """Live plays of one night that no rotation entry owns (the KJ played the
+        song directly), oldest first: ``[{played_at (local), artist, title, media_id}]``.
+        The night-clips tool offers them as songs a phone clip can belong to."""
+        conn = self._media_conn()
+        out = []
+        for p in self._plays(conn):
+            if p.get("entry_id") is not None or night_of(p.get("played_local")) != night:
+                continue
+            out.append({"played_at": (p.get("played_local") or "")[:19],
+                        "artist": p.get("artist") or "", "title": p.get("title") or "",
+                        "media_id": p.get("media_id")})
+        out.sort(key=lambda p: p["played_at"])
+        return out
+
     def get_night(self, night):
         """Every entry of one night, in the order things happened."""
         entries = [e for e in self._build() if e["night"] == night]
