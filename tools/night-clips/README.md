@@ -163,6 +163,8 @@ opens a second Chromium window (its own profile at `~/.night-clips/fb-profile`) 
 
 - **Login:** always manual, once. Log in to Facebook in that window. The session is saved in the profile.
   If Facebook shows "Switch Now" for the Page, the tool clicks it so you post as the Page.
+  Take your time with any captcha / 2FA / checkpoint: the tool waits (up to 15 minutes) while the window is
+  on a login, `two_step_verification` or `checkpoint` page and never navigates away from one mid-login.
 - **Steps:** Photo/video -> upload -> caption -> optional location -> Next. It **stops before Post**;
   check the audience, then click Post yourself. `--auto-share` also clicks Post.
 - **Location:** set `facebook_location = "The Babylon Kino"` (search text) in `config.toml` and it tries

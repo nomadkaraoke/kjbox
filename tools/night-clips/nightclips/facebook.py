@@ -26,6 +26,10 @@ from .publish import LONG, SHORT, StepFailed, log as _log
 FB_PAGE_URL = "https://www.facebook.com/nomadkaraoke"
 PROFILE_DIR = HOME / "fb-profile"
 LOGIN_TIMEOUT_S = 15 * 60
+# Facebook's login / 2FA / captcha / checkpoint pages. While the tab is on one of these Andrew is
+# mid-login: never treat it as logged in and never navigate away (that restarts the login).
+AUTH_FLOW_URL = re.compile(
+    r"facebook\.com/(login|two_step_verification|checkpoint|recover|auth_platform|device-based)", re.I)
 FB_CAPTION_MAX = 63_206
 
 
@@ -76,8 +80,24 @@ class FacebookPublisher:
             p.locator("[aria-label='Photo/video'][role='button']"),
         ]
 
+    def in_auth_flow(self) -> bool:
+        try:
+            return bool(AUTH_FLOW_URL.search(self.page.url or ""))
+        except Exception:  # noqa: BLE001 — page mid-navigation
+            return True
+
+    def wait_out_auth_flow(self, timeout_s: float = LOGIN_TIMEOUT_S) -> None:
+        """Block (without navigating) while Facebook shows login / 2FA / captcha pages."""
+        deadline = time.monotonic() + timeout_s
+        while self.in_auth_flow():
+            if time.monotonic() > deadline:
+                raise StepFailed("login: timed out waiting for you to finish the Facebook security check")
+            self.page.wait_for_timeout(2000)
+
     def is_logged_in(self) -> bool:
         p = self.page
+        if self.in_auth_flow():
+            return False
         # The top-bar account switcher / Page header only exist when logged in.
         return self.first_visible([
             p.get_by_role("button", name=re.compile(r"^(Account|Your profile)", re.I)),
@@ -97,6 +117,8 @@ class FacebookPublisher:
         deadline = time.monotonic() + LOGIN_TIMEOUT_S
         while time.monotonic() < deadline:
             p.wait_for_timeout(3000)
+            if self.in_auth_flow():
+                continue  # captcha / 2FA in progress: leave the tab alone
             if self.is_logged_in():
                 log("Login detected, continuing.")
                 p.goto(FB_PAGE_URL, wait_until="domcontentloaded")
@@ -125,6 +147,7 @@ class FacebookPublisher:
         if self.first_visible(self.composer_button(), timeout_ms=5000) is None:
             log("Photo/video button not showing yet. If Facebook is asking for a security check, "
                 "finish it in the window; waiting up to 3 minutes...")
+            self.wait_out_auth_flow()
             p.goto(FB_PAGE_URL, wait_until="domcontentloaded")
             self.switch_into_page()
         btn = self.first_visible(self.composer_button(), timeout_ms=3 * 60_000)
