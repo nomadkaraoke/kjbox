@@ -544,7 +544,7 @@ def launch_publisher_subprocess(work_dir: Path, night: str, auto_share: bool):
         cmd = [sys.executable, "-m", "nightclips.publish", "--request", str(req), "--work-dir", str(work_dir)]
         if auto_share_flag:
             cmd.append("--auto-share")
-        proc = subprocess.Popen(cmd)  # inherits the terminal so Andrew sees its log lines
+        proc = spawn_reaped(cmd)  # inherits the terminal so Andrew sees its log lines
         return {"started": True, "pid": proc.pid,
                 "message": "Publisher started — watch the Chromium window and this terminal."}
 
@@ -774,6 +774,14 @@ def make_server(state: ReviewState, port: int = 8765, tries: int = 20) -> Thread
     raise OSError(f"no free port from {port}: {last}")
 
 
+def spawn_reaped(cmd: list[str]) -> subprocess.Popen:
+    """Start a publisher and reap it when it exits, so a finished publisher doesn't linger as a
+    zombie (which still answers `kill -0` and looks alive) for as long as the review server runs."""
+    proc = subprocess.Popen(cmd)
+    threading.Thread(target=proc.wait, daemon=True, name=f"reap-{proc.pid}").start()
+    return proc
+
+
 def launch_facebook_subprocess(work_dir: Path, night: str, location: str | None, auto_share: bool):
     """Run the Facebook publisher in its own process/browser, same files and caption as Instagram."""
 
@@ -784,7 +792,7 @@ def launch_facebook_subprocess(work_dir: Path, night: str, location: str | None,
         cmd = [sys.executable, "-m", "nightclips.facebook", "--request", str(req), "--work-dir", str(work_dir)]
         if auto_share:
             cmd.append("--auto-share")
-        proc = subprocess.Popen(cmd)
+        proc = spawn_reaped(cmd)
         return {"started": True, "pid": proc.pid,
                 "message": "Facebook publisher started — watch its Chromium window."}
 

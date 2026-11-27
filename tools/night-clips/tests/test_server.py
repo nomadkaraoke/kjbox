@@ -622,3 +622,16 @@ def test_direct_play_song_takes_singers_and_their_consent(tmp_path):
     state.set_consent({"Emerson": "yes"})
     assert it["status"] == "eligible" and it["id"] in state.selected
     assert "Emerson & Fiona — Take Me Back - Cody Johnson" in state.caption
+
+
+def test_spawned_publisher_is_reaped_not_left_a_zombie():
+    import sys
+    import time
+
+    from nightclips.server import spawn_reaped
+
+    proc = spawn_reaped([sys.executable, "-c", "pass"])
+    deadline = time.monotonic() + 10
+    while proc.returncode is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert proc.returncode == 0
